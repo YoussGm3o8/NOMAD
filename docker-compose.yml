@@ -1,0 +1,170 @@
+# ============================================================
+# NOMAD Docker Compose Configuration
+# 
+# Services:
+# - mediamtx: RTSP video streaming server (feeds Mission Planner)
+# - nomad-core: Edge Core (FastAPI + Vision + MAVLink)
+# - mavlink-router: MAVLink message routing
+#
+# Usage:
+#   docker compose up -d           # Start all services
+#   docker compose logs -f         # View logs
+#   docker compose down            # Stop all services
+#
+# For Jetson Orin Nano deployment
+# Control interface: Mission Planner plugin
+# ============================================================
+
+services:
+  # ============================================================
+  # MediaMTX - Video Streaming Server
+  # ============================================================
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: nomad-mediamtx
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./infra/mediamtx.yml:/mediamtx.yml:ro
+      # Optional: recording storage
+      - /mnt/nvme/recordings:/mnt/nvme/recordings
+    environment:
+      - MTX_PROTOCOLS=tcp
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9997/v3/paths/list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================
+  # NOMAD Edge Core - Main Application
+  # ============================================================
+  nomad-core:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+    image: nomad-edge-core:latest
+    container_name: nomad-core
+    restart: unless-stopped
+    network_mode: host
+    privileged: true  # Required for USB/GPIO/ZED access
+    depends_on:
+      mediamtx:
+        condition: service_healthy
+    volumes:
+      # Device access
+      - /dev:/dev
+      # NVMe storage for evidence and logs
+      - /mnt/nvme:/mnt/nvme
+      # Configuration (live reload)
+      - ./config:/app/config:ro
+      # ZED SDK resources (if installed on host)
+      - /usr/local/zed:/usr/local/zed:ro
+    environment:
+      # NOMAD configuration
+      - NOMAD_LOG_LEVEL=INFO
+      - NOMAD_SIM_MODE=${NOMAD_SIM_MODE:-false}
+      - NOMAD_CONFIG_PATH=/app/config
+      - NOMAD_DATA_PATH=/mnt/nvme
+      # MAVLink
+      - MAVLINK_CONNECTION=udpin:0.0.0.0:14550
+      - MAVLINK_SYSTEM_ID=1
+      - MAVLINK_COMPONENT_ID=191
+      # Vision
+      - VISION_MODEL_PATH=/app/config/models/yolov8n.pt
+      - VISION_VIDEO_SOURCE=zed
+      - VISION_CONFIDENCE=0.5
+      - ENABLE_VIO=true
+      # RTSP streaming (for Mission Planner video feed)
+      - RTSP_OUTPUT_URL=rtsp://127.0.0.1:8554/live
+      - RTSP_FRAMERATE=30
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ============================================================
+  # MAVLink Router - Message Routing
+  # ============================================================
+  mavlink-router:
+    image: tiiuae/mavlink-router:latest
+    container_name: nomad-mavlink-router
+    restart: unless-stopped
+    network_mode: host
+    privileged: true  # Required for serial port access
+    volumes:
+      # Configuration file
+      - ./transport/mavlink_router/mavlink-router.conf:/etc/mavlink-router/main.conf:ro
+      # Serial device access
+      - /dev:/dev
+    # Override default command to use our config
+    command: ["-c", "/etc/mavlink-router/main.conf"]
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep mavlink-routerd || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+
+# ============================================================
+# Networks (using host mode, so not needed)
+# ============================================================
+# networks:
+#   nomad-net:
+#     driver: bridge
+
+
+# ============================================================
+# Volumes
+# ============================================================
+volumes:
+  nvme-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/nvme
+
+
+# ============================================================
+# Profiles for different deployment scenarios
+# ============================================================
+# Usage: docker compose --profile sim up
+# 
+# profiles:
+#   sim:
+#     - nomad-core-sim (simulation mode)
+#   dev:
+#     - all services + hot reload
+#   prod:
+#     - optimized production settings

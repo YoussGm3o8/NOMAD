@@ -1,0 +1,79 @@
+# NOMAD Edge Core Requirements
+# Target: Python 3.13 | NVIDIA Jetson Orin Nano
+# Last Updated: 2026-01-04
+
+# ============================================================
+# Core Web Framework
+# ============================================================
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.10.0
+pydantic-settings==2.6.0
+
+# ============================================================
+# MAVLink Communication
+# ============================================================
+pymavlink==2.4.42
+
+# ============================================================
+# IPC and Messaging
+# ============================================================
+pyzmq==26.2.0
+
+# ============================================================
+# Computer Vision
+# ============================================================
+# OpenCV for image processing (use pre-built Jetson package)
+opencv-python==4.10.0.84
+
+# YOLOv8 for object detection
+ultralytics==8.3.0
+torch==2.5.0  # PyTorch (use Jetson-optimized builds in production)
+torchvision==0.20.0
+
+# ============================================================
+# ZED SDK
+# ============================================================
+# Note: pyzed is installed via Stereolabs installer, not pip
+# Requires: ZED SDK 4.2+ from https://www.stereolabs.com/developers/release/
+
+# ============================================================
+# System Monitoring
+# ============================================================
+psutil==6.1.0  # CPU, GPU, memory monitoring
+
+# ============================================================
+# HTTP Client (for testing)
+# ============================================================
+httpx==0.28.0
+
+# ============================================================
+# Utilities
+# ============================================================
+python-dotenv==1.0.1  # Environment variable loading
+
+# ============================================================
+# Development & Testing (Optional)
+# ============================================================
+pytest==8.3.0
+pytest-asyncio==0.24.0
+black==24.10.0
+ruff==0.7.0
+
+# ============================================================
+# Python 3.13 Free-Threading Notes
+# ============================================================
+# - All dependencies are compatible with Python 3.13
+# - StateManager uses threading.Lock() for thread safety
+# - Vision process runs in isolated multiprocessing.Process
+# - No global mutable state accessed without locks
+# - ZED SDK isolation via process boundaries
+
+# ============================================================
+# Jetson-Specific Installation Notes
+# ============================================================
+# 1. Install ZED SDK first: https://www.stereolabs.com/developers/release/
+# 2. Use Jetson-optimized PyTorch from NVIDIA:
+#    https://forums.developer.nvidia.com/t/pytorch-for-jetson/72048
+# 3. Consider using JetPack SDK for optimized OpenCV
+# 4. GPU acceleration requires CUDA toolkit (pre-installed on JetPack)

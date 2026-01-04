@@ -1,0 +1,67 @@
+# NOMAD Edge Core Systemd Service
+# Location: /etc/systemd/system/nomad.service
+# 
+# Installation:
+#   sudo cp nomad.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable nomad
+#   sudo systemctl start nomad
+#
+# Management:
+#   sudo systemctl status nomad
+#   sudo journalctl -u nomad -f
+#   sudo systemctl restart nomad
+
+[Unit]
+Description=NOMAD Edge Core Orchestrator
+Documentation=https://github.com/NOMAD/edge_core
+After=network-online.target tailscaled.service mavlink-router.service
+Wants=network-online.target
+Requires=mavlink-router.service
+
+[Service]
+Type=simple
+User=nomad
+Group=nomad
+WorkingDirectory=/home/nomad/NOMAD
+
+# Environment variables
+Environment="NOMAD_SIM_MODE=false"
+Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONPATH=/home/nomad/NOMAD"
+
+# Main command - run orchestrator with uvicorn
+ExecStart=/usr/bin/python3 -m uvicorn edge_core.main:app --host 0.0.0.0 --port 8000 --log-level info
+
+# Alternative: Run with edge_core CLI
+# ExecStart=/usr/bin/python3 -m edge_core.main --host 0.0.0.0 --port 8000 --log-level info
+
+# Restart policy
+Restart=always
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Process management
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nomad
+
+# Security hardening (adjust as needed)
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Watchdog support (if systemd watchdog is used)
+# WatchdogSec=60
+
+[Install]
+WantedBy=multi-user.target

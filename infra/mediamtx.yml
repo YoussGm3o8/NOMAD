@@ -1,0 +1,119 @@
+###############################################
+# MediaMTX Configuration for NOMAD
+# 
+# Accepts RTSP streams from edge_core and
+# serves them via RTSP to Mission Planner.
+#
+# Source: https://github.com/bluenviron/mediamtx
+###############################################
+
+# ============================================================
+# Global Settings
+# ============================================================
+
+# Logging level (debug, info, warn, error)
+logLevel: info
+logDestinations: [stdout]
+
+# Read timeout for connections
+readTimeout: 10s
+writeTimeout: 10s
+writeQueueSize: 512
+
+# ============================================================
+# API (for monitoring)
+# ============================================================
+
+api: yes
+apiAddress: :9997
+# Metrics for Prometheus
+metrics: yes
+metricsAddress: :9998
+
+# ============================================================
+# RTSP Server (input from edge_core, output to Mission Planner)
+# ============================================================
+
+rtsp: yes
+rtspAddress: :8554
+protocols: [tcp]  # Force TCP for reliability
+
+# RTSP authentication (disabled for local use)
+# rtspAuthMethods: []
+
+# ============================================================
+# RTMP Server (disabled)
+# ============================================================
+
+rtmp: no
+rtmpAddress: :1935
+
+# ============================================================
+# HLS Server (disabled)
+# ============================================================
+
+hls: no
+hlsAddress: :8888
+
+# ============================================================
+# WebRTC Server (disabled - using RTSP for Mission Planner)
+# ============================================================
+
+webrtc: no
+webrtcAddress: :8889
+
+# ============================================================
+# SRT Server (disabled)
+# ============================================================
+
+srt: no
+srtAddress: :8890
+
+# ============================================================
+# Recording (optional)
+# ============================================================
+
+record: no
+
+# ============================================================
+# Paths (stream endpoints)
+# ============================================================
+
+paths:
+  # Main live stream from ZED camera (navigation view)
+  live:
+    source: publisher
+    sourceOnDemand: no
+    publishUser: ""
+    publishPass: ""
+    publishIPs: []
+    readUser: ""
+    readPass: ""
+    readIPs: []
+    # Recording for evidence
+    record: no
+    recordPath: /mnt/nvme/recordings/%path/%Y-%m-%d_%H-%M-%S
+    recordFormat: fmp4
+    recordSegmentDuration: 1h
+
+  # Gimbal camera stream (targeting view)
+  gimbal:
+    source: publisher
+    sourceOnDemand: no
+    publishUser: ""
+    publishPass: ""
+    readUser: ""
+    readPass: ""
+
+  # Detection overlay stream (optional - for debug)
+  debug:
+    source: publisher
+    sourceOnDemand: no
+    publishUser: ""
+    publishPass: ""
+    readUser: ""
+    readPass: ""
+
+  # Catch-all for any other streams
+  all_others:
+    source: publisher

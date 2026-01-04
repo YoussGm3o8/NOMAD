@@ -1,0 +1,29 @@
+# NOMAD Edge Core Dependencies
+# Target: Python 3.13.9 | NVIDIA Jetson Orin Nano
+
+# Web Framework
+fastapi>=0.104.0
+uvicorn>=0.24.0
+websockets>=12.0
+
+# MAVLink
+pymavlink>=2.4.0
+pyserial>=3.5
+
+# Data & Models
+numpy>=1.26.0
+pydantic>=2.5.0
+
+# IPC
+pyzmq>=25.1.0
+
+# Vision / Object Detection
+ultralytics>=8.0.0
+opencv-python-headless>=4.8.0
+
+# Hardware Monitoring
+psutil>=5.9.0
+jetson-stats>=4.2.0  # jtop for Jetson devices (optional, graceful fallback)
+
+# Geospatial (optional, for advanced calculations)
+# geopy>=2.4.0
