@@ -46,12 +46,6 @@ from .visual_servoing import (
     ServoMode,
 )
 from .time_manager import TimeSyncService, TimeSyncStatus
-from .hardware_monitor import (
-    HealthMonitor,
-    HardwareThresholds,
-    ThrottleLevel,
-    DEFAULT_THROTTLE_ENDPOINT,
-)
 
 # Configure logging
 logging.basicConfig(
@@ -573,10 +567,6 @@ detection_subscriber: DetectionSubscriber | None = None
 # Time synchronization service
 time_sync_service: TimeSyncService | None = None
 
-# Hardware health monitor
-health_monitor: HealthMonitor | None = None
-throttle_publisher: ZMQPublisher | None = None
-
 # Task 2 components
 exclusion_map: ExclusionMap = ExclusionMap()
 task2_controller: Task2Controller | None = None
@@ -600,7 +590,7 @@ app = get_app()
 
 def cleanup() -> None:
     """Cleanup on shutdown."""
-    global vision_manager, detection_subscriber, task2_subscriber, time_sync_service, health_monitor, throttle_publisher
+    global vision_manager, detection_subscriber, task2_subscriber, time_sync_service
     logger.info("Shutting down Edge Core...")
 
     # Stop Task 2 components first
@@ -613,15 +603,6 @@ def cleanup() -> None:
 
     if vision_manager:
         vision_manager.stop()
-
-    # Stop hardware health monitor
-    if health_monitor:
-        health_monitor.stop()
-        logger.info("Health monitor stopped")
-
-    # Stop throttle publisher
-    if throttle_publisher:
-        throttle_publisher.stop()
 
     # Stop time sync service
     if time_sync_service:
@@ -657,7 +638,7 @@ def run(
         watchdog_timeout: Seconds before watchdog restarts vision
         servo_mode: Visual servoing mode ("gimbal" or "drone_body")
     """
-    global vision_manager, detection_subscriber, task2_controller, task2_subscriber, time_sync_service, health_monitor, throttle_publisher
+    global vision_manager, detection_subscriber, task2_controller, task2_subscriber, time_sync_service
 
     logger.info("=" * 50)
     logger.info("NOMAD Edge Core Starting")
@@ -671,26 +652,6 @@ def run(
     if enable_task2:
         logger.info(f"Servo mode: {servo_mode}")
     logger.info("=" * 50)
-
-    # Initialize throttle publisher (for hardware throttling -> vision process)
-    throttle_publisher = ZMQPublisher(endpoint=DEFAULT_THROTTLE_ENDPOINT)
-    logger.info(f"Throttle publisher: {DEFAULT_THROTTLE_ENDPOINT}")
-
-    # Initialize hardware health monitor
-    def on_throttle_change(level: ThrottleLevel, reason: str) -> None:
-        """Callback when throttle level changes."""
-        if level in (ThrottleLevel.THROTTLE, ThrottleLevel.CRITICAL):
-            logger.warning(f"Hardware throttling: {level.name} - {reason}")
-        elif level == ThrottleLevel.NONE:
-            logger.info("Hardware throttling deactivated")
-
-    health_monitor = HealthMonitor(
-        state_manager=state_manager,
-        throttle_publisher=throttle_publisher,
-        on_throttle_change=on_throttle_change,
-    )
-    health_monitor.start()
-    logger.info("Hardware health monitor started")
 
     # Initialize time synchronization service
     def on_time_sync_change(status: TimeSyncStatus) -> None:

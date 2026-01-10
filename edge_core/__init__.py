@@ -87,15 +87,6 @@ from .time_manager import (
     get_time_sync_service,
     init_time_sync_service,
 )
-from .hardware_monitor import (
-    HealthMonitor,
-    HardwareStatus,
-    HardwareThresholds,
-    ThrottleLevel,
-    get_health_monitor,
-    init_health_monitor,
-    DEFAULT_THROTTLE_ENDPOINT,
-)
 from .mission_validator import (
     EKFSourcePosXY,
     EKFSourceVelXY,
@@ -179,14 +170,6 @@ __all__ = [
     "TimeSyncSource",
     "get_time_sync_service",
     "init_time_sync_service",
-    # Hardware Monitoring
-    "HealthMonitor",
-    "HardwareStatus",
-    "HardwareThresholds",
-    "ThrottleLevel",
-    "get_health_monitor",
-    "init_health_monitor",
-    "DEFAULT_THROTTLE_ENDPOINT",
     # Mission Validator
     "EKFSourcePosXY",
     "EKFSourceVelXY",
