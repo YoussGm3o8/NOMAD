@@ -120,33 +120,3 @@ class SystemState(BaseModel):
         """Check if GPS coordinates are available."""
         return self.gps_fix and self.gps_lat is not None and self.gps_lon is not None
 
-    def has_task1_data(self) -> bool:
-        """Check if all data required for Task 1 is available."""
-        return (
-            self.has_valid_gps()
-            and self.heading_deg is not None
-            and self.gimbal_pitch_deg is not None
-            and self.lidar_distance_m is not None
-        )
-
-
-
-class Task1CaptureRequest(BaseModel):
-    """Request model for Task 1 capture endpoint."""
-
-    # Optional overrides for testing/simulation
-    heading_deg: Optional[float] = None
-    gimbal_pitch_deg: Optional[float] = None
-    lidar_distance_m: Optional[float] = None
-
-
-class Task1CaptureResponse(BaseModel):
-    """Response model for Task 1 capture endpoint."""
-
-    success: bool
-    target_text: str
-    file_path: str
-    target_gps: Optional[dict] = None
-    nearest_landmark: Optional[str] = None
-    offset_meters: Optional[dict] = None
-    error: Optional[str] = None
