@@ -61,6 +61,27 @@ If embedded playback still fails, the plugin will fall back to opening VLC or FF
 
 Tip: For automated deployments, package the `libvlc` redistributables with your plugin or document the matching VLC version to install on operator machines.
 
+### Automated libVLC packaging
+
+To make embedded playback easy for operators, the repository contains helper scripts that can fetch and package LibVLC and LibVLCSharp for Windows:
+
+- `mission_planner/packaging/fetch-libvlc.ps1` — downloads the latest `VideoLAN.LibVLC.Windows` (native redistributables) and `LibVLCSharp`/`LibVLCSharp.WinForms` managed assemblies from NuGet, and places them into `packaging/libvlc-windows/` and `third_party/libvlc/` respectively.
+- `mission_planner/packaging/copy-libvlc.ps1` — copies native libvlc DLLs and the `plugins/` folder into the build output `src/bin/Release`.
+- `mission_planner/packaging/copy-managed-libs.ps1` — copies managed `LibVLCSharp*.dll` into the build output.
+
+Usage:
+
+1. Run the fetcher (one-time per developer machine):
+   ```powershell
+   .\mission_planner\packaging\fetch-libvlc.ps1 -Arch win-x64
+   ```
+2. Build using the included build script — it will automatically copy the managed and native files into the plugin output and deploy them to `%LOCALAPPDATA%\Mission Planner\plugins`:
+   ```powershell
+   .\mission_planner\src\build_and_deploy.ps1
+   ```
+
+This ensures the embedded player can initialize libVLC at runtime. If you prefer not to include the redistributables in the repository, operators can instead install VLC on their machines and the plugin will detect the native libs automatically.
+
 ### Building
 
 1. Open `src/NOMADPlugin.csproj` in Visual Studio
