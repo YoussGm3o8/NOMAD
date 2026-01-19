@@ -3,6 +3,7 @@
 // ============================================================
 // Handles plugin configuration persistence.
 // Stored in Mission Planner's config directory.
+// Supports all NOMAD features including video, terminal, and VIO.
 // ============================================================
 
 using System;
@@ -12,16 +13,16 @@ using Newtonsoft.Json;
 namespace NOMAD.MissionPlanner
 {
     /// <summary>
-    /// Plugin configuration settings.
+    /// Plugin configuration settings for NOMAD Mission Planner integration.
     /// </summary>
     public class NOMADConfig
     {
         // ============================================================
-        // Configuration Properties
+        // Connection Configuration
         // ============================================================
 
         /// <summary>
-        /// Jetson IP address (local network).
+        /// Jetson IP address (local network or Tailscale).
         /// </summary>
         public string JetsonIP { get; set; } = "192.168.1.100";
 
@@ -33,7 +34,34 @@ namespace NOMAD.MissionPlanner
         /// <summary>
         /// Full Jetson Base URL (computed property).
         /// </summary>
+        [JsonIgnore]
         public string JetsonBaseUrl => $"http://{JetsonIP}:{JetsonPort}";
+
+        /// <summary>
+        /// Tailscale IP address (if using VPN).
+        /// </summary>
+        public string TailscaleIP { get; set; } = "100.100.100.100";
+
+        /// <summary>
+        /// Use Tailscale IP instead of local IP.
+        /// </summary>
+        public bool UseTailscale { get; set; } = false;
+
+        /// <summary>
+        /// Gets the effective IP based on UseTailscale setting.
+        /// </summary>
+        [JsonIgnore]
+        public string EffectiveIP => UseTailscale ? TailscaleIP : JetsonIP;
+
+        /// <summary>
+        /// Gets the effective base URL.
+        /// </summary>
+        [JsonIgnore]
+        public string EffectiveBaseUrl => $"http://{EffectiveIP}:{JetsonPort}";
+
+        // ============================================================
+        // Video Streaming Configuration
+        // ============================================================
 
         /// <summary>
         /// RTSP video stream URL (primary camera - ZED/Navigation).
@@ -46,6 +74,26 @@ namespace NOMAD.MissionPlanner
         public string RtspUrlSecondary { get; set; } = "rtsp://192.168.1.100:8554/gimbal";
 
         /// <summary>
+        /// Network caching for video streams (ms).
+        /// Lower = less latency, higher = more stable.
+        /// </summary>
+        public int VideoNetworkCaching { get; set; } = 100;
+
+        /// <summary>
+        /// Preferred video player: "Embedded", "VLC", "FFplay".
+        /// </summary>
+        public string PreferredVideoPlayer { get; set; } = "Embedded";
+
+        /// <summary>
+        /// Enable video stream auto-start when opening video tab.
+        /// </summary>
+        public bool VideoAutoStart { get; set; } = false;
+
+        // ============================================================
+        // Communication Configuration
+        // ============================================================
+
+        /// <summary>
         /// Use ELRS/MAVLink mode instead of HTTP.
         /// </summary>
         public bool UseELRS { get; set; } = false;
@@ -56,9 +104,133 @@ namespace NOMAD.MissionPlanner
         public int HttpTimeoutSeconds { get; set; } = 5;
 
         /// <summary>
+        /// Enable auto-reconnect on connection loss.
+        /// </summary>
+        public bool AutoReconnect { get; set; } = true;
+
+        /// <summary>
+        /// Health polling interval (ms).
+        /// </summary>
+        public int HealthPollInterval { get; set; } = 2000;
+
+        // ============================================================
+        // Task 1 Configuration (Outdoor Recon)
+        // ============================================================
+
+        /// <summary>
+        /// Enable Task 1 features.
+        /// </summary>
+        public bool Task1Enabled { get; set; } = true;
+
+        /// <summary>
+        /// Auto-capture on waypoint arrival.
+        /// </summary>
+        public bool Task1AutoCapture { get; set; } = false;
+
+        // ============================================================
+        // Task 2 Configuration (Indoor Extinguish)
+        // ============================================================
+
+        /// <summary>
+        /// Enable Task 2 features.
+        /// </summary>
+        public bool Task2Enabled { get; set; } = true;
+
+        /// <summary>
+        /// WASD nudge speed (m/s).
+        /// </summary>
+        public float WasdNudgeSpeed { get; set; } = 0.5f;
+
+        /// <summary>
+        /// WASD altitude change speed (m/s).
+        /// </summary>
+        public float WasdAltSpeed { get; set; } = 0.3f;
+
+        /// <summary>
+        /// Enable WASD by default on Task 2 tab.
+        /// </summary>
+        public bool WasdAutoEnable { get; set; } = false;
+
+        // ============================================================
+        // VIO Configuration
+        // ============================================================
+
+        /// <summary>
+        /// VIO confidence warning threshold (0-100).
+        /// </summary>
+        public float VioConfidenceWarning { get; set; } = 50.0f;
+
+        /// <summary>
+        /// VIO confidence critical threshold (0-100).
+        /// </summary>
+        public float VioConfidenceCritical { get; set; } = 30.0f;
+
+        /// <summary>
+        /// Enable VIO status alerts.
+        /// </summary>
+        public bool VioAlertsEnabled { get; set; } = true;
+
+        // ============================================================
+        // Terminal Configuration
+        // ============================================================
+
+        /// <summary>
+        /// SSH username for direct SSH connection.
+        /// </summary>
+        public string SshUsername { get; set; } = "nomad";
+
+        /// <summary>
+        /// Terminal command timeout (seconds).
+        /// </summary>
+        public int TerminalTimeout { get; set; } = 30;
+
+        /// <summary>
+        /// Save terminal history between sessions.
+        /// </summary>
+        public bool SaveTerminalHistory { get; set; } = true;
+
+        // ============================================================
+        // UI Configuration
+        // ============================================================
+
+        /// <summary>
         /// Enable debug logging.
         /// </summary>
         public bool DebugMode { get; set; } = false;
+
+        /// <summary>
+        /// Show notifications for status changes.
+        /// </summary>
+        public bool ShowNotifications { get; set; } = true;
+
+        /// <summary>
+        /// Default tab to show on startup.
+        /// </summary>
+        public string DefaultTab { get; set; } = "Dashboard";
+
+        /// <summary>
+        /// Enable dark mode for NOMAD UI.
+        /// </summary>
+        public bool DarkMode { get; set; } = true;
+
+        // ============================================================
+        // Alert Configuration
+        // ============================================================
+
+        /// <summary>
+        /// Temperature warning threshold (Celsius).
+        /// </summary>
+        public float TempWarningC { get; set; } = 75.0f;
+
+        /// <summary>
+        /// Temperature critical threshold (Celsius).
+        /// </summary>
+        public float TempCriticalC { get; set; } = 85.0f;
+
+        /// <summary>
+        /// Enable audio alerts for critical warnings.
+        /// </summary>
+        public bool AudioAlerts { get; set; } = true;
 
         // ============================================================
         // Persistence
@@ -81,7 +253,15 @@ namespace NOMAD.MissionPlanner
                 if (File.Exists(ConfigPath))
                 {
                     var json = File.ReadAllText(ConfigPath);
-                    return JsonConvert.DeserializeObject<NOMADConfig>(json) ?? new NOMADConfig();
+                    var config = JsonConvert.DeserializeObject<NOMADConfig>(json);
+                    
+                    // Ensure non-null return
+                    if (config != null)
+                    {
+                        // Migrate any missing properties with defaults
+                        config.MigrateDefaults();
+                        return config;
+                    }
                 }
             }
             catch (Exception ex)
@@ -100,7 +280,7 @@ namespace NOMAD.MissionPlanner
             try
             {
                 var dir = Path.GetDirectoryName(ConfigPath);
-                if (!Directory.Exists(dir))
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 {
                     Directory.CreateDirectory(dir);
                 }
@@ -112,6 +292,70 @@ namespace NOMAD.MissionPlanner
             {
                 Console.WriteLine($"NOMAD: Failed to save config - {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Migrate defaults for properties that may have been added in newer versions.
+        /// </summary>
+        private void MigrateDefaults()
+        {
+            // Ensure video URLs use effective IP
+            if (RtspUrlPrimary.Contains("192.168.1.100") && UseTailscale)
+            {
+                RtspUrlPrimary = $"rtsp://{TailscaleIP}:8554/live";
+                RtspUrlSecondary = $"rtsp://{TailscaleIP}:8554/gimbal";
+            }
+        }
+
+        /// <summary>
+        /// Create a copy of the configuration.
+        /// </summary>
+        public NOMADConfig Clone()
+        {
+            var json = JsonConvert.SerializeObject(this);
+            return JsonConvert.DeserializeObject<NOMADConfig>(json) ?? new NOMADConfig();
+        }
+
+        /// <summary>
+        /// Reset to default values.
+        /// </summary>
+        public void ResetToDefaults()
+        {
+            var defaults = new NOMADConfig();
+            
+            // Copy all properties from defaults
+            JetsonIP = defaults.JetsonIP;
+            JetsonPort = defaults.JetsonPort;
+            TailscaleIP = defaults.TailscaleIP;
+            UseTailscale = defaults.UseTailscale;
+            RtspUrlPrimary = defaults.RtspUrlPrimary;
+            RtspUrlSecondary = defaults.RtspUrlSecondary;
+            VideoNetworkCaching = defaults.VideoNetworkCaching;
+            PreferredVideoPlayer = defaults.PreferredVideoPlayer;
+            VideoAutoStart = defaults.VideoAutoStart;
+            UseELRS = defaults.UseELRS;
+            HttpTimeoutSeconds = defaults.HttpTimeoutSeconds;
+            AutoReconnect = defaults.AutoReconnect;
+            HealthPollInterval = defaults.HealthPollInterval;
+            Task1Enabled = defaults.Task1Enabled;
+            Task1AutoCapture = defaults.Task1AutoCapture;
+            Task2Enabled = defaults.Task2Enabled;
+            WasdNudgeSpeed = defaults.WasdNudgeSpeed;
+            WasdAltSpeed = defaults.WasdAltSpeed;
+            WasdAutoEnable = defaults.WasdAutoEnable;
+            VioConfidenceWarning = defaults.VioConfidenceWarning;
+            VioConfidenceCritical = defaults.VioConfidenceCritical;
+            VioAlertsEnabled = defaults.VioAlertsEnabled;
+            SshUsername = defaults.SshUsername;
+            TerminalTimeout = defaults.TerminalTimeout;
+            SaveTerminalHistory = defaults.SaveTerminalHistory;
+            DebugMode = defaults.DebugMode;
+            ShowNotifications = defaults.ShowNotifications;
+            DefaultTab = defaults.DefaultTab;
+            DarkMode = defaults.DarkMode;
+            TempWarningC = defaults.TempWarningC;
+            TempCriticalC = defaults.TempCriticalC;
+            AudioAlerts = defaults.AudioAlerts;
         }
     }
 }

@@ -1,15 +1,24 @@
 # NOMAD Mission Planner Plugin
 
-**Centralized Control Interface for NOMAD Operations**
+**Comprehensive Control Interface for NOMAD Operations - AEAC 2026**
 
-This C# plugin integrates directly with Mission Planner to provide full control of the NOMAD drone system including task execution, RTSP video streaming, and indoor manual control.
+This C# plugin integrates directly with Mission Planner to provide full control of the NOMAD drone system including task execution, embedded video streaming, remote terminal access, and indoor manual control.
 
 ## Features
 
+### Full Control Page
+- **Dashboard Tab**: System overview with quick actions and status cards
+- **Task 1 Tab**: GPS-based outdoor reconnaissance with snapshot capture
+- **Task 2 Tab**: VIO-based indoor navigation with WASD controls
+- **Video Tab**: Embedded RTSP streaming (no external VLC required)
+- **Terminal Tab**: Remote command execution on Jetson
+- **Health Tab**: Real-time Jetson health monitoring (CPU/GPU temps, memory, network)
+
+### Core Functionality
 - **Task 1 (Recon)**: Capture snapshot and calculate target position relative to landmarks
 - **Task 2 (Extinguish)**: Manage exclusion map and target hit registration
-- **RTSP Video Streaming**: View live ZED camera and gimbal feeds via VLC or FFplay
-- **Indoor Nudge**: WASD keyboard controls for manual indoor positioning via ELRS
+- **Embedded Video**: Built-in RTSP player with low-latency streaming
+- **Indoor Nudge**: WASD keyboard controls for manual indoor positioning
 - **Telemetry Display**: Real-time position and connection status
 - **Dual-Link Communication**: HTTP API or MAVLink via ELRS for redundancy
 
@@ -18,8 +27,13 @@ This C# plugin integrates directly with Mission Planner to provide full control 
 | File | Description |
 |------|-------------|
 | `src/NOMADPlugin.cs` | Main plugin class (implements `MissionPlanner.Plugin.Plugin`) |
+| `src/NOMADFullPage.cs` | Full-page tabbed control interface |
+| `src/NOMADControlPanel.cs` | Quick access popup panel |
 | `src/DualLinkSender.cs` | HTTP and MAVLink communication handler |
-| `src/NOMADControlPanel.cs` | Flight Data tab UI control with video streaming |
+| `src/EmbeddedVideoPlayer.cs` | Built-in RTSP video player |
+| `src/JetsonTerminalControl.cs` | Remote terminal interface |
+| `src/EnhancedHealthDashboard.cs` | Health monitoring display |
+| `src/WASDNudgeControl.cs` | WASD keyboard control handler |
 | `src/NOMADConfig.cs` | Configuration persistence |
 | `src/NOMADSettingsForm.cs` | Settings dialog |
 | `src/NOMADPlugin.csproj` | Project file |
@@ -31,7 +45,21 @@ This C# plugin integrates directly with Mission Planner to provide full control 
 1. **Mission Planner** - Download from [ardupilot.org](https://ardupilot.org/planner/docs/mission-planner-installation.html)
 2. **Visual Studio 2022** - For building the plugin (Community edition is free)
 3. **.NET Framework 4.7.2 or 4.8**
-4. **VLC Media Player** (recommended) - For low-latency RTSP video playback
+4. **(Optional) LibVLCSharp** - For enhanced embedded video playback
+
+### Enabling Embedded Video (Windows)
+
+If the Video tab opens an external VLC window instead of showing the stream inside Mission Planner, the embedded LibVLC player is not available. To enable embedded playback:
+
+1. Add the `LibVLCSharp.WinForms` NuGet package to `src/NOMADPlugin.csproj` and restore packages.
+2. Install VLC (matching system bitness) from https://www.videolan.org/vlc/ — this provides the native `libvlc.dll` and related files.
+3. Rebuild the plugin (Release) and ensure the `LibVLCSharp.WinForms.dll` and native libvlc binaries are copied next to `NOMADPlugin.dll` in the Mission Planner plugins folder.
+   - Alternatively, include the libvlc redistributable (DLLs and `plugins` folder) in the plugin directory.
+4. Restart Mission Planner. The Video tab should now show an embedded player.
+
+If embedded playback still fails, the plugin will fall back to opening VLC or FFplay externally; check the debug output for a message describing why LibVLC failed to initialize (missing native lib or assembly mismatch).
+
+Tip: For automated deployments, package the `libvlc` redistributables with your plugin or document the matching VLC version to install on operator machines.
 
 ### Building
 
@@ -40,6 +68,7 @@ This C# plugin integrates directly with Mission Planner to provide full control 
 2. Restore NuGet packages:
    - Right-click solution → "Restore NuGet Packages"
    - Required: `Newtonsoft.Json`
+   - Optional: `LibVLCSharp.WinForms` for embedded video
 
 3. Add Mission Planner references:
    - Right-click "References" → "Add Reference"
@@ -69,35 +98,93 @@ Example:
 {
   "JetsonIP": "192.168.1.100",
   "JetsonPort": 8000,
+  "TailscaleIP": "100.100.100.100",
+  "UseTailscale": false,
   "RtspUrlPrimary": "rtsp://192.168.1.100:8554/live",
   "RtspUrlSecondary": "rtsp://192.168.1.100:8554/gimbal",
+  "VideoNetworkCaching": 100,
+  "PreferredVideoPlayer": "Embedded",
   "UseELRS": false,
   "HttpTimeoutSeconds": 5,
+  "DefaultTab": "Dashboard",
   "DebugMode": false
 }
 ```
 
 ## Usage
 
-### First Launch
+### Opening the Control Interface
 
-1. Start Mission Planner
-2. If Debug Mode is enabled, you may see a popup: "NOMAD Plugin v1.0.0 loaded"
-3. Go to **Flight Data** tab
-4. Use **NOMAD → Open Control Panel** (reliable), and/or look for the **NOMAD** tab if it was injected successfully
+**Method 1: Menu Bar**
+- Click **NOMAD → Open Full Control Page**
+
+**Method 2: Quick Panel**
+- Click **NOMAD → Open Control Panel** (smaller popup)
+
+**Method 3: FlightData Context**
+- NOMAD tab may appear in FlightData actions panel
+
+### Dashboard Tab
+
+The dashboard provides:
+- Connection status indicator (green = connected)
+- Quick action buttons for common operations
+- System status cards showing VIO and GPS state
+- Activity log with recent events
+
+### Task 1: Outdoor Recon
+
+1. Ensure GPS fix is acquired
+2. Navigate the drone to view a target
+3. Go to **Task 1** tab
+4. Click **📸 CAPTURE SNAPSHOT**
+5. Position and image are logged
+
+### Task 2: Indoor Extinguish
+
+1. Go to **Task 2** tab
+2. Click **🎯 Reset VIO Origin** at your start position
+3. Use WASD controls for precise positioning:
+   - **W/S**: Forward/Backward
+   - **A/D**: Left/Right
+   - **Q/E**: Rotate
+   - **R/F**: Up/Down
+4. Click **🔄 Reset Exclusion Map** to clear engaged targets
+
+### Video Tab
+
+The embedded video player supports:
+- **Play/Stop**: Start and stop video streams
+- **Snapshot**: Capture current frame
+- **Fullscreen**: Expand video to full window
+- **Latency Control**: Adjust network caching (lower = less delay)
+- **External Player**: Fall back to VLC if needed
+
+### Terminal Tab
+
+Execute commands on the Jetson remotely:
+- Quick commands dropdown for common operations
+- Command history (up/down arrows)
+- Output with color-coded errors
+- Safe command whitelist in production mode
+
+### Health Tab
+
+Real-time monitoring:
+- **CPU/GPU**: Temperature, load, frequency
+- **Memory**: Used/total with percentage
+- **Disk**: Free space and usage
+- **Power**: Current draw in watts
+- **Network**: Tailscale status and IP
+- **Thermal**: Warning/critical indicators
 
 ### Settings
 
-1. Click **Tools → NOMAD Settings** in the menu
-2. Configure Jetson IP, API port, and RTSP URLs
-3. Click **Test Connection** to verify connectivity
+1. Click **NOMAD → Settings** in the menu
+2. Configure connection settings, video preferences
+3. Click **Test Connection** to verify
 4. Click **OK** to save
 
-### Task 1: Recon
-
-1. Navigate the drone to view a target
-2. Click **📸 Capture Snapshot**
-3. Result shows: "Target is Xm Direction of Landmark"
 
 ### Task 2: Extinguish
 

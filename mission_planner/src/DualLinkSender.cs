@@ -156,6 +156,60 @@ namespace NOMAD.MissionPlanner
             }
         }
 
+        /// <summary>
+        /// Simplified async wrapper for Task 1 capture (no overrides).
+        /// </summary>
+        public async Task<CommandResult> SendTask1CaptureAsync()
+        {
+            return await SendTask1Capture();
+        }
+
+        /// <summary>
+        /// Simplified async wrapper for Task 2 reset map.
+        /// </summary>
+        public async Task<CommandResult> SendTask2ResetAsync()
+        {
+            return await SendTask2ResetMap();
+        }
+
+        /// <summary>
+        /// Get health status from Jetson.
+        /// </summary>
+        public async Task<CommandResult> GetHealthAsync()
+        {
+            try
+            {
+                var url = $"http://{_config.JetsonIP}:{_config.JetsonPort}/health";
+                var response = await _httpClient.GetAsync(url);
+                var responseBody = await response.Content.ReadAsStringAsync();
+
+                return new CommandResult
+                {
+                    Success = response.IsSuccessStatusCode,
+                    Message = response.IsSuccessStatusCode ? "Health check OK" : "Health check failed",
+                    Data = responseBody,
+                    Method = "HTTP"
+                };
+            }
+            catch (Exception ex)
+            {
+                return new CommandResult
+                {
+                    Success = false,
+                    Message = $"Health check error: {ex.Message}",
+                    Method = "HTTP"
+                };
+            }
+        }
+
+        /// <summary>
+        /// Reset VIO origin on Jetson.
+        /// </summary>
+        public async Task<CommandResult> ResetVioOriginAsync()
+        {
+            return await SendHttpPost("/api/vio/reset_origin", null);
+        }
+
         // ============================================================
         // HTTP Communication
         // ============================================================

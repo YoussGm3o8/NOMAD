@@ -8,9 +8,13 @@
 // for Task 1 (Recon) and Task 2 (Extinguish) operations.
 //
 // Features:
+// - Full-page NOMAD control interface with tabs
+// - Embedded video streaming
+// - Jetson terminal access
+// - System health monitoring
 // - Dual-link communication (HTTP or MAVLink/ELRS)
 // - Task 1: Capture snapshot command
-// - Task 2: Reset exclusion map command
+// - Task 2: Reset exclusion map, WASD indoor control
 // ============================================================
 
 using System;
@@ -28,7 +32,7 @@ namespace NOMAD.MissionPlanner
     {
         // Plugin metadata
         public override string Name => "NOMAD Control";
-        public override string Version => "1.0.0";
+        public override string Version => "2.0.0";
         public override string Author => "McGill Aerial Design";
 
         // Plugin state
@@ -36,8 +40,10 @@ namespace NOMAD.MissionPlanner
         private DualLinkSender _sender;
         private NOMADControlPanel _controlPanelTab;
         private NOMADControlPanel _controlPanelWindow;
+        private NOMADFullPage _fullPage;
         private TabPage _tabPage;
         private Form _panelForm;
+        private Form _fullPageForm;
         private bool _tabAdded;
 
         // ============================================================
@@ -62,7 +68,11 @@ namespace NOMAD.MissionPlanner
                 {
                     if (Host?.FDMenuMap?.Items != null)
                     {
-                        var openPanelItem = new ToolStripMenuItem("NOMAD Control Panel");
+                        var openFullPageItem = new ToolStripMenuItem("NOMAD Full Control (New!)");
+                        openFullPageItem.Click += (s, e) => ShowFullPage();
+                        Host.FDMenuMap.Items.Add(openFullPageItem);
+                        
+                        var openPanelItem = new ToolStripMenuItem("NOMAD Quick Panel");
                         openPanelItem.Click += (s, e) => ShowControlPanel();
                         Host.FDMenuMap.Items.Add(openPanelItem);
 
@@ -96,7 +106,8 @@ namespace NOMAD.MissionPlanner
                         {
                             nomadMenu = new ToolStripMenuItem("NOMAD")
                             {
-                                ForeColor = Color.White
+                                ForeColor = Color.White,
+                                BackColor = Color.FromArgb(0, 122, 204)
                             };
                             // Insert before Help menu (usually last)
                             int insertIndex = menuStrip.Items.Count - 1;
@@ -107,19 +118,35 @@ namespace NOMAD.MissionPlanner
                         // Avoid duplicate items if plugin reloads
                         nomadMenu.DropDownItems.Clear();
 
-                        var openPanelItem = new ToolStripMenuItem("Open Control Panel");
+                        // NEW: Full Page Control (Primary)
+                        var openFullPageItem = new ToolStripMenuItem(">> Open Full Control Page");
+                        openFullPageItem.Font = new Font(openFullPageItem.Font, FontStyle.Bold);
+                        openFullPageItem.Click += (s, e) => ShowFullPage();
+                        nomadMenu.DropDownItems.Add(openFullPageItem);
+                        
+                        nomadMenu.DropDownItems.Add(new ToolStripSeparator());
+                        
+                        var openPanelItem = new ToolStripMenuItem("Quick Control Panel");
                         openPanelItem.Click += (s, e) => ShowControlPanel();
                         nomadMenu.DropDownItems.Add(openPanelItem);
                         
-                        var settingsItem2 = new ToolStripMenuItem("Settings...");
+                        nomadMenu.DropDownItems.Add(new ToolStripSeparator());
+                        
+                        var settingsItem2 = new ToolStripMenuItem("[Settings...]");
                         settingsItem2.Click += (s, e) => ShowSettings();
                         nomadMenu.DropDownItems.Add(settingsItem2);
                         
-                        var aboutItem = new ToolStripMenuItem("About NOMAD");
+                        var aboutItem = new ToolStripMenuItem("[i] About NOMAD");
                         aboutItem.Click += (s, e) => CustomMessageBox.Show(
                             $"NOMAD Plugin v{Version}\n" +
                             $"McGill Aerial Design - AEAC 2026\n\n" +
-                            $"Jetson IP: {_config.JetsonIP}:{_config.JetsonPort}\n" +
+                            $"Features:\n" +
+                            $"• Full-page control interface\n" +
+                            $"• Embedded video streaming\n" +
+                            $"• Jetson terminal access\n" +
+                            $"• Real-time health monitoring\n" +
+                            $"• Task 1 (Outdoor) & Task 2 (Indoor) support\n\n" +
+                            $"Jetson: {_config.EffectiveIP}:{_config.JetsonPort}\n" +
                             $"Mode: {(_config.UseELRS ? "ELRS/MAVLink" : "HTTP")}",
                             "About NOMAD"
                         );
@@ -138,10 +165,10 @@ namespace NOMAD.MissionPlanner
                     {
                         CustomMessageBox.Show(
                             $"NOMAD Plugin v{Version} loaded.\n\n" +
-                            $"Use the NOMAD menu → Open Control Panel\n" +
-                            $"Or right-click in Flight Data → NOMAD Control Panel\n\n" +
+                            $"Use the NOMAD menu → Open Full Control Page\n" +
+                            $"for the complete NOMAD interface.\n\n" +
                             $"Mode: {(_config.UseELRS ? "ELRS/MAVLink" : "HTTP")}\n" +
-                            $"Jetson IP: {_config.JetsonIP}",
+                            $"Jetson IP: {_config.EffectiveIP}",
                             "NOMAD"
                         );
                     });
@@ -193,7 +220,7 @@ namespace NOMAD.MissionPlanner
                     if (!_tabAdded)
                     {
                         Console.WriteLine("NOMAD: Could not add FlightData tab; using control panel window");
-                        ShowControlPanel();
+                        // Don't auto-show - let user choose from menu
                     }
                 }
 
@@ -229,17 +256,29 @@ namespace NOMAD.MissionPlanner
         {
             try
             {
-                if (_panelForm != null)
+                // Force close forms (bypass FormClosing hide behavior)
+                if (_fullPageForm != null && !_fullPageForm.IsDisposed)
                 {
-                    _panelForm.Close();
+                    _fullPage?.Dispose();
+                    _fullPage = null;
+                    _fullPageForm.Dispose();
+                    _fullPageForm = null;
+                }
+                
+                if (_panelForm != null && !_panelForm.IsDisposed)
+                {
+                    _controlPanelWindow?.Dispose();
+                    _controlPanelWindow = null;
+                    _panelForm.Dispose();
                     _panelForm = null;
                 }
             }
             catch
             {
-                // ignore
+                // ignore disposal errors
             }
 
+            _fullPage = null;
             _controlPanelWindow = null;
             _sender?.Dispose();
             return true;
@@ -279,6 +318,73 @@ namespace NOMAD.MissionPlanner
             }
         }
 
+        /// <summary>
+        /// Shows the full-page NOMAD control interface.
+        /// This is the primary interface with all features.
+        /// </summary>
+        private void ShowFullPage()
+        {
+            if (Host?.MainForm != null && Host.MainForm.InvokeRequired)
+            {
+                Host.MainForm.BeginInvoke((MethodInvoker)delegate { ShowFullPage(); });
+                return;
+            }
+
+            // Always create a fresh instance to avoid disposed object errors
+            if (_fullPageForm == null || _fullPageForm.IsDisposed)
+            {
+                // Create new full page instance
+                _fullPage = new NOMADFullPage(_sender, _config);
+                
+                _fullPageForm = new Form
+                {
+                    Text = "NOMAD Control Center - AEAC 2026",
+                    StartPosition = FormStartPosition.CenterScreen,
+                    Width = 1200,
+                    Height = 800,
+                    MinimumSize = new Size(900, 600),
+                    Icon = null, // Could add custom icon
+                    BackColor = Color.FromArgb(30, 30, 30),
+                };
+                
+                // Handle FormClosing to prevent crash - hide instead of close when X clicked
+                _fullPageForm.FormClosing += (s, e) =>
+                {
+                    if (e.CloseReason == CloseReason.UserClosing)
+                    {
+                        // Hide instead of close to prevent disposal issues
+                        e.Cancel = true;
+                        _fullPageForm.Hide();
+                    }
+                };
+                
+                _fullPageForm.FormClosed += (s, e) =>
+                {
+                    // Safely dispose control when form is actually closed
+                    try
+                    {
+                        _fullPage?.Dispose();
+                    }
+                    catch { }
+                    _fullPage = null;
+                    _fullPageForm = null;
+                };
+                
+                _fullPageForm.Controls.Add(_fullPage);
+                _fullPage.Dock = DockStyle.Fill;
+            }
+
+            if (!_fullPageForm.Visible)
+            {
+                _fullPageForm.Show(Host?.MainForm);
+            }
+            else
+            {
+                _fullPageForm.BringToFront();
+                _fullPageForm.Activate();
+            }
+        }
+
         private void ShowControlPanel()
         {
             if (Host?.MainForm != null && Host.MainForm.InvokeRequired)
@@ -295,22 +401,37 @@ namespace NOMAD.MissionPlanner
                 
                 _panelForm = new Form
                 {
-                    Text = "NOMAD Control Panel",
+                    Text = "NOMAD Quick Panel",
                     StartPosition = FormStartPosition.CenterParent,
                     Width = 420,
-                    Height = 1000,  // Increased height for health tab
-                    AutoScroll = true  // Enable scrolling if content exceeds form
+                    Height = 800,
+                    AutoScroll = true
                 };
+                
+                // Handle FormClosing to prevent crash - hide instead of close when X clicked
+                _panelForm.FormClosing += (s, e) =>
+                {
+                    if (e.CloseReason == CloseReason.UserClosing)
+                    {
+                        e.Cancel = true;
+                        _panelForm.Hide();
+                    }
+                };
+                
                 _panelForm.FormClosed += (s, e) =>
                 {
-                    // Dispose control when form closes
-                    _controlPanelWindow?.Dispose();
+                    // Safely dispose control when form is actually closed
+                    try
+                    {
+                        _controlPanelWindow?.Dispose();
+                    }
+                    catch { }
                     _controlPanelWindow = null;
                     _panelForm = null;
                 };
                 _panelForm.Controls.Add(_controlPanelWindow);
                 _controlPanelWindow.Dock = DockStyle.Fill;
-                _controlPanelWindow.AutoScroll = true;  // Enable scrolling in panel too
+                _controlPanelWindow.AutoScroll = true;
             }
 
             if (!_panelForm.Visible)
@@ -335,6 +456,7 @@ namespace NOMAD.MissionPlanner
                     _sender.UpdateConfig(_config);
                     _controlPanelTab?.UpdateConfig(_config);
                     _controlPanelWindow?.UpdateConfig(_config);
+                    _fullPage?.UpdateConfig(_config);
                 }
             }
         }

@@ -66,6 +66,25 @@ Write-Host ""
 # Step 4: Deploy plugin
 Write-Host "[4/4] Deploying plugin..." -ForegroundColor Yellow
 
+# Try to include libVLC redistributables if present in packaging folder
+try {
+    $copyManaged = Join-Path $ScriptDir '..\packaging\copy-managed-libs.ps1'
+    if (Test-Path $copyManaged) {
+        Write-Host "  Copying managed LibVLC assemblies (if present)..." -ForegroundColor Gray
+        & $copyManaged | Out-Null
+    }
+
+    $copyScript = Join-Path $ScriptDir '..\packaging\copy-libvlc.ps1'
+    if (Test-Path $copyScript) {
+        Write-Host "  Found libVLC packaging helper, copying redistributables..." -ForegroundColor Gray
+        & $copyScript | Out-Null
+    } else {
+        Write-Host "  No libVLC packaging helper found (skipping)" -ForegroundColor Gray
+    }
+} catch {
+    Write-Host "  Warning: failed to copy libVLC files: $_" -ForegroundColor Yellow
+}
+
 $BuiltDll = "bin\$Configuration\NOMADPlugin.dll"
 
 if (-not (Test-Path $BuiltDll)) {

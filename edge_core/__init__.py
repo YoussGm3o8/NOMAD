@@ -43,6 +43,20 @@ from .time_manager import (
     init_time_sync_service,
 )
 
+# Optional imports (may not be available on all platforms)
+try:
+    from .isaac_ros_bridge import (
+        IsaacROSBridge,
+        VIOState,
+        DetectedTarget,
+        ExclusionEntry,
+        get_isaac_bridge,
+        init_isaac_bridge,
+    )
+    _ISAAC_AVAILABLE = True
+except ImportError:
+    _ISAAC_AVAILABLE = False
+
 __all__ = [
     # Models
     "SystemState",
@@ -74,4 +88,11 @@ __all__ = [
     "TimeSyncSource",
     "get_time_sync_service",
     "init_time_sync_service",
+    # Isaac ROS (optional)
+    "IsaacROSBridge",
+    "VIOState",
+    "DetectedTarget",
+    "ExclusionEntry",
+    "get_isaac_bridge",
+    "init_isaac_bridge",
 ]

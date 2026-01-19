@@ -98,11 +98,16 @@ NOMAD/
 │
 ├── mission_planner/        # Ground Control Plugin (C#)
 │   └── src/
-│       ├── NOMADPlugin.cs
+│       ├── NOMADPlugin.cs         # Plugin entry point
+│       ├── NOMADFullPage.cs       # Full-page control interface
+│       ├── NOMADControlPanel.cs   # Quick access panel
+│       ├── EmbeddedVideoPlayer.cs # Built-in video streaming
+│       ├── JetsonTerminalControl.cs # Remote terminal
 │       └── ...
 │
 ├── config/                 # Configuration files
-│   └── params/             # ArduPilot parameter files
+│   ├── params/             # ArduPilot parameter files
+│   └── env/                # Environment configs
 │
 ├── infra/                  # Deployment configs
 │   ├── Dockerfile
@@ -123,7 +128,8 @@ NOMAD/
 2. Open Mission Planner
 3. Connect to drone via ELRS
 4. Configure RTK/NTRIP for corrections
-5. Fly with GPS waypoints
+5. Use NOMAD → Open Full Control Page for capture controls
+6. Fly with GPS waypoints
 ```
 
 ### Task 2 Setup (With Jetson)
@@ -137,8 +143,27 @@ python -m edge_core.main --host 0.0.0.0 --port 8000
 # On Ground Station
 1. Connect via Tailscale IP
 2. Open Mission Planner with NOMAD plugin
-3. Verify Jetson health in plugin tab
+3. Use NOMAD menu → Open Full Control Page
+4. Check Jetson health in Health tab
+5. Use embedded video or terminal as needed
 ```
+
+---
+
+## 🎮 Mission Planner Plugin Features
+
+### Full Control Page
+- **Dashboard**: System overview, quick actions, connection status
+- **Task 1 Tab**: GPS capture controls, waypoint management
+- **Task 2 Tab**: VIO controls, WASD nudge, exclusion map
+- **Video Tab**: Embedded RTSP streaming (no VLC needed)
+- **Terminal Tab**: Remote command execution on Jetson
+- **Health Tab**: CPU/GPU temps, memory, disk, network status
+
+### Quick Access
+- Right-click FlightData map → NOMAD Full Control
+- Menu bar → NOMAD → Open Full Control Page
+- Keyboard shortcut support (configurable)
 
 ---
 
@@ -159,8 +184,11 @@ python -m edge_core.main --host 0.0.0.0 --port 8000
 |-----------|--------|--------|
 | ArduPilot Integration | ✅ Ready | ✅ Ready |
 | ELRS Telemetry | ✅ Ready | ✅ Ready |
-| Edge Core API | N/A | ✅ Ready |
+| Edge Core API | ✅ Ready | ✅ Ready |
 | Tailscale VPN | N/A | ✅ Ready |
-| ZED VIO | N/A | ⏳ In Progress |
+| ZED 2i VIO | ✅ Ready | ✅ Ready |
 | YOLO Detection | N/A | ⏳ In Progress |
-| Mission Planner Plugin | ✅ Basic | ⏳ In Progress |
+| Mission Planner Plugin | ✅ Ready | ✅ Ready |
+| Embedded Video | ✅ Ready | ✅ Ready |
+| Remote Terminal | ✅ Ready | ✅ Ready |
+| Health Monitoring | ✅ Ready | ✅ Ready |

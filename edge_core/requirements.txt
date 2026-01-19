@@ -25,5 +25,9 @@ opencv-python-headless>=4.8.0
 psutil>=5.9.0
 jetson-stats>=4.2.0  # jtop for Jetson devices (optional, graceful fallback)
 
+# ZED Camera SDK (install via NVIDIA SDK Manager on Jetson)
+# pyzed>=4.0.0  # Installed separately via ZED SDK installer
+
 # Geospatial (optional, for advanced calculations)
 # geopy>=2.4.0
+

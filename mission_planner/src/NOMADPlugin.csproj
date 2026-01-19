@@ -99,8 +99,24 @@
     <Compile Include="NOMADControlPanel.cs" />
     <Compile Include="NOMADPlugin.cs" />
     <Compile Include="NOMADSettingsForm.cs" />
+    <Compile Include="NOMADFullPage.cs" />
+    <Compile Include="EmbeddedVideoPlayer.cs" />
+    <Compile Include="JetsonTerminalControl.cs" />
+    <Compile Include="EnhancedHealthDashboard.cs" />
     <Compile Include="TelemetryInjector.cs" />
     <Compile Include="WASDNudgeControl.cs" />
+  </ItemGroup>
+
+  <!-- Optional local references for LibVLCSharp managed assemblies (place DLLs in third_party/libvlc) -->
+  <ItemGroup>
+    <Reference Include="LibVLCSharp.WinForms" Condition="Exists('..\third_party\libvlc\LibVLCSharp.WinForms.dll')">
+      <HintPath>..\third_party\libvlc\LibVLCSharp.WinForms.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="LibVLCSharp.Shared" Condition="Exists('..\third_party\libvlc\LibVLCSharp.Shared.dll')">
+      <HintPath>..\third_party\libvlc\LibVLCSharp.Shared.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
   </ItemGroup>
   
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
