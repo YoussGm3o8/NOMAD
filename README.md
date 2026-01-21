@@ -6,7 +6,7 @@
 
 | Task | Configuration | Computer | Navigation |
 |------|--------------|----------|------------|
-| **Task 1** (Outdoor Recon) | Jetson + ZED 2i camera | Orin Nano (imaging only) | GPS/RTK (pilot-only) |
+| **Task 1** (Outdoor Recon) | ZED 2i camera | Orin Nano (imaging only) | GPS/RTK (pilot-only) |
 | **Task 2** (Indoor Extinguish) | With Jetson | Orin Nano | ZED VIO |
 
 ---
@@ -79,7 +79,7 @@ NOMAD/
 │   ├── architecture.md     # System design
 │   └── PRD.md              # Product requirements
 │
-├── edge_core/              # Jetson software (Task 2 autonomy; Task 1 imaging out of scope)
+├── edge_core/              # Jetson software (Task 2 autonomy + Task 1 imaging support)
 │   ├── main.py             # Entry point
 │   ├── api.py              # REST API endpoints
 │   ├── state.py            # State manager
