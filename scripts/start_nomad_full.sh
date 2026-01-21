@@ -54,6 +54,7 @@ else
 fi
 
 # Start ZED Video Stream (ultra low latency)
+# NOTE: UDP is unicast - only ONE receiver at a time (either OSD video OR VLC/NOMAD plugin)
 echo "[4/4] Starting ZED Video Stream..."
 gst-launch-1.0 -q \
   v4l2src device=/dev/video0 num-buffers=-1 ! \
@@ -69,6 +70,7 @@ sleep 1
 
 if ps -p $VIDEO_PID > /dev/null 2>&1; then
     echo "    OK: Video stream running (PID: $VIDEO_PID)"
+    echo "    NOTE: Close OSD video in Mission Planner before using VLC/plugin video"
 else
     echo "    FAIL: Video stream failed to start!"
 fi

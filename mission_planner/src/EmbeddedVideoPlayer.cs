@@ -158,8 +158,8 @@ namespace NOMAD.MissionPlanner
             {
                 var placeholder = new Label
                 {
-                    Text = "[VIDEO] Video Feed\n\nClick Play to start stream\n\n" +
-                           "(Embedded GStreamer unavailable)",
+                    Text = "[VIDEO] ZED Camera Feed\n\nClick Play to start stream\n\n" +
+                           "NOTE: Close OSD video first (right-click HUD > Video > Stop)",
                     Dock = DockStyle.Fill,
                     ForeColor = Color.Gray,
                     Font = new Font("Segoe UI", 11),
