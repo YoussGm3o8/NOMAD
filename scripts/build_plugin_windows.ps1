@@ -1,14 +1,18 @@
 # NOMAD Mission Planner Plugin - Build and Deploy Script
-# Usage: .\build_and_deploy.ps1
+# Location: scripts/build_plugin_windows.ps1
+# Usage: .\scripts\build_plugin_windows.ps1 (from repo root)
+#        or Run from anywhere - it will auto-locate the project
 
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host " NOMAD Mission Planner Plugin Build" -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Set working directory to script location
+# Find project directory (relative to this script)
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-Set-Location $ScriptDir
+$RepoRoot = Split-Path -Parent $ScriptDir
+$ProjectDir = Join-Path $RepoRoot "mission_planner\src"
+Set-Location $ProjectDir
 
 # Configuration
 $ProjectFile = "NOMADPlugin.csproj"
