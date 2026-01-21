@@ -21,8 +21,8 @@ namespace NOMAD.MissionPlanner
 
         private TextBox _txtJetsonIP;
         private NumericUpDown _numPort;
-        private TextBox _txtRtspPrimary;
-        private TextBox _txtRtspSecondary;
+        private TextBox _txtRtspZed;
+        private NumericUpDown _numServoChannel;
         private CheckBox _chkUseELRS;
         private NumericUpDown _numTimeout;
         private CheckBox _chkDebug;
@@ -102,28 +102,41 @@ namespace NOMAD.MissionPlanner
             this.Controls.Add(lblVideoSection);
             yOffset += 25;
 
-            // Primary RTSP URL
-            AddLabel("Primary RTSP URL:", 20, yOffset);
-            _txtRtspPrimary = new TextBox
+            // ZED Camera RTSP URL
+            AddLabel("ZED Camera URL:", 20, yOffset);
+            _txtRtspZed = new TextBox
             {
                 Location = new Point(labelWidth + 30, yOffset - 3),
                 Size = new Size(250, 23),
                 BackColor = Color.FromArgb(30, 30, 30),
                 ForeColor = Color.White
             };
-            this.Controls.Add(_txtRtspPrimary);
+            this.Controls.Add(_txtRtspZed);
             yOffset += 30;
 
-            // Secondary RTSP URL
-            AddLabel("Secondary RTSP URL:", 20, yOffset);
-            _txtRtspSecondary = new TextBox
+            // Camera Tilt Servo Channel
+            AddLabel("Tilt Servo Channel:", 20, yOffset);
+            _numServoChannel = new NumericUpDown
             {
                 Location = new Point(labelWidth + 30, yOffset - 3),
-                Size = new Size(250, 23),
+                Size = new Size(60, 23),
+                Minimum = 0,
+                Maximum = 16,
+                Value = 10,
                 BackColor = Color.FromArgb(30, 30, 30),
                 ForeColor = Color.White
             };
-            this.Controls.Add(_txtRtspSecondary);
+            this.Controls.Add(_numServoChannel);
+            
+            var lblServoHelp = new Label
+            {
+                Text = "(0=off, 9-14=AUX1-6)",
+                Location = new Point(labelWidth + 100, yOffset),
+                AutoSize = true,
+                ForeColor = Color.Gray,
+                Font = new Font("Segoe UI", 8)
+            };
+            this.Controls.Add(lblServoHelp);
             yOffset += 40;
 
             // Use ELRS
@@ -225,8 +238,8 @@ namespace NOMAD.MissionPlanner
         {
             _txtJetsonIP.Text = Config.JetsonIP;
             _numPort.Value = Config.JetsonPort;
-            _txtRtspPrimary.Text = Config.RtspUrlPrimary;
-            _txtRtspSecondary.Text = Config.RtspUrlSecondary;
+            _txtRtspZed.Text = Config.RtspUrlZed;
+            _numServoChannel.Value = Config.ZedServoChannel;
             _chkUseELRS.Checked = Config.UseELRS;
             _numTimeout.Value = Config.HttpTimeoutSeconds;
             _chkDebug.Checked = Config.DebugMode;
@@ -236,8 +249,8 @@ namespace NOMAD.MissionPlanner
         {
             Config.JetsonIP = _txtJetsonIP.Text.Trim();
             Config.JetsonPort = (int)_numPort.Value;
-            Config.RtspUrlPrimary = _txtRtspPrimary.Text.Trim();
-            Config.RtspUrlSecondary = _txtRtspSecondary.Text.Trim();
+            Config.RtspUrlZed = _txtRtspZed.Text.Trim();
+            Config.ZedServoChannel = (int)_numServoChannel.Value;
             Config.UseELRS = _chkUseELRS.Checked;
             Config.HttpTimeoutSeconds = (int)_numTimeout.Value;
             Config.DebugMode = _chkDebug.Checked;

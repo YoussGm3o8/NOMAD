@@ -40,12 +40,12 @@ namespace NOMAD.MissionPlanner
         /// <summary>
         /// Tailscale IP address (if using VPN).
         /// </summary>
-        public string TailscaleIP { get; set; } = "100.100.100.100";
+        public string TailscaleIP { get; set; } = "100.75.218.89";
 
         /// <summary>
         /// Use Tailscale IP instead of local IP.
         /// </summary>
-        public bool UseTailscale { get; set; } = false;
+        public bool UseTailscale { get; set; } = true;
 
         /// <summary>
         /// Gets the effective IP based on UseTailscale setting.
@@ -64,14 +64,50 @@ namespace NOMAD.MissionPlanner
         // ============================================================
 
         /// <summary>
-        /// RTSP video stream URL (primary camera - ZED/Navigation).
+        /// RTSP video stream URL for ZED camera.
         /// </summary>
-        public string RtspUrlPrimary { get; set; } = "rtsp://192.168.1.100:8554/live";
+        public string RtspUrlZed { get; set; } = "rtsp://192.168.1.100:8554/zed";
 
         /// <summary>
-        /// RTSP video stream URL (secondary camera - Gimbal/Targeting).
+        /// Legacy: Primary RTSP URL (mapped to ZED for compatibility).
         /// </summary>
-        public string RtspUrlSecondary { get; set; } = "rtsp://192.168.1.100:8554/gimbal";
+        [Obsolete("Use RtspUrlZed instead")]
+        public string RtspUrlPrimary
+        {
+            get => RtspUrlZed;
+            set => RtspUrlZed = value;
+        }
+
+        /// <summary>
+        /// Legacy: Secondary RTSP URL (no longer used - only ZED camera available).
+        /// </summary>
+        [Obsolete("Secondary camera not available - use RtspUrlZed")]
+        public string RtspUrlSecondary
+        {
+            get => RtspUrlZed;
+            set { /* No-op for compatibility */ }
+        }
+
+        /// <summary>
+        /// Servo channel for ZED camera tilt control (0 = disabled).
+        /// Typically AUX1-AUX6 on flight controller (channels 9-14).
+        /// </summary>
+        public int ZedServoChannel { get; set; } = 10;
+
+        /// <summary>
+        /// Minimum PWM for ZED camera tilt (looking down).
+        /// </summary>
+        public int ZedServoMin { get; set; } = 1000;
+
+        /// <summary>
+        /// Maximum PWM for ZED camera tilt (looking up).
+        /// </summary>
+        public int ZedServoMax { get; set; } = 2000;
+
+        /// <summary>
+        /// Center PWM for ZED camera tilt (level).
+        /// </summary>
+        public int ZedServoCenter { get; set; } = 1500;
 
         /// <summary>
         /// Network caching for video streams (ms).
@@ -300,10 +336,14 @@ namespace NOMAD.MissionPlanner
         private void MigrateDefaults()
         {
             // Ensure video URLs use effective IP
-            if (RtspUrlPrimary.Contains("192.168.1.100") && UseTailscale)
+            if (RtspUrlZed.Contains("192.168.1.100") && UseTailscale)
             {
-                RtspUrlPrimary = $"rtsp://{TailscaleIP}:8554/live";
-                RtspUrlSecondary = $"rtsp://{TailscaleIP}:8554/gimbal";
+                RtspUrlZed = $"rtsp://{TailscaleIP}:8554/zed";
+            }
+            // Migrate from old 'live' endpoint to 'zed'
+            if (RtspUrlZed.EndsWith("/live"))
+            {
+                RtspUrlZed = RtspUrlZed.Replace("/live", "/zed");
             }
         }
 
@@ -328,8 +368,11 @@ namespace NOMAD.MissionPlanner
             JetsonPort = defaults.JetsonPort;
             TailscaleIP = defaults.TailscaleIP;
             UseTailscale = defaults.UseTailscale;
-            RtspUrlPrimary = defaults.RtspUrlPrimary;
-            RtspUrlSecondary = defaults.RtspUrlSecondary;
+            RtspUrlZed = defaults.RtspUrlZed;
+            ZedServoChannel = defaults.ZedServoChannel;
+            ZedServoMin = defaults.ZedServoMin;
+            ZedServoMax = defaults.ZedServoMax;
+            ZedServoCenter = defaults.ZedServoCenter;
             VideoNetworkCaching = defaults.VideoNetworkCaching;
             PreferredVideoPlayer = defaults.PreferredVideoPlayer;
             VideoAutoStart = defaults.VideoAutoStart;

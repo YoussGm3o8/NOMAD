@@ -13,16 +13,25 @@ from __future__ import annotations
 
 import atexit
 import logging
+import os
 import signal
 import sys
 from typing import Any
 
 import uvicorn
 
-from .api import create_app
+from .api import create_app, set_isaac_bridge
 from .mavlink_interface import MavlinkService
 from .state import StateManager
 from .time_manager import TimeSyncService, TimeSyncStatus
+
+# Conditional import for Isaac ROS bridge (ROS2 environment only)
+try:
+    from .isaac_ros_bridge import IsaacROSBridge, init_isaac_bridge, get_isaac_bridge
+    ISAAC_ROS_AVAILABLE = True
+except ImportError:
+    ISAAC_ROS_AVAILABLE = False
+    IsaacROSBridge = None  # type: ignore
 
 # Configure logging
 logging.basicConfig(
@@ -39,6 +48,9 @@ mavlink_service = MavlinkService(state_manager)
 # Time synchronization service
 time_sync_service: TimeSyncService | None = None
 
+# Isaac ROS bridge (Task 2 only - requires ROS2 environment)
+isaac_bridge: "IsaacROSBridge | None" = None
+
 
 def get_app():
     """Get or create the FastAPI application."""
@@ -51,8 +63,13 @@ app = get_app()
 
 def cleanup() -> None:
     """Cleanup on shutdown."""
-    global time_sync_service
+    global time_sync_service, isaac_bridge
     logger.info("Shutting down Edge Core...")
+
+    # Stop Isaac ROS bridge first (depends on ROS being active)
+    if isaac_bridge:
+        isaac_bridge.stop()
+        logger.info("Isaac ROS bridge stopped")
 
     # Stop time sync service
     if time_sync_service:
@@ -80,13 +97,29 @@ def run(
         port: Port number
         log_level: Logging level
     """
-    global time_sync_service
+    global time_sync_service, isaac_bridge
 
     logger.info("=" * 50)
     logger.info("NOMAD Edge Core Starting")
     logger.info("=" * 50)
     logger.info(f"Host: {host}:{port}")
     logger.info("=" * 50)
+
+    # Initialize Isaac ROS bridge (Task 2 only - requires NOMAD_ENABLE_ISAAC_ROS=true)
+    enable_isaac = os.environ.get("NOMAD_ENABLE_ISAAC_ROS", "false").lower() == "true"
+    if enable_isaac and ISAAC_ROS_AVAILABLE:
+        try:
+            isaac_bridge = init_isaac_bridge()
+            isaac_bridge.start()
+            set_isaac_bridge(isaac_bridge)
+            logger.info("Isaac ROS bridge started")
+        except Exception as e:
+            logger.error(f"Failed to start Isaac ROS bridge: {e}")
+            isaac_bridge = None
+    elif enable_isaac and not ISAAC_ROS_AVAILABLE:
+        logger.warning("Isaac ROS enabled but rclpy not available - skipping bridge")
+    else:
+        logger.info("Isaac ROS bridge disabled (set NOMAD_ENABLE_ISAAC_ROS=true to enable)")
 
     # Initialize time synchronization service
     def on_time_sync_change(status: TimeSyncStatus) -> None:

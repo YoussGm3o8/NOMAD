@@ -76,6 +76,11 @@
       <HintPath>C:\Program Files (x86)\Mission Planner\MissionPlanner.Utilities.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="MissionPlanner.Drawing">
+      <HintPath>C:\Program Files (x86)\Mission Planner\MissionPlanner.Drawing.dll</HintPath>
+      <Private>False</Private>
+      <Aliases>MPDrawing</Aliases>
+    </Reference>
     <Reference Include="Interfaces">
       <HintPath>C:\Program Files (x86)\Mission Planner\Interfaces.dll</HintPath>
       <Private>False</Private>

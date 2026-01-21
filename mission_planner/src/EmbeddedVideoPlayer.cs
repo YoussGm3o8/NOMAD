@@ -1,22 +1,24 @@
+extern alias MPDrawing;
+
 // ============================================================
 // NOMAD Embedded Video Player Control
 // ============================================================
 // Provides in-app RTSP video streaming for Mission Planner
-// without requiring external VLC or FFplay applications.
-// Uses LibVLCSharp for embedded video playback.
+// using the built-in GStreamer pipeline (same core as OSD video).
 // ============================================================
 
 using System;
 using System.Drawing;
-using System.Threading.Tasks;
 using System.Windows.Forms;
+using MissionPlanner.Utilities;
+using MPBitmap = MPDrawing::System.Drawing.Bitmap;
 
 namespace NOMAD.MissionPlanner
 {
     /// <summary>
     /// Embedded video player for RTSP streams within Mission Planner.
-    /// Uses LibVLCSharp for native video playback.
-    /// Falls back to external player if LibVLC is not available.
+    /// Uses Mission Planner's GStreamer wrapper for native video playback.
+    /// Falls back to external player only if GStreamer is not available.
     /// </summary>
     public class EmbeddedVideoPlayer : UserControl
     {
@@ -27,7 +29,7 @@ namespace NOMAD.MissionPlanner
         private string _streamTitle;
         private string _streamUrl;
         private bool _isPlaying;
-        private bool _useEmbedded;
+        private bool _useGStreamer;
         
         // UI Controls
         private Panel _videoPanel;
@@ -43,11 +45,13 @@ namespace NOMAD.MissionPlanner
         private TrackBar _trkLatency;
         private Label _lblLatency;
         
-        // LibVLC (if available)
-        private dynamic _libVLC;
-        private dynamic _mediaPlayer;
-        private dynamic _videoView;
-        private string _libVlcInitErrorMessage = null;
+        // GStreamer (Mission Planner built-in)
+        private GStreamer _gst;
+        private PictureBox _videoBox;
+        private Form _fullscreenForm;
+        private PictureBox _fullscreenBox;
+        private MPBitmap _lastFrame;
+        private string _embeddedInitErrorMessage = null;
         
         // Playback settings
         private int _networkCaching = 100; // ms
@@ -62,7 +66,7 @@ namespace NOMAD.MissionPlanner
             _streamTitle = title;
             _streamUrl = rtspUrl;
             _isPlaying = false;
-            _useEmbedded = TryInitializeLibVLC();
+            _useGStreamer = TryInitializeGStreamer();
             
             InitializeUI();
         }
@@ -71,69 +75,27 @@ namespace NOMAD.MissionPlanner
         // LibVLC Initialization
         // ============================================================
         
-        private bool TryInitializeLibVLC()
+        private bool TryInitializeGStreamer()
         {
             try
             {
-                // Try to load LibVLCSharp dynamically from the AppDomain first
-                System.Reflection.Assembly assembly = null;
-                try
+                _gst = new GStreamer();
+                var gstPath = GStreamer.LookForGstreamer();
+                if (string.IsNullOrWhiteSpace(gstPath) || !GStreamer.GstLaunchExists)
                 {
-                    assembly = System.Reflection.Assembly.Load("LibVLCSharp.WinForms");
-                }
-                catch { }
-
-                // If not already loaded, try to find a local copy next to this assembly
-                if (assembly == null)
-                {
-                    var baseDir = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-                    var candidate = System.IO.Path.Combine(baseDir, "LibVLCSharp.WinForms.dll");
-                    if (System.IO.File.Exists(candidate))
-                    {
-                        try { assembly = System.Reflection.Assembly.LoadFrom(candidate); } catch { assembly = null; }
-                    }
+                    _embeddedInitErrorMessage = "GStreamer runtime not found. Install Mission Planner GStreamer support or run its GStreamer downloader.";
+                    System.Diagnostics.Debug.WriteLine("NOMAD: GStreamer not available");
+                    return false;
                 }
 
-                if (assembly != null)
-                {
-                    var vlcType = assembly.GetType("LibVLCSharp.Shared.LibVLC");
-                    var mediaPlayerType = assembly.GetType("LibVLCSharp.Shared.MediaPlayer");
-                    var videoViewType = assembly.GetType("LibVLCSharp.WinForms.VideoView");
-
-                    if (vlcType != null && mediaPlayerType != null && videoViewType != null)
-                    {
-                        try
-                        {
-                            // Initialize LibVLC - pass args as string[] to match expected ctor
-                            var args = new string[] { $"--network-caching={_networkCaching}" };
-                            _libVLC = Activator.CreateInstance(vlcType, new object[] { args });
-                            _mediaPlayer = Activator.CreateInstance(mediaPlayerType, _libVLC);
-                            _videoView = Activator.CreateInstance(videoViewType);
-
-                            // Set media player on video view
-                            _videoView.MediaPlayer = _mediaPlayer;
-
-                            System.Diagnostics.Debug.WriteLine("NOMAD: LibVLCSharp initialized successfully");
-                            return true;
-                        }
-                        catch (System.DllNotFoundException dllEx)
-                        {
-                            // Native libvlc not found (common if VLC isn't installed)
-                            _libVlcInitErrorMessage = "Native libVLC not found (libvlc.dll); install VLC or include libvlc redistributables." + Environment.NewLine + dllEx.Message;
-                            System.Diagnostics.Debug.WriteLine("NOMAD: LibVLCSharp initialization failed - native lib missing: " + dllEx.Message);
-                        }
-                        catch (Exception ex)
-                        {
-                            _libVlcInitErrorMessage = ex.Message;
-                            System.Diagnostics.Debug.WriteLine($"NOMAD: LibVLCSharp initialization failed - {ex}");
-                        }
-                    }
-                }
+                _gst.OnNewImage += OnGstNewImage;
+                System.Diagnostics.Debug.WriteLine("NOMAD: GStreamer initialized successfully");
+                return true;
             }
             catch (Exception ex)
             {
-                _libVlcInitErrorMessage = ex.Message;
-                System.Diagnostics.Debug.WriteLine($"NOMAD: LibVLCSharp not available - {ex}");
+                _embeddedInitErrorMessage = ex.Message;
+                System.Diagnostics.Debug.WriteLine($"NOMAD: GStreamer initialization failed - {ex}");
             }
             
             return false;
@@ -173,40 +135,43 @@ namespace NOMAD.MissionPlanner
                 Margin = new Padding(0),
             };
             
-            // Add placeholder or LibVLC video view
-            if (_useEmbedded && _videoView != null)
+            _videoBox = new PictureBox
             {
-                _videoView.Dock = DockStyle.Fill;
-                _videoPanel.Controls.Add(_videoView);
+                Dock = DockStyle.Fill,
+                BackColor = Color.Black,
+                SizeMode = PictureBoxSizeMode.Zoom,
+            };
+
+            if (_useGStreamer)
+            {
+                _videoPanel.Controls.Add(_videoBox);
             }
             else
             {
                 var placeholder = new Label
                 {
                     Text = "[VIDEO] Video Feed\n\nClick Play to start stream\n\n" +
-                           "(External player will open if LibVLC unavailable)",
+                           "(Embedded GStreamer unavailable)",
                     Dock = DockStyle.Fill,
                     ForeColor = Color.Gray,
                     Font = new Font("Segoe UI", 11),
                     TextAlign = ContentAlignment.MiddleCenter,
                 };
-                    _videoPanel.Controls.Add(placeholder);
+                _videoPanel.Controls.Add(placeholder);
 
-                    // If there was a specific libVLC init error, show a small note below the control
-                    if (!string.IsNullOrEmpty(_libVlcInitErrorMessage))
+                if (!string.IsNullOrEmpty(_embeddedInitErrorMessage))
+                {
+                    var info = new Label
                     {
-                        var info = new Label
-                        {
-                            Text = "Embedded player unavailable: " + _libVlcInitErrorMessage,
-                            Dock = DockStyle.Bottom,
-                            ForeColor = Color.Orange,
-                            Font = new Font("Segoe UI", 8),
-                            Height = 32,
-                            TextAlign = ContentAlignment.MiddleLeft,
-                        };
-                        // place the note above control panel
-                        mainPanel.Controls.Add(info, 0, 2);
-                    }
+                        Text = "Embedded player unavailable: " + _embeddedInitErrorMessage,
+                        Dock = DockStyle.Bottom,
+                        ForeColor = Color.Orange,
+                        Font = new Font("Segoe UI", 8),
+                        Height = 32,
+                        TextAlign = ContentAlignment.MiddleLeft,
+                    };
+                    mainPanel.Controls.Add(info, 0, 2);
+                }
             }
             
             mainPanel.Controls.Add(_videoPanel, 0, 1);
@@ -405,45 +370,23 @@ namespace NOMAD.MissionPlanner
             
             try
             {
-                if (_useEmbedded && _libVLC != null && _mediaPlayer != null)
+                if (_useGStreamer && _gst != null)
                 {
-                    // Use LibVLC embedded playback
-                    var mediaType = _libVLC.GetType().Assembly.GetType("LibVLCSharp.Shared.Media");
-                    var fromLocationType = _libVLC.GetType().Assembly.GetType("LibVLCSharp.Shared.FromType");
-                    
-                    var options = new string[]
-                    {
-                        $":network-caching={_networkCaching}",
-                        ":rtsp-tcp",
-                        ":clock-jitter=0",
-                        ":clock-synchro=0"
-                    };
-                    
-                    dynamic media = Activator.CreateInstance(mediaType, _libVLC, _streamUrl, 1); // FromType.FromLocation = 1
-                    foreach (var opt in options)
-                    {
-                        media.AddOption(opt);
-                    }
-                    
-                    _mediaPlayer.Media = media;
-                    _mediaPlayer.Play();
-                    
+                    var pipeline = BuildGStreamerPipeline();
+                    _gst.Start(pipeline);
+
                     _isPlaying = true;
-                    UpdateStatus("[*] Playing (Embedded)", Color.LimeGreen);
+                    UpdateStatus("[*] Playing (GStreamer)", Color.LimeGreen);
                 }
                 else
                 {
-                    // Fall back to external player
-                    OpenExternal();
+                    UpdateStatus("[X] Embedded player unavailable", Color.Red);
                 }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"NOMAD Video: Play error - {ex.Message}");
                 UpdateStatus($"[X] Error: {ex.Message}", Color.Red);
-                
-                // Try external as fallback
-                OpenExternal();
             }
         }
         
@@ -451,9 +394,9 @@ namespace NOMAD.MissionPlanner
         {
             try
             {
-                if (_useEmbedded && _mediaPlayer != null)
+                if (_useGStreamer && _gst != null)
                 {
-                    _mediaPlayer.Stop();
+                    _gst.Stop();
                 }
                 
                 _isPlaying = false;
@@ -547,27 +490,18 @@ namespace NOMAD.MissionPlanner
         {
             try
             {
-                if (_useEmbedded && _mediaPlayer != null)
+                if (_lastFrame != null)
                 {
                     var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                     var filename = $"NOMAD_Snapshot_{DateTime.Now:yyyyMMdd_HHmmss}.png";
                     var path = System.IO.Path.Combine(desktopPath, filename);
-                    
-                    // Try to take snapshot via LibVLC
-                    bool success = _mediaPlayer.TakeSnapshot(0, path, 0, 0);
-                    
-                    if (success)
-                    {
-                        UpdateStatus($"[S] Saved: {filename}", Color.LimeGreen);
-                    }
-                    else
-                    {
-                        UpdateStatus("[X] Snapshot failed", Color.Red);
-                    }
+
+                    _lastFrame.Save(path);
+                    UpdateStatus($"[S] Saved: {filename}", Color.LimeGreen);
                 }
                 else
                 {
-                    UpdateStatus("[!] No embedded player", Color.Yellow);
+                    UpdateStatus("[!] No frame available", Color.Yellow);
                 }
             }
             catch (Exception ex)
@@ -580,41 +514,41 @@ namespace NOMAD.MissionPlanner
         {
             try
             {
-                if (_useEmbedded && _mediaPlayer != null)
+                if (_fullscreenForm != null && !_fullscreenForm.IsDisposed)
                 {
-                    _mediaPlayer.ToggleFullscreen();
+                    _fullscreenForm.Close();
+                    _fullscreenForm = null;
+                    _fullscreenBox = null;
+                    return;
                 }
-                else
+
+                _fullscreenForm = new Form
                 {
-                    // Create fullscreen form with video panel
-                    var fullscreenForm = new Form
+                    FormBorderStyle = FormBorderStyle.None,
+                    WindowState = FormWindowState.Maximized,
+                    BackColor = Color.Black,
+                    KeyPreview = true,
+                };
+
+                _fullscreenForm.KeyDown += (s, e) =>
+                {
+                    if (e.KeyCode == Keys.Escape)
                     {
-                        FormBorderStyle = FormBorderStyle.None,
-                        WindowState = FormWindowState.Maximized,
-                        BackColor = Color.Black,
-                        KeyPreview = true,
-                    };
-                    
-                    fullscreenForm.KeyDown += (s, e) =>
-                    {
-                        if (e.KeyCode == Keys.Escape)
-                        {
-                            fullscreenForm.Close();
-                        }
-                    };
-                    
-                    var infoLabel = new Label
-                    {
-                        Text = $"Fullscreen Mode\n\n{_streamTitle}\n{_streamUrl}\n\nPress ESC to exit",
-                        Dock = DockStyle.Fill,
-                        ForeColor = Color.White,
-                        Font = new Font("Segoe UI", 14),
-                        TextAlign = ContentAlignment.MiddleCenter,
-                    };
-                    fullscreenForm.Controls.Add(infoLabel);
-                    
-                    fullscreenForm.Show();
-                }
+                        _fullscreenForm.Close();
+                        _fullscreenForm = null;
+                        _fullscreenBox = null;
+                    }
+                };
+
+                _fullscreenBox = new PictureBox
+                {
+                    Dock = DockStyle.Fill,
+                    BackColor = Color.Black,
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                };
+
+                _fullscreenForm.Controls.Add(_fullscreenBox);
+                _fullscreenForm.Show();
             }
             catch (Exception ex)
             {
@@ -666,23 +600,80 @@ namespace NOMAD.MissionPlanner
                 try
                 {
                     StopStream();
-                    
-                    if (_mediaPlayer != null)
+                    _gst = null;
+
+                    if (_lastFrame != null)
                     {
-                        _mediaPlayer.Dispose();
-                        _mediaPlayer = null;
-                    }
-                    
-                    if (_libVLC != null)
-                    {
-                        _libVLC.Dispose();
-                        _libVLC = null;
+                        _lastFrame.Dispose();
+                        _lastFrame = null;
                     }
                 }
                 catch { }
             }
             
             base.Dispose(disposing);
+        }
+
+        // ============================================================
+        // GStreamer Helpers
+        // ============================================================
+
+        private string BuildGStreamerPipeline()
+        {
+            var latency = Math.Max(50, _networkCaching);
+            return $"rtspsrc location=\"{_streamUrl}\" latency={latency} protocols=tcp ! " +
+                   "queue ! decodebin ! videoconvert ! videoscale ! " +
+                   "video/x-raw,format=RGB ! appsink name=appsink";
+        }
+
+        private void OnGstNewImage(object sender, MPBitmap frame)
+        {
+            if (frame == null)
+            {
+                return;
+            }
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => OnGstNewImage(sender, frame)));
+                return;
+            }
+
+            try
+            {
+                // Clone frames for display and snapshot
+                // Use dynamic to handle the type mismatch between compile-time and runtime assemblies
+                dynamic displayFrame = frame.Clone();
+                var snapshotFrame = (MPBitmap)frame.Clone();
+
+                // Update video display
+                var old = _videoBox?.Image;
+                if (_videoBox != null)
+                {
+                    _videoBox.Image = displayFrame;
+                }
+                (old as IDisposable)?.Dispose();
+
+                // Update fullscreen display
+                if (_fullscreenBox != null)
+                {
+                    var oldFull = _fullscreenBox.Image;
+                    dynamic fullFrame = frame.Clone();
+                    _fullscreenBox.Image = fullFrame;
+                    (oldFull as IDisposable)?.Dispose();
+                }
+
+                // Keep last frame for snapshot
+                if (_lastFrame != null)
+                {
+                    _lastFrame.Dispose();
+                }
+                _lastFrame = snapshotFrame;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"NOMAD Video: Frame update error - {ex.Message}");
+            }
         }
     }
 }

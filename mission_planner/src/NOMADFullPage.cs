@@ -53,8 +53,10 @@ namespace NOMAD.MissionPlanner
         private Panel _pnlQuickActions;
         
         // Video Tab Controls
-        private EmbeddedVideoPlayer _primaryVideoPlayer;
-        private EmbeddedVideoPlayer _secondaryVideoPlayer;
+        private EmbeddedVideoPlayer _zedVideoPlayer;
+        private TrackBar _trkCameraTilt;
+        private Label _lblTiltAngle;
+        private Button _btnTiltCenter;
         
         // Terminal Tab Controls
         private JetsonTerminalControl _terminalControl;
@@ -708,38 +710,151 @@ namespace NOMAD.MissionPlanner
         
         private void CreateVideoTab()
         {
-            _tabVideo = new TabPage("Video Feeds")
+            _tabVideo = new TabPage("ZED Camera")
             {
                 BackColor = Color.FromArgb(30, 30, 30),
                 Padding = new Padding(10),
             };
             
-            var panel = new TableLayoutPanel
+            var mainPanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 1,
+                ColumnCount = 1,
+                RowCount = 2,
                 BackColor = Color.Transparent,
             };
             
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            mainPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
             
-            // Primary Video Player
-            _primaryVideoPlayer = new EmbeddedVideoPlayer(
-                "Primary (ZED/Navigation)",
-                _config.RtspUrlPrimary
+            // ZED Camera Video Player (full width)
+            _zedVideoPlayer = new EmbeddedVideoPlayer(
+                "ZED Camera (Navigation/VIO)",
+                _config.RtspUrlZed
             );
-            panel.Controls.Add(_primaryVideoPlayer, 0, 0);
+            _zedVideoPlayer.Dock = DockStyle.Fill;
+            mainPanel.Controls.Add(_zedVideoPlayer, 0, 0);
             
-            // Secondary Video Player
-            _secondaryVideoPlayer = new EmbeddedVideoPlayer(
-                "Secondary (Gimbal/Targeting)",
-                _config.RtspUrlSecondary
-            );
-            panel.Controls.Add(_secondaryVideoPlayer, 1, 0);
+            // Camera Tilt Control Panel
+            var tiltPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(45, 45, 48),
+                Padding = new Padding(10),
+            };
             
-            _tabVideo.Controls.Add(panel);
+            var lblTiltTitle = new Label
+            {
+                Text = "Camera Tilt (Servo Control)",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                Location = new Point(10, 5),
+                AutoSize = true,
+            };
+            tiltPanel.Controls.Add(lblTiltTitle);
+            
+            // Tilt slider (maps to servo PWM)
+            _trkCameraTilt = new TrackBar
+            {
+                Minimum = _config.ZedServoMin,
+                Maximum = _config.ZedServoMax,
+                Value = _config.ZedServoCenter,
+                TickFrequency = 100,
+                LargeChange = 100,
+                SmallChange = 10,
+                Location = new Point(10, 30),
+                Size = new Size(400, 30),
+            };
+            _trkCameraTilt.ValueChanged += TrkCameraTilt_ValueChanged;
+            tiltPanel.Controls.Add(_trkCameraTilt);
+            
+            _lblTiltAngle = new Label
+            {
+                Text = "PWM: 1500 (Level)",
+                ForeColor = Color.LimeGreen,
+                Font = new Font("Segoe UI", 9),
+                Location = new Point(420, 35),
+                AutoSize = true,
+            };
+            tiltPanel.Controls.Add(_lblTiltAngle);
+            
+            _btnTiltCenter = new Button
+            {
+                Text = "Center",
+                Location = new Point(550, 28),
+                Size = new Size(70, 28),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(0, 122, 204),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9),
+            };
+            _btnTiltCenter.Click += (s, e) => {
+                _trkCameraTilt.Value = _config.ZedServoCenter;
+            };
+            tiltPanel.Controls.Add(_btnTiltCenter);
+            
+            var lblDown = new Label
+            {
+                Text = "▼ Down",
+                ForeColor = Color.Gray,
+                Font = new Font("Segoe UI", 8),
+                Location = new Point(10, 55),
+                AutoSize = true,
+            };
+            tiltPanel.Controls.Add(lblDown);
+            
+            var lblUp = new Label
+            {
+                Text = "Up ▲",
+                ForeColor = Color.Gray,
+                Font = new Font("Segoe UI", 8),
+                Location = new Point(375, 55),
+                AutoSize = true,
+            };
+            tiltPanel.Controls.Add(lblUp);
+            
+            mainPanel.Controls.Add(tiltPanel, 0, 1);
+            _tabVideo.Controls.Add(mainPanel);
+        }
+        
+        private void TrkCameraTilt_ValueChanged(object sender, EventArgs e)
+        {
+            var pwm = _trkCameraTilt.Value;
+            var center = _config.ZedServoCenter;
+            var range = _config.ZedServoMax - _config.ZedServoMin;
+            var deviation = pwm - center;
+            var angle = (int)((deviation / (range / 2.0)) * 45); // Approx -45 to +45 degrees
+            
+            string direction = angle == 0 ? "Level" : (angle > 0 ? "Up" : "Down");
+            _lblTiltAngle.Text = $"PWM: {pwm} ({direction})";
+            
+            // Send servo command to flight controller
+            if (_config.ZedServoChannel > 0)
+            {
+                SendCameraTiltCommand(pwm);
+            }
+        }
+        
+        private async void SendCameraTiltCommand(int pwm)
+        {
+            try
+            {
+                // Use MAVLink DO_SET_SERVO command via Mission Planner
+                if (MainV2.comPort?.BaseStream?.IsOpen == true)
+                {
+                    MainV2.comPort.doCommand(
+                        (byte)MainV2.comPort.sysidcurrent,
+                        (byte)MainV2.comPort.compidcurrent,
+                        MAVLink.MAV_CMD.DO_SET_SERVO,
+                        _config.ZedServoChannel,  // Servo channel
+                        pwm,                       // PWM value
+                        0, 0, 0, 0, 0);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"NOMAD: Camera tilt error - {ex.Message}");
+            }
         }
         
         // ============================================================
@@ -853,42 +968,78 @@ namespace NOMAD.MissionPlanner
             // Video Stream Group
             var videoGroup = new GroupBox
             {
-                Text = "RTSP Video Streams",
+                Text = "ZED Camera Settings",
                 ForeColor = Color.FromArgb(200, 100, 200),
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 Location = new Point(10, yOffset),
-                Size = new Size(400, 100),
+                Size = new Size(400, 130),
                 BackColor = Color.FromArgb(45, 45, 48),
             };
             
-            var lblPrimary = new Label { Text = "Primary:", Location = new Point(15, 30), ForeColor = Color.LightGray, AutoSize = true };
-            videoGroup.Controls.Add(lblPrimary);
+            var lblZedUrl = new Label { Text = "RTSP URL:", Location = new Point(15, 30), ForeColor = Color.LightGray, AutoSize = true };
+            videoGroup.Controls.Add(lblZedUrl);
             
-            var txtPrimary = new TextBox
+            var txtZedUrl = new TextBox
             {
-                Text = _config.RtspUrlPrimary,
+                Text = _config.RtspUrlZed,
                 Location = new Point(80, 27),
                 Size = new Size(300, 25),
                 BackColor = Color.FromArgb(30, 30, 30),
                 ForeColor = Color.White,
             };
-            videoGroup.Controls.Add(txtPrimary);
+            videoGroup.Controls.Add(txtZedUrl);
             
-            var lblSecondary = new Label { Text = "Secondary:", Location = new Point(15, 60), ForeColor = Color.LightGray, AutoSize = true };
-            videoGroup.Controls.Add(lblSecondary);
+            var lblServoChannel = new Label { Text = "Tilt Servo:", Location = new Point(15, 60), ForeColor = Color.LightGray, AutoSize = true };
+            videoGroup.Controls.Add(lblServoChannel);
             
-            var txtSecondary = new TextBox
+            var txtServoChannel = new TextBox
             {
-                Text = _config.RtspUrlSecondary,
+                Text = _config.ZedServoChannel.ToString(),
                 Location = new Point(80, 57),
-                Size = new Size(300, 25),
+                Size = new Size(60, 25),
                 BackColor = Color.FromArgb(30, 30, 30),
                 ForeColor = Color.White,
             };
-            videoGroup.Controls.Add(txtSecondary);
+            videoGroup.Controls.Add(txtServoChannel);
+            
+            var lblServoHelp = new Label
+            {
+                Text = "Channel (0=off, 9-14=AUX1-6)",
+                Location = new Point(150, 60),
+                ForeColor = Color.Gray,
+                AutoSize = true,
+                Font = new Font("Segoe UI", 8),
+            };
+            videoGroup.Controls.Add(lblServoHelp);
+            
+            var lblPwmRange = new Label { Text = "PWM Range:", Location = new Point(15, 90), ForeColor = Color.LightGray, AutoSize = true };
+            videoGroup.Controls.Add(lblPwmRange);
+            
+            var txtPwmMin = new TextBox
+            {
+                Text = _config.ZedServoMin.ToString(),
+                Location = new Point(90, 87),
+                Size = new Size(50, 25),
+                BackColor = Color.FromArgb(30, 30, 30),
+                ForeColor = Color.White,
+            };
+            videoGroup.Controls.Add(txtPwmMin);
+            
+            var lblTo = new Label { Text = "to", Location = new Point(145, 90), ForeColor = Color.Gray, AutoSize = true };
+            videoGroup.Controls.Add(lblTo);
+            
+            var txtPwmMax = new TextBox
+            {
+                Text = _config.ZedServoMax.ToString(),
+                Location = new Point(165, 87),
+                Size = new Size(50, 25),
+                BackColor = Color.FromArgb(30, 30, 30),
+                ForeColor = Color.White,
+            };
+            videoGroup.Controls.Add(txtPwmMax);
             
             panel.Controls.Add(videoGroup);
-            yOffset += 110;
+            yOffset += 140;
             
             // Save Button
             var btnSave = new Button
@@ -905,8 +1056,10 @@ namespace NOMAD.MissionPlanner
             {
                 _config.JetsonIP = txtIp.Text;
                 _config.JetsonPort = int.Parse(txtPort.Text);
-                _config.RtspUrlPrimary = txtPrimary.Text;
-                _config.RtspUrlSecondary = txtSecondary.Text;
+                _config.RtspUrlZed = txtZedUrl.Text;
+                if (int.TryParse(txtServoChannel.Text, out int servo)) _config.ZedServoChannel = servo;
+                if (int.TryParse(txtPwmMin.Text, out int pwmMin)) _config.ZedServoMin = pwmMin;
+                if (int.TryParse(txtPwmMax.Text, out int pwmMax)) _config.ZedServoMax = pwmMax;
                 _config.Save();
                 CustomMessageBox.Show("Settings saved!", "NOMAD");
             };
@@ -1042,10 +1195,17 @@ namespace NOMAD.MissionPlanner
         public void UpdateConfig(NOMADConfig config)
         {
             _config = config;
-            _primaryVideoPlayer?.UpdateStreamUrl(_config.RtspUrlPrimary);
-            _secondaryVideoPlayer?.UpdateStreamUrl(_config.RtspUrlSecondary);
+            _zedVideoPlayer?.UpdateStreamUrl(_config.RtspUrlZed);
             _terminalControl?.UpdateConfig(_config);
             _healthDashboard?.UpdateConfig(_config);
+            
+            // Update tilt servo range if changed
+            if (_trkCameraTilt != null)
+            {
+                _trkCameraTilt.Minimum = _config.ZedServoMin;
+                _trkCameraTilt.Maximum = _config.ZedServoMax;
+                _trkCameraTilt.Value = Math.Max(_config.ZedServoMin, Math.Min(_config.ZedServoMax, _trkCameraTilt.Value));
+            }
         }
         
         protected override void Dispose(bool disposing)
@@ -1054,8 +1214,7 @@ namespace NOMAD.MissionPlanner
             {
                 _updateTimer?.Stop();
                 _updateTimer?.Dispose();
-                _primaryVideoPlayer?.Dispose();
-                _secondaryVideoPlayer?.Dispose();
+                _zedVideoPlayer?.Dispose();
                 _terminalControl?.Dispose();
                 _healthDashboard?.Dispose();
             }

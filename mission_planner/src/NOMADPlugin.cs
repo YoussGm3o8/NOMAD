@@ -201,6 +201,7 @@ namespace NOMAD.MissionPlanner
                 if (_controlPanelTab == null)
                 {
                     _controlPanelTab = new NOMADControlPanel(_sender, _config);
+                    _controlPanelTab.DockStateChanged += ControlPanel_DockStateChanged;
                 }
 
                 if (_tabPage == null)
@@ -458,6 +459,163 @@ namespace NOMAD.MissionPlanner
                     _controlPanelWindow?.UpdateConfig(_config);
                     _fullPage?.UpdateConfig(_config);
                 }
+            }
+        }
+        
+        /// <summary>
+        /// Handle dock/undock requests from the control panel.
+        /// </summary>
+        private void ControlPanel_DockStateChanged(object sender, bool isDocked)
+        {
+            if (Host?.MainForm != null && Host.MainForm.InvokeRequired)
+            {
+                Host.MainForm.BeginInvoke((MethodInvoker)delegate { ControlPanel_DockStateChanged(sender, isDocked); });
+                return;
+            }
+            
+            try
+            {
+                if (isDocked)
+                {
+                    // Dock back to FlightData tab
+                    DockControlPanel();
+                }
+                else
+                {
+                    // Undock to floating window
+                    UndockControlPanel();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"NOMAD: Dock/Undock error - {ex.Message}");
+            }
+        }
+        
+        private void UndockControlPanel()
+        {
+            // Remove from tab if currently docked there
+            if (_tabPage != null && _tabPage.Controls.Contains(_controlPanelTab))
+            {
+                _tabPage.Controls.Remove(_controlPanelTab);
+            }
+            
+            // Remove tab from FlightData
+            RemoveTabFromFlightData(_tabPage);
+            
+            // Create floating window if needed
+            if (_panelForm == null || _panelForm.IsDisposed)
+            {
+                _panelForm = new Form
+                {
+                    Text = "NOMAD Quick Panel (Floating)",
+                    StartPosition = FormStartPosition.CenterParent,
+                    Width = 420,
+                    Height = 800,
+                    AutoScroll = true,
+                    TopMost = true,
+                };
+                
+                _panelForm.FormClosing += (s, e) =>
+                {
+                    if (e.CloseReason == CloseReason.UserClosing)
+                    {
+                        // Dock back instead of closing
+                        e.Cancel = true;
+                        _controlPanelTab?.SetDockState(true);
+                        ControlPanel_DockStateChanged(null, true);
+                    }
+                };
+            }
+            
+            _panelForm.Controls.Clear();
+            _panelForm.Controls.Add(_controlPanelTab);
+            _controlPanelTab.Dock = DockStyle.Fill;
+            _controlPanelTab.SetDockState(false);
+            
+            if (!_panelForm.Visible)
+            {
+                _panelForm.Show(Host?.MainForm);
+            }
+            _panelForm.BringToFront();
+        }
+        
+        private void DockControlPanel()
+        {
+            // Hide floating window
+            if (_panelForm != null && !_panelForm.IsDisposed)
+            {
+                _panelForm.Controls.Remove(_controlPanelTab);
+                _panelForm.Hide();
+            }
+            
+            // Put back in tab
+            if (_tabPage == null)
+            {
+                _tabPage = new TabPage("NOMAD")
+                {
+                    BackColor = Color.FromArgb(45, 45, 48)
+                };
+            }
+            
+            if (!_tabPage.Controls.Contains(_controlPanelTab))
+            {
+                _tabPage.Controls.Add(_controlPanelTab);
+                _controlPanelTab.Dock = DockStyle.Fill;
+            }
+            _controlPanelTab.SetDockState(true);
+            
+            // Re-add tab to FlightData
+            _tabAdded = AddTabToFlightData(_tabPage);
+            
+            // Select the NOMAD tab
+            if (_tabAdded)
+            {
+                SelectNomadTab();
+            }
+        }
+        
+        private void RemoveTabFromFlightData(TabPage tab)
+        {
+            try
+            {
+                var flightData = Host?.MainForm?.Controls.Find("FlightData", true);
+                if (flightData != null && flightData.Length > 0 && flightData[0] is UserControl fd)
+                {
+                    var tabControl = fd.Controls.Find("tabControlactions", true);
+                    if (tabControl.Length > 0 && tabControl[0] is TabControl tc)
+                    {
+                        if (tc.TabPages.Contains(tab))
+                        {
+                            tc.TabPages.Remove(tab);
+                            _tabAdded = false;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"NOMAD: Tab removal failed - {ex.Message}");
+            }
+        }
+        
+        private void SelectNomadTab()
+        {
+            try
+            {
+                var flightData = Host?.MainForm?.Controls.Find("FlightData", true);
+                if (flightData != null && flightData.Length > 0 && flightData[0] is UserControl fd)
+                {
+                    var tabControl = fd.Controls.Find("tabControlactions", true);
+                    if (tabControl.Length > 0 && tabControl[0] is TabControl tc)
+                    {
+                        tc.SelectedTab = _tabPage;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"NOMAD: Tab selection failed - {ex.Message}");
             }
         }
     }

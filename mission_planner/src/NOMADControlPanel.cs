@@ -60,10 +60,19 @@ namespace NOMAD.MissionPlanner
 
         // Video Stream Controls
         private GroupBox _grpVideo;
-        private Button _btnOpenPrimaryVideo;
-        private Button _btnOpenSecondaryVideo;
+        private Button _btnOpenZedVideo;
         private Label _lblVideoStatus;
         private ComboBox _cmbVideoPlayer;
+        private TrackBar _trkCameraTilt;
+        private Label _lblTiltValue;
+
+        // Dock/Undock Controls
+        private Button _btnDockUndock;
+        private Button _btnOpenFullPage;
+        
+        // Dock state event
+        public event EventHandler<bool> DockStateChanged;
+        public bool IsDocked { get; private set; } = true;
 
         // Nudge State
         private bool _nudgeEnabled = false;
@@ -147,16 +156,60 @@ namespace NOMAD.MissionPlanner
 
             int yOffset = 10;
 
+            // Header Panel with Title and Dock/Undock button
+            var headerPanel = new Panel
+            {
+                Location = new Point(10, yOffset),
+                Size = new Size(340, 35),
+                BackColor = Color.Transparent,
+            };
+            
             // Title
             _lblTitle = new Label
             {
                 Text = "NOMAD Control",
-                Font = new Font("Segoe UI", 16, FontStyle.Bold),
+                Font = new Font("Segoe UI", 14, FontStyle.Bold),
                 ForeColor = Color.FromArgb(0, 122, 204),
-                Location = new Point(10, yOffset),
+                Location = new Point(0, 5),
                 AutoSize = true
             };
-            this.Controls.Add(_lblTitle);
+            headerPanel.Controls.Add(_lblTitle);
+            
+            // Dock/Undock Button
+            _btnDockUndock = new Button
+            {
+                Text = "⇱",  // Unicode pop-out icon
+                Location = new Point(280, 0),
+                Size = new Size(28, 28),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(80, 80, 85),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 12),
+                Cursor = Cursors.Hand,
+            };
+            _btnDockUndock.FlatAppearance.BorderSize = 0;
+            _btnDockUndock.Click += BtnDockUndock_Click;
+            new ToolTip().SetToolTip(_btnDockUndock, "Pop out / Dock panel");
+            headerPanel.Controls.Add(_btnDockUndock);
+            
+            // Open Full Page Button
+            _btnOpenFullPage = new Button
+            {
+                Text = "⛶",  // Full screen icon
+                Location = new Point(310, 0),
+                Size = new Size(28, 28),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(0, 100, 180),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 12),
+                Cursor = Cursors.Hand,
+            };
+            _btnOpenFullPage.FlatAppearance.BorderSize = 0;
+            _btnOpenFullPage.Click += BtnOpenFullPage_Click;
+            new ToolTip().SetToolTip(_btnOpenFullPage, "Open Full NOMAD Page");
+            headerPanel.Controls.Add(_btnOpenFullPage);
+            
+            this.Controls.Add(headerPanel);
             yOffset += 40;
 
             // Status Row
@@ -407,43 +460,28 @@ namespace NOMAD.MissionPlanner
 
             _grpVideo = new GroupBox
             {
-                Text = "Video Streams (RTSP)",
+                Text = "ZED Camera",
                 ForeColor = Color.FromArgb(200, 100, 200),
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 Location = new Point(10, yOffset),
-                Size = new Size(350, 130),
+                Size = new Size(350, 160),
                 BackColor = Color.FromArgb(55, 55, 58)
             };
 
-            _btnOpenPrimaryVideo = new Button
+            _btnOpenZedVideo = new Button
             {
-                Text = "[VID] Open Primary (ZED/Nav)",
+                Text = "[ZED] Open Camera Stream",
                 Location = new Point(15, 25),
-                Size = new Size(155, 35),
+                Size = new Size(200, 35),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(100, 50, 150),
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 Cursor = Cursors.Hand
             };
-            _btnOpenPrimaryVideo.FlatAppearance.BorderSize = 0;
-            _btnOpenPrimaryVideo.Click += BtnOpenPrimaryVideo_Click;
-            _grpVideo.Controls.Add(_btnOpenPrimaryVideo);
-
-            _btnOpenSecondaryVideo = new Button
-            {
-                Text = "[TGT] Open Secondary (Gimbal)",
-                Location = new Point(180, 25),
-                Size = new Size(155, 35),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(150, 100, 50),
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                Cursor = Cursors.Hand
-            };
-            _btnOpenSecondaryVideo.FlatAppearance.BorderSize = 0;
-            _btnOpenSecondaryVideo.Click += BtnOpenSecondaryVideo_Click;
-            _grpVideo.Controls.Add(_btnOpenSecondaryVideo);
+            _btnOpenZedVideo.FlatAppearance.BorderSize = 0;
+            _btnOpenZedVideo.Click += BtnOpenZedVideo_Click;
+            _grpVideo.Controls.Add(_btnOpenZedVideo);
 
             var lblPlayer = new Label
             {
@@ -457,7 +495,7 @@ namespace NOMAD.MissionPlanner
             _cmbVideoPlayer = new ComboBox
             {
                 Location = new Point(100, 67),
-                Size = new Size(150, 25),
+                Size = new Size(120, 25),
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 BackColor = Color.FromArgb(30, 30, 30),
                 ForeColor = Color.White
@@ -466,10 +504,56 @@ namespace NOMAD.MissionPlanner
             _cmbVideoPlayer.SelectedIndex = 0;
             _grpVideo.Controls.Add(_cmbVideoPlayer);
 
+            // Camera Tilt Control
+            var lblTilt = new Label
+            {
+                Text = "Tilt:",
+                Location = new Point(15, 100),
+                ForeColor = Color.Gray,
+                AutoSize = true
+            };
+            _grpVideo.Controls.Add(lblTilt);
+
+            _trkCameraTilt = new TrackBar
+            {
+                Minimum = _config.ZedServoMin,
+                Maximum = _config.ZedServoMax,
+                Value = _config.ZedServoCenter,
+                TickFrequency = 250,
+                Location = new Point(50, 95),
+                Size = new Size(200, 30),
+            };
+            _trkCameraTilt.ValueChanged += TrkCameraTilt_ValueChanged;
+            _grpVideo.Controls.Add(_trkCameraTilt);
+
+            _lblTiltValue = new Label
+            {
+                Text = "1500",
+                Location = new Point(255, 100),
+                ForeColor = Color.LimeGreen,
+                Font = new Font("Segoe UI", 9),
+                AutoSize = true
+            };
+            _grpVideo.Controls.Add(_lblTiltValue);
+
+            var btnTiltCenter = new Button
+            {
+                Text = "⟳",
+                Location = new Point(305, 95),
+                Size = new Size(30, 25),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(0, 122, 204),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10),
+            };
+            btnTiltCenter.FlatAppearance.BorderSize = 0;
+            btnTiltCenter.Click += (s, e) => _trkCameraTilt.Value = _config.ZedServoCenter;
+            _grpVideo.Controls.Add(btnTiltCenter);
+
             _lblVideoStatus = new Label
             {
                 Text = "Status: Ready",
-                Location = new Point(15, 100),
+                Location = new Point(15, 130),
                 ForeColor = Color.Gray,
                 Font = new Font("Segoe UI", 9),
                 AutoSize = true
@@ -477,7 +561,7 @@ namespace NOMAD.MissionPlanner
             _grpVideo.Controls.Add(_lblVideoStatus);
 
             this.Controls.Add(_grpVideo);
-            yOffset += 140;
+            yOffset += 170;
 
             // ============================================================
             // Jetson Health Monitor Tab
@@ -489,6 +573,40 @@ namespace NOMAD.MissionPlanner
                 _healthTab.Size = new Size(350, 450);
                 _healthTab.SetJetsonUrl(_config?.JetsonBaseUrl ?? "http://127.0.0.1:8000");
                 this.Controls.Add(_healthTab);
+            }
+        }
+
+        private void TrkCameraTilt_ValueChanged(object sender, EventArgs e)
+        {
+            var pwm = _trkCameraTilt.Value;
+            _lblTiltValue.Text = pwm.ToString();
+            
+            // Send servo command to flight controller
+            if (_config.ZedServoChannel > 0)
+            {
+                SendCameraTiltCommand(pwm);
+            }
+        }
+
+        private void SendCameraTiltCommand(int pwm)
+        {
+            try
+            {
+                // Use MAVLink DO_SET_SERVO command via Mission Planner
+                if (MainV2.comPort?.BaseStream?.IsOpen == true)
+                {
+                    MainV2.comPort.doCommand(
+                        (byte)MainV2.comPort.sysidcurrent,
+                        (byte)MainV2.comPort.compidcurrent,
+                        MAVLink.MAV_CMD.DO_SET_SERVO,
+                        _config.ZedServoChannel,  // Servo channel
+                        pwm,                       // PWM value
+                        0, 0, 0, 0, 0);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"NOMAD: Camera tilt error - {ex.Message}");
             }
         }
 
@@ -733,14 +851,9 @@ namespace NOMAD.MissionPlanner
         // Video Streaming Event Handlers
         // ============================================================
 
-        private void BtnOpenPrimaryVideo_Click(object sender, EventArgs e)
+        private void BtnOpenZedVideo_Click(object sender, EventArgs e)
         {
-            OpenVideoStream(_config.RtspUrlPrimary, "Primary (ZED/Navigation)");
-        }
-
-        private void BtnOpenSecondaryVideo_Click(object sender, EventArgs e)
-        {
-            OpenVideoStream(_config.RtspUrlSecondary, "Secondary (Gimbal/Targeting)");
+            OpenVideoStream(_config.RtspUrlZed, "ZED Camera");
         }
 
         /// <summary>
@@ -811,6 +924,65 @@ namespace NOMAD.MissionPlanner
                     MessageBoxIcon.Error
                 );
             }
+        }
+        
+        // ============================================================
+        // Dock/Undock Functionality
+        // ============================================================
+        
+        private void BtnDockUndock_Click(object sender, EventArgs e)
+        {
+            IsDocked = !IsDocked;
+            UpdateDockButton();
+            DockStateChanged?.Invoke(this, IsDocked);
+        }
+        
+        private void BtnOpenFullPage_Click(object sender, EventArgs e)
+        {
+            // Find the NOMAD menu item and trigger the full page open
+            try
+            {
+                var menuStrip = MainV2.instance?.MainMenuStrip;
+                if (menuStrip != null)
+                {
+                    foreach (ToolStripItem item in menuStrip.Items)
+                    {
+                        if (item is ToolStripMenuItem menuItem && menuItem.Text == "NOMAD")
+                        {
+                            foreach (ToolStripItem subItem in menuItem.DropDownItems)
+                            {
+                                if (subItem is ToolStripMenuItem subMenuItem && subMenuItem.Text.Contains("Full Control"))
+                                {
+                                    subMenuItem.PerformClick();
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+                CustomMessageBox.Show("Use NOMAD menu → Open Full Control Page", "NOMAD");
+            }
+            catch (Exception ex)
+            {
+                CustomMessageBox.Show($"Could not open full page: {ex.Message}", "NOMAD");
+            }
+        }
+        
+        private void UpdateDockButton()
+        {
+            if (_btnDockUndock != null)
+            {
+                _btnDockUndock.Text = IsDocked ? "⇱" : "⇲";  // Pop-out / Dock icons
+            }
+        }
+        
+        /// <summary>
+        /// Set the dock state externally (called by plugin when window state changes)
+        /// </summary>
+        public void SetDockState(bool docked)
+        {
+            IsDocked = docked;
+            UpdateDockButton();
         }
     }
 }
