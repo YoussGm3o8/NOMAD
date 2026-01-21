@@ -340,7 +340,19 @@ namespace NOMAD.MissionPlanner
                 }
                 else
                 {
-                    AppendOutput($"Error: {result.Error}\n", Color.Red);
+                    // Show stderr if available (API-level error), otherwise show Error (HTTP error)
+                    if (!string.IsNullOrEmpty(result.StdErr))
+                    {
+                        AppendOutput($"Error: {result.StdErr}\n", Color.Red);
+                    }
+                    else if (!string.IsNullOrEmpty(result.Error))
+                    {
+                        AppendOutput($"Error: {result.Error}\n", Color.Red);
+                    }
+                    else
+                    {
+                        AppendOutput($"Command failed with exit code {result.ReturnCode}\n", Color.Red);
+                    }
                     UpdateStatus("Error", Color.Red);
                 }
             }

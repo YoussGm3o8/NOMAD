@@ -19,15 +19,27 @@ echo "Video Port: $VIDEO_PORT"
 echo ""
 
 # Stop any existing services
-echo "[1/3] Stopping existing services..."
-pkill -f "edge_core.main" 2>/dev/null || true
-pkill -f "gst-launch" 2>/dev/null || true
-sleep 1
+echo "[1/4] Stopping existing services..."
+pkill -9 -f "edge_core.main" 2>/dev/null || true
+pkill -9 -f "gst-launch" 2>/dev/null || true
+# Wait for processes to fully terminate and release camera
+sleep 2
+
+# Check if camera is still busy
+echo "[2/4] Checking camera availability..."
+if lsof /dev/video0 2>/dev/null | grep -v "^COMMAND"; then
+    echo "    WARNING: Camera still in use by another process:"
+    lsof /dev/video0
+    echo "    Attempting to free camera..."
+    fuser -k /dev/video0 2>/dev/null || true
+    sleep 2
+fi
 
 # Start Edge Core API
-echo "[2/3] Starting Edge Core API..."
+echo "[3/4] Starting Edge Core API..."
 cd /home/mad/NOMAD
 export PATH=/home/mad/.local/bin:$PATH
+export NOMAD_DEBUG=true  # Enable debug mode for terminal commands
 nohup python3 -m edge_core.main > $LOG_DIR/edge_core.log 2>&1 &
 EDGE_PID=$!
 sleep 2
@@ -42,7 +54,7 @@ else
 fi
 
 # Start ZED Video Stream
-echo "[3/3] Starting ZED Video Stream..."
+echo "[4/4] Starting ZED Video Stream..."
 gst-launch-1.0 -q \
   v4l2src device=/dev/video0 ! \
   "video/x-raw,width=2560,height=720,framerate=30/1" ! \
