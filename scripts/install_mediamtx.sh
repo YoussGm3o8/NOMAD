@@ -13,6 +13,11 @@ echo "=========================================="
 echo "  Installing MediaMTX RTSP Server"
 echo "=========================================="
 
+# Install ffmpeg (needed to restream to RTSP)
+echo "Installing ffmpeg..."
+sudo apt-get update -qq
+sudo apt-get install -y -qq ffmpeg
+
 # Create directories
 sudo mkdir -p $INSTALL_DIR
 sudo mkdir -p $CONFIG_DIR

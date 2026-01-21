@@ -80,8 +80,9 @@ record: no
 # ============================================================
 
 paths:
-  # Main live stream from ZED camera (navigation view)
-  live:
+  # Main live stream from ZED camera
+  # ffmpeg publishes to this endpoint
+  zed:
     source: publisher
     sourceOnDemand: no
     publishUser: ""
@@ -96,8 +97,8 @@ paths:
     recordFormat: fmp4
     recordSegmentDuration: 1h
 
-  # Gimbal camera stream (targeting view)
-  gimbal:
+  # Alternative endpoint
+  live:
     source: publisher
     sourceOnDemand: no
     publishUser: ""
