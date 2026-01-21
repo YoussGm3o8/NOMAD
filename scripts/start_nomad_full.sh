@@ -79,29 +79,18 @@ if [ "$USE_RTSP" = true ]; then
 fi
 
 if [ "$USE_RTSP" = true ]; then
-    # RTSP mode - allows multiple viewers
-    # Use ffmpeg to publish to MediaMTX RTSP server
+    # RTSP mode - allows multiple viewers using rtspclientsink
     RTSP_URL="rtsp://localhost:$RTSP_PORT/zed"
     
-    # First, start GStreamer to output RTP to local UDP
+    # GStreamer publishes directly to MediaMTX RTSP server
     gst-launch-1.0 -q \
       v4l2src device=/dev/video0 num-buffers=-1 ! \
       "video/x-raw,width=2560,height=720,framerate=30/1" ! \
       videocrop left=0 right=1280 ! \
       videoconvert ! \
       x264enc tune=zerolatency bitrate=4000 speed-preset=ultrafast sliced-threads=true key-int-max=15 bframes=0 ! \
-      "video/x-h264,profile=baseline,stream-format=byte-stream" ! \
-      rtph264pay config-interval=1 pt=96 mtu=1400 ! \
-      udpsink host=127.0.0.1 port=5600 sync=false > $LOG_DIR/video.log 2>&1 &
-    GST_PID=$!
-    sleep 2
-    
-    # Then use ffmpeg to restream from UDP to RTSP
-    ffmpeg -hide_banner -loglevel warning \
-      -i "udp://127.0.0.1:5600?overrun_nonfatal=1" \
-      -c:v copy \
-      -f rtsp -rtsp_transport tcp \
-      "$RTSP_URL" > $LOG_DIR/ffmpeg.log 2>&1 &
+      "video/x-h264,profile=baseline" ! \
+      rtspclientsink location=$RTSP_URL protocols=tcp latency=0 > $LOG_DIR/video.log 2>&1 &
     VIDEO_PID=$!
     STREAM_URL="rtsp://100.75.218.89:$RTSP_PORT/zed"
 else
