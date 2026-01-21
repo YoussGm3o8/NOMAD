@@ -64,9 +64,10 @@ namespace NOMAD.MissionPlanner
         // ============================================================
 
         /// <summary>
-        /// Video stream URL for ZED camera (UDP or RTSP).
+        /// Video stream URL for ZED camera (RTSP or UDP).
+        /// RTSP allows multiple viewers, UDP is single viewer only.
         /// </summary>
-        public string RtspUrlZed { get; set; } = "udp://@:5600";
+        public string RtspUrlZed { get; set; } = "rtsp://100.75.218.89:8554/zed";
 
         /// <summary>
         /// Legacy: Primary RTSP URL (mapped to ZED for compatibility).
@@ -335,11 +336,11 @@ namespace NOMAD.MissionPlanner
         /// </summary>
         private void MigrateDefaults()
         {
-            // Migrate from old RTSP format to UDP stream
-            if (RtspUrlZed.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
+            // Migrate from old UDP format to RTSP (multiple viewers)
+            if (RtspUrlZed == "udp://@:5600")
             {
-                // New default is UDP stream on port 5600
-                RtspUrlZed = "udp://@:5600";
+                // New default is RTSP stream (allows multiple viewers)
+                RtspUrlZed = "rtsp://100.75.218.89:8554/zed";
             }
             
             // Migrate old Jetson IP to Tailscale if using Tailscale
