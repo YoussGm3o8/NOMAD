@@ -20,10 +20,11 @@ from typing import Any
 
 import uvicorn
 
-from .api import create_app, set_isaac_bridge
+from .api import create_app, set_isaac_bridge, set_health_monitor
 from .mavlink_interface import MavlinkService
 from .state import StateManager
 from .time_manager import TimeSyncService, TimeSyncStatus
+from .health_monitor import JetsonHealthMonitor
 
 # Conditional import for Isaac ROS bridge (ROS2 environment only)
 try:
@@ -48,6 +49,9 @@ mavlink_service = MavlinkService(state_manager)
 # Time synchronization service
 time_sync_service: TimeSyncService | None = None
 
+# Health monitor for Jetson metrics
+health_monitor: JetsonHealthMonitor | None = None
+
 # Isaac ROS bridge (Task 2 only - requires ROS2 environment)
 isaac_bridge: "IsaacROSBridge | None" = None
 
@@ -63,13 +67,18 @@ app = get_app()
 
 def cleanup() -> None:
     """Cleanup on shutdown."""
-    global time_sync_service, isaac_bridge
+    global time_sync_service, isaac_bridge, health_monitor
     logger.info("Shutting down Edge Core...")
 
     # Stop Isaac ROS bridge first (depends on ROS being active)
     if isaac_bridge:
         isaac_bridge.stop()
         logger.info("Isaac ROS bridge stopped")
+
+    # Stop health monitor
+    if health_monitor:
+        health_monitor.stop()
+        logger.info("Health monitor stopped")
 
     # Stop time sync service
     if time_sync_service:
@@ -97,13 +106,19 @@ def run(
         port: Port number
         log_level: Logging level
     """
-    global time_sync_service, isaac_bridge
+    global time_sync_service, isaac_bridge, health_monitor
 
     logger.info("=" * 50)
     logger.info("NOMAD Edge Core Starting")
     logger.info("=" * 50)
     logger.info(f"Host: {host}:{port}")
     logger.info("=" * 50)
+
+    # Initialize Jetson health monitor
+    health_monitor = JetsonHealthMonitor(poll_interval=2.0)
+    health_monitor.start()
+    set_health_monitor(health_monitor)
+    logger.info("Health monitor started")
 
     # Initialize Isaac ROS bridge (Task 2 only - requires NOMAD_ENABLE_ISAAC_ROS=true)
     enable_isaac = os.environ.get("NOMAD_ENABLE_ISAAC_ROS", "false").lower() == "true"
