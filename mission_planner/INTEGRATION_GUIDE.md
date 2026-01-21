@@ -210,7 +210,7 @@ public class NOMADConfig
 
 ### WASD Control Safety
 
-⚠️ **WARNING:** WASD control sends velocity commands directly to the drone
+**WARNING:** WASD control sends velocity commands directly to the drone
 
 - **Only use in controlled indoor environment**
 - **Ensure Guided mode is active**

@@ -126,7 +126,7 @@ namespace NOMAD.MissionPlanner
                         nomadMenu.DropDownItems.Clear();
 
                         // Dock/Undock toggle (Primary action)
-                        var toggleDockItem = new ToolStripMenuItem(_isDocked ? "⬜ Undock to Window" : "📌 Dock to FlightData");
+                        var toggleDockItem = new ToolStripMenuItem(_isDocked ? "Undock to Window" : "Dock to FlightData");
                         toggleDockItem.Font = new Font(toggleDockItem.Font, FontStyle.Bold);
                         toggleDockItem.Click += (s, e) => ToggleDockState();
                         nomadMenu.DropDownItems.Add(toggleDockItem);

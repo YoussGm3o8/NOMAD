@@ -5,7 +5,7 @@
 
 ---
 
-## 📍 System Information
+## System Information
 
 | Property | Value |
 |----------|-------|
@@ -18,7 +18,7 @@
 
 ---
 
-## 📂 Installation Paths
+## Installation Paths
 
 ### NOMAD Edge Core
 ```
@@ -62,7 +62,7 @@
 
 ---
 
-## 🚀 How to Start NOMAD
+## How to Start NOMAD
 
 ### Method 1: Unified Startup (Recommended)
 Starts both Edge Core API and ZED Video Stream:
@@ -99,7 +99,7 @@ sudo systemctl status nomad
 
 ---
 
-## 🛑 How to Stop NOMAD
+## How to Stop NOMAD
 
 ### If running in foreground:
 Press `Ctrl+C`
@@ -116,7 +116,7 @@ sudo systemctl stop nomad
 
 ---
 
-## ✅ Verify NOMAD is Running
+## Verify NOMAD is Running
 
 ### From Jetson (localhost):
 ```bash
@@ -143,7 +143,7 @@ Invoke-WebRequest -Uri "http://100.75.218.89:8000/health" -UseBasicParsing | Sel
 
 ---
 
-## 🌐 API Endpoints
+## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -169,7 +169,7 @@ http://100.75.218.89:8000/docs
 
 ---
 
-## � Video Streaming
+## Video Streaming
 
 ### ZED 2i Camera Status
 The ZED 2i camera is connected and accessible via V4L2:
@@ -206,7 +206,7 @@ Then: `vlc zed.sdp`
 
 ---
 
-## �🔧 Configuration
+## Configuration
 
 ### Environment Variables (`.env`)
 Located at: `/home/mad/NOMAD/.env`
@@ -237,7 +237,7 @@ nano ~/NOMAD/.env
 
 ---
 
-## 📡 Network Ports
+## Network Ports
 
 | Port | Protocol | Service | Direction |
 |------|----------|---------|-----------|
@@ -248,7 +248,7 @@ nano ~/NOMAD/.env
 
 ---
 
-## 🔄 Updating NOMAD
+## Updating NOMAD
 
 ### Pull Latest Code:
 ```bash
@@ -273,7 +273,7 @@ sudo systemctl restart nomad
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Edge Core Won't Start
 
@@ -343,7 +343,7 @@ dmesg | tail -50
 
 ---
 
-## 📋 Quick Reference
+## Quick Reference
 
 ### SSH Access
 ```bash
@@ -378,7 +378,7 @@ cd ~/NOMAD && git pull
 
 ---
 
-## 🛡️ Security Notes
+## Security Notes
 
 1. **Change the default password** when deploying to production
 2. **Enable SSH key authentication** and disable password auth
@@ -387,7 +387,7 @@ cd ~/NOMAD && git pull
 
 ---
 
-## 📞 Support
+## Support
 
 - **Repository:** https://github.com/YoussGm3o8/NOMAD
 - **Issues:** https://github.com/YoussGm3o8/NOMAD/issues

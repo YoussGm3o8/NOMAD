@@ -351,20 +351,23 @@ namespace NOMAD.MissionPlanner
                 if (_useGStreamer && _gst != null)
                 {
                     var pipeline = BuildGStreamerPipeline();
+                    System.Diagnostics.Debug.WriteLine($"NOMAD Video: Starting pipeline: {pipeline}");
                     _gst.Start(pipeline);
 
                     _isPlaying = true;
-                    UpdateStatus("[*] Playing (GStreamer)", Color.LimeGreen);
+                    UpdateStatus("Playing (GStreamer)", Color.LimeGreen);
                 }
                 else
                 {
-                    UpdateStatus("[X] Embedded player unavailable", Color.Red);
+                    var errorMsg = _embeddedInitErrorMessage ?? "GStreamer not available";
+                    UpdateStatus($"Error: {errorMsg}", Color.Red);
+                    System.Diagnostics.Debug.WriteLine($"NOMAD Video: Cannot start - {errorMsg}");
                 }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"NOMAD Video: Play error - {ex.Message}");
-                UpdateStatus($"[X] Error: {ex.Message}", Color.Red);
+                UpdateStatus($"Error: {ex.Message}", Color.Red);
             }
         }
         
@@ -385,7 +388,7 @@ namespace NOMAD.MissionPlanner
                 }
                 
                 _isPlaying = false;
-                UpdateStatus("[*] Stopped", Color.Gray);
+                UpdateStatus("Stopped", Color.Gray);
             }
             catch (Exception ex)
             {
@@ -438,7 +441,7 @@ namespace NOMAD.MissionPlanner
                     };
                     System.Diagnostics.Process.Start(psi);
                     
-                    UpdateStatus("[>] Opened in VLC", Color.Yellow);
+                    UpdateStatus("Opened in VLC", Color.Yellow);
                     _isPlaying = true;
                     return;
                 }
@@ -468,7 +471,7 @@ namespace NOMAD.MissionPlanner
                     };
                     System.Diagnostics.Process.Start(psi);
                     
-                    UpdateStatus("[>] Opened in FFplay", Color.Yellow);
+                    UpdateStatus("Opened in FFplay", Color.Yellow);
                     _isPlaying = true;
                     return;
                 }
@@ -479,7 +482,7 @@ namespace NOMAD.MissionPlanner
             }
             
             // No player found - show error
-            UpdateStatus("[X] No player found", Color.Red);
+            UpdateStatus("No player found", Color.Red);
             MessageBox.Show(
                 $"Could not open video stream.\n\n" +
                 $"Please install VLC or FFplay and ensure it's in your PATH.\n\n" +
@@ -657,23 +660,20 @@ namespace NOMAD.MissionPlanner
             {
                 // UDP RTP stream (e.g., udp://@:5600)
                 // Extract port from URL like "udp://@:5600" or "udp://0.0.0.0:5600"
-                var port = "5600";
-                var match = System.Text.RegularExpressions.Regex.Match(_streamUrl, @":(\d+)");
-                if (match.Success)
-                {
-                    port = match.Groups[1].Value;
-                }
+                var port = ExtractUdpPort(_streamUrl);
                 
-                return $"udpsrc port={port} caps=\"application/x-rtp,media=video,clock-rate=90000,encoding-name=H264\" ! " +
-                       $"rtpjitterbuffer latency={latency} ! rtph264depay ! decodebin ! " +
-                       "videoconvert ! videoscale ! video/x-raw,format=RGB ! appsink name=appsink";
+                // Simple UDP pipeline - let GStreamer auto-detect the stream format
+                // This is more compatible with Mission Planner's GStreamer wrapper
+                return $"udpsrc port={port} ! application/x-rtp,media=video,clock-rate=90000,encoding-name=H264 ! " +
+                       $"rtpjitterbuffer latency={latency} ! rtph264depay ! avdec_h264 ! " +
+                       "videoconvert ! video/x-raw,format=BGRx ! appsink name=appsink";
             }
             else
             {
-                // RTSP stream (default)
-                return $"rtspsrc location=\"{_streamUrl}\" latency={latency} protocols=tcp ! " +
-                       "queue ! decodebin ! videoconvert ! videoscale ! " +
-                       "video/x-raw,format=RGB ! appsink name=appsink";
+                // RTSP stream (default) - use same format as Mission Planner OSD
+                return $"rtspsrc location={_streamUrl} latency={latency} ! " +
+                       "rtph264depay ! avdec_h264 ! videoconvert ! " +
+                       "video/x-raw,format=BGRx ! appsink name=appsink";
             }
         }
 

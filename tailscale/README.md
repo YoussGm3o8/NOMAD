@@ -53,7 +53,7 @@ Tailscale provides:
     100.x.x.x                     100.y.y.y
 ```
 
-## 📡 Ports & Endpoints
+## Ports & Endpoints
 
 | Service | Port | Protocol | Description |
 |---------|------|----------|-------------|
@@ -63,7 +63,7 @@ Tailscale provides:
 | RTSP Primary | 8554 | TCP | ZED left camera stream |
 | RTSP Secondary | 8554 | TCP | ZED right camera stream |
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 # On Jetson
@@ -75,16 +75,16 @@ tailscale status
 tailscale ip -4
 ```
 
-## 📋 Status
+## Status
 
 | Component | Status |
 |-----------|--------|
-| Setup Documentation | ✅ Complete |
-| MAVLink Router Config | ✅ Complete |
-| Python Manager | ⏳ Pending |
-| Network Monitor | ⏳ Pending |
-| Watchdog Script | ⏳ Pending |
-| API Endpoints | ⏳ Pending |
-| Mission Planner UI | ⏳ Pending |
+| Setup Documentation | Complete |
+| MAVLink Router Config | Complete |
+| Python Manager | Pending |
+| Network Monitor | Pending |
+| Watchdog Script | Pending |
+| API Endpoints | Pending |
+| Mission Planner UI | Pending |
 
 See [TASK.md](TASK.md) for development specifications.

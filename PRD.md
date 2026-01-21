@@ -23,7 +23,7 @@ This specification is designed to be included in the **AEAC Phase 1 Design Paper
 
 The system is designed for **two distinct configurations**:
 
-1.  **Task 1 (Outdoor Recon):** Pilot-only operation. **Jetson is NOT mounted** on the drone. Flight uses GPS/RTK positioning with ELRS telemetry to Mission Planner. No edge compute required.
+1.  **Task 1 (Outdoor Recon):** Pilot-assisted operation with Jetson mounted on drone. Flight uses GPS/RTK positioning with ELRS telemetry to Mission Planner. ZED camera provides video feed for recon.
 
 2.  **Task 2 (Indoor Extinguish):** Jetson-powered autonomous operation using Visual Inertial Odometry (VIO), YOLO target detection, and gimbal visual servoing. Full edge compute stack deployed.
 
@@ -74,11 +74,11 @@ The system follows **Clean Architecture** principles, divided into three logical
 
 ---
 
-### 3.2 Domain B: Edge Core (Task 2 Only)
+### 3.2 Domain B: Edge Core
 
-*Objective: Jetson Orin Nano running Python 3.13.9 for Task 2 indoor autonomous operations.*
+*Objective: Jetson Orin Nano running Python 3.13.9 for both Task 1 (video streaming) and Task 2 (autonomous operations).*
 
-**⚠️ NOTE: Edge Core is ONLY deployed for Task 2. The Jetson is NOT on the drone during Task 1.**
+**NOTE: Jetson is mounted on the drone for both tasks. Task 1 uses basic video streaming, Task 2 uses full autonomy stack.**
 
 #### **B.1 Orchestrator & State Management**
 *   **[EDGE-ORCH-01] API Interface:** FastAPI service exposing endpoints for status, health, and Task 2 control.

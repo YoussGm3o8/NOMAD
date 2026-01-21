@@ -5,36 +5,36 @@
 
 ---
 
-## 📋 Task Overview
+## Task Overview
 
 Implement the Tailscale VPN system for secure 4G/LTE communication between the Jetson Orin Nano (drone) and Ground Station (laptop). This enables remote MAVLink telemetry, API access, SSH, and video streaming when the drone is beyond WiFi range.
 
 ---
 
-## 📂 Files in This Folder
+## Files in This Folder
 
 | File | Purpose | Status |
 |------|---------|--------|
-| [README.md](README.md) | Folder overview | ✅ Complete |
-| [SETUP.md](SETUP.md) | Installation & configuration guide | ✅ Complete |
-| [TASK.md](TASK.md) | This task document | ✅ Complete |
-| [src/tailscale_manager.py](src/tailscale_manager.py) | Python Tailscale manager | ✅ Complete |
-| [src/network_monitor.py](src/network_monitor.py) | Network/4G monitoring | ✅ Complete |
-| [src/__init__.py](src/__init__.py) | Package exports | ✅ Complete |
-| [scripts/setup.sh](scripts/setup.sh) | Automated Jetson setup | ✅ Complete |
-| [scripts/watchdog.sh](scripts/watchdog.sh) | Connection watchdog | ✅ Complete |
-| [config/tailscale-watchdog.service](config/tailscale-watchdog.service) | Systemd service | ✅ Complete |
+| [README.md](README.md) | Folder overview | Complete |
+| [SETUP.md](SETUP.md) | Installation & configuration guide | Complete |
+| [TASK.md](TASK.md) | This task document | Complete |
+| [src/tailscale_manager.py](src/tailscale_manager.py) | Python Tailscale manager | Complete |
+| [src/network_monitor.py](src/network_monitor.py) | Network/4G monitoring | Complete |
+| [src/__init__.py](src/__init__.py) | Package exports | Complete |
+| [scripts/setup.sh](scripts/setup.sh) | Automated Jetson setup | Complete |
+| [scripts/watchdog.sh](scripts/watchdog.sh) | Connection watchdog | Complete |
+| [config/tailscale-watchdog.service](config/tailscale-watchdog.service) | Systemd service | Complete |
 
 **Related Files (Outside This Folder):**
 
 | File | Purpose | Status |
 |------|---------|--------|
-| [../transport/mavlink_router/main.conf](../transport/mavlink_router/main.conf) | MAVLink routing config | ✅ Complete |
-| [../mission_planner/src/DualLinkSender.cs](../mission_planner/src/DualLinkSender.cs) | Dual HTTP/MAVLink sender | ✅ Complete |
+| [../transport/mavlink_router/main.conf](../transport/mavlink_router/main.conf) | MAVLink routing config | Complete |
+| [../mission_planner/src/DualLinkSender.cs](../mission_planner/src/DualLinkSender.cs) | Dual HTTP/MAVLink sender | Complete |
 
 ---
 
-## 🎯 Remaining Work
+## Remaining Work
 
 ### 1. Add API Endpoints to `edge_core/api.py`
 

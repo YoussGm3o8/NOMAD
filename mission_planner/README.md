@@ -164,13 +164,13 @@ The dashboard provides:
 ### Task 2: Indoor Extinguish
 
 1. Go to **Task 2** tab
-2. Click **🎯 Reset VIO Origin** at your start position
+2. Click **Reset VIO Origin** at your start position
 3. Use WASD controls for precise positioning:
    - **W/S**: Forward/Backward
    - **A/D**: Left/Right
    - **Q/E**: Rotate
    - **R/F**: Up/Down
-4. Click **🔄 Reset Exclusion Map** to clear engaged targets
+4. Click **Reset Exclusion Map** to clear engaged targets
 
 ### Video Tab
 
@@ -209,14 +209,14 @@ Real-time monitoring:
 
 ### Task 2: Extinguish
 
-1. Click **🗑️ Reset Exclusion Map** at the start of a new run
+1. Click **Reset Exclusion Map** at the start of a new run
 2. Manually register hits with X, Y, Z coordinates and **Hit** button
 
 ### Video Streaming
 
 1. Select video player: VLC (recommended), FFplay, or System Default
-2. Click **🎥 Open Primary** for ZED/Navigation view
-3. Click **🎯 Open Secondary** for Gimbal/Targeting view
+2. Click **Open Primary** for ZED/Navigation view
+3. Click **Open Secondary** for Gimbal/Targeting view
 
 ### Indoor Nudge
 
