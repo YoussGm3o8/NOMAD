@@ -285,9 +285,7 @@ namespace NOMAD.MissionPlanner
             btnVioReset.Click += (s, e) => ResetVioOrigin();
             flowPanel.Controls.Add(btnVioReset);
             
-            var btnRefresh = CreateQuickActionButton("[REF] Refresh Status", Color.FromArgb(100, 100, 150));
-            btnRefresh.Click += (s, e) => RefreshAllStatus();
-            flowPanel.Controls.Add(btnRefresh);
+            // Removed manual refresh button - auto-refresh is enabled
             
             panel.Controls.Add(flowPanel);
             

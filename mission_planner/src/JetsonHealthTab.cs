@@ -34,7 +34,6 @@ namespace NOMAD.MissionPlanner
         private Label _lblCpuTemp;
         private Label _lblGpuTemp;
         private Label _lblLastUpdate;
-        private Button _btnRefresh;
         private TextBox _txtUrl;
         
         public JetsonHealthTab()
@@ -101,28 +100,15 @@ namespace NOMAD.MissionPlanner
             _txtUrl = new TextBox
             {
                 Location = new Point(15, yOffset),
-                Size = new Size(280, 25),
+                Size = new Size(350, 25),
                 Text = _jetsonBaseUrl,
                 BackColor = Color.FromArgb(30, 30, 30),
-                ForeColor = Color.White
+                ForeColor = Color.White,
+                ReadOnly = true  // Auto-configured via settings
             };
             this.Controls.Add(_txtUrl);
             
-            _btnRefresh = new Button
-            {
-                Text = "Update",
-                Location = new Point(305, yOffset),
-                Size = new Size(75, 25),
-                BackColor = Color.FromArgb(0, 122, 204),
-                ForeColor = Color.White,
-                FlatStyle = FlatStyle.Flat
-            };
-            _btnRefresh.Click += (s, e) =>
-            {
-                _jetsonBaseUrl = _txtUrl.Text.TrimEnd('/');
-                PollJetsonHealth();
-            };
-            this.Controls.Add(_btnRefresh);
+            // Removed manual refresh button - auto-refresh handles updates
             yOffset += 40;
             
             // Status

@@ -36,8 +36,6 @@ namespace NOMAD.MissionPlanner
         private Panel _controlPanel;
         private Label _lblTitle;
         private Label _lblStatus;
-        private Button _btnPlay;
-        private Button _btnStop;
         private Button _btnFullscreen;
         private Button _btnExternal;
         private Button _btnSnapshot;
@@ -69,6 +67,14 @@ namespace NOMAD.MissionPlanner
             _useGStreamer = TryInitializeGStreamer();
             
             InitializeUI();
+            
+            // Auto-start streaming when control is loaded
+            this.Load += (s, e) => {
+                if (_useGStreamer)
+                {
+                    StartStream();
+                }
+            };
         }
         
         // ============================================================
@@ -223,44 +229,16 @@ namespace NOMAD.MissionPlanner
                 Padding = new Padding(10, 5, 10, 5),
             };
             
-            // Play Button
-            _btnPlay = new Button
-            {
-                Text = "> Play",
-                Location = new Point(10, 10),
-                Size = new Size(70, 30),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(0, 150, 50),
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-            };
-            _btnPlay.Click += (s, e) => StartStream();
-            panel.Controls.Add(_btnPlay);
-            
-            // Stop Button
-            _btnStop = new Button
-            {
-                Text = "[] Stop",
-                Location = new Point(85, 10),
-                Size = new Size(70, 30),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(150, 50, 50),
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-            };
-            _btnStop.Click += (s, e) => StopStream();
-            panel.Controls.Add(_btnStop);
-            
             // Snapshot Button
             _btnSnapshot = new Button
             {
-                Text = "[S]",
-                Location = new Point(160, 10),
-                Size = new Size(35, 30),
+                Text = "[S] Snapshot",
+                Location = new Point(10, 10),
+                Size = new Size(90, 30),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(100, 100, 150),
                 ForeColor = Color.White,
-                Font = new Font("Segoe UI", 10),
+                Font = new Font("Segoe UI", 9),
             };
             _btnSnapshot.Click += (s, e) => TakeSnapshot();
             panel.Controls.Add(_btnSnapshot);
@@ -268,13 +246,13 @@ namespace NOMAD.MissionPlanner
             // External Button
             _btnExternal = new Button
             {
-                Text = "[EXT] External",
-                Location = new Point(200, 10),
-                Size = new Size(80, 30),
+                Text = "[EXT] VLC",
+                Location = new Point(105, 10),
+                Size = new Size(75, 30),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(80, 80, 85),
                 ForeColor = Color.White,
-                Font = new Font("Segoe UI", 8),
+                Font = new Font("Segoe UI", 9),
             };
             _btnExternal.Click += (s, e) => OpenExternal();
             panel.Controls.Add(_btnExternal);
@@ -282,13 +260,13 @@ namespace NOMAD.MissionPlanner
             // Fullscreen Button
             _btnFullscreen = new Button
             {
-                Text = "[+]",
-                Location = new Point(285, 10),
-                Size = new Size(35, 30),
+                Text = "[+] Full",
+                Location = new Point(185, 10),
+                Size = new Size(65, 30),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(80, 80, 85),
                 ForeColor = Color.White,
-                Font = new Font("Segoe UI", 12),
+                Font = new Font("Segoe UI", 9),
             };
             _btnFullscreen.Click += (s, e) => ToggleFullscreen();
             panel.Controls.Add(_btnFullscreen);

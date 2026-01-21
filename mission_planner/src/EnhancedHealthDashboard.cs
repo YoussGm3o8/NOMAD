@@ -169,17 +169,16 @@ namespace NOMAD.MissionPlanner
             };
             panel.Controls.Add(_lblLastUpdate);
             
-            var btnRefresh = new Button
+            // Auto-refresh indicator (no manual button needed)
+            var lblAutoRefresh = new Label
             {
-                Text = "[REF] Refresh",
-                Location = new Point(400, 20),
-                Size = new Size(90, 35),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(0, 122, 204),
-                ForeColor = Color.White,
+                Text = "[AUTO] Refreshing every 2s",
+                Location = new Point(400, 28),
+                ForeColor = Color.LimeGreen,
+                Font = new Font("Segoe UI", 8),
+                AutoSize = true,
             };
-            btnRefresh.Click += (s, e) => RefreshHealth();
-            panel.Controls.Add(btnRefresh);
+            panel.Controls.Add(lblAutoRefresh);
             
             return panel;
         }
