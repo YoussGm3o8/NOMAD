@@ -374,7 +374,14 @@ namespace NOMAD.MissionPlanner
             {
                 if (_useGStreamer && _gst != null)
                 {
+                    // Unhook the event handler to prevent more callbacks
+                    try { _gst.OnNewImage -= OnGstNewImage; } catch { }
+                    
+                    // Stop the pipeline
                     _gst.Stop();
+                    
+                    // Give GStreamer a moment to clean up
+                    System.Threading.Thread.Sleep(100);
                 }
                 
                 _isPlaying = false;
@@ -598,13 +605,37 @@ namespace NOMAD.MissionPlanner
             {
                 try
                 {
+                    // First stop the stream and unhook events
                     StopStream();
-                    _gst = null;
+                    
+                    // Force GStreamer cleanup on a background thread with timeout
+                    if (_gst != null)
+                    {
+                        var cleanupTask = System.Threading.Tasks.Task.Run(() =>
+                        {
+                            try
+                            {
+                                _gst.Stop();
+                            }
+                            catch { }
+                        });
+                        
+                        // Wait max 500ms for cleanup
+                        cleanupTask.Wait(500);
+                        _gst = null;
+                    }
 
                     if (_lastFrame != null)
                     {
                         _lastFrame.Dispose();
                         _lastFrame = null;
+                    }
+                    
+                    // Close fullscreen form
+                    if (_fullscreenForm != null && !_fullscreenForm.IsDisposed)
+                    {
+                        _fullscreenForm.Close();
+                        _fullscreenForm = null;
                     }
                 }
                 catch { }
