@@ -9,6 +9,7 @@ extern alias MPDrawing;
 
 using System;
 using System.Drawing;
+using System.IO;
 using System.Windows.Forms;
 using MissionPlanner.Utilities;
 using MPBitmap = MPDrawing::System.Drawing.Bitmap;
@@ -36,6 +37,7 @@ namespace NOMAD.MissionPlanner
         private Panel _controlPanel;
         private Label _lblTitle;
         private Label _lblStatus;
+        private Button _btnPlayStop;
         private Button _btnFullscreen;
         private Button _btnExternal;
         private Button _btnSnapshot;
@@ -229,12 +231,26 @@ namespace NOMAD.MissionPlanner
                 Padding = new Padding(10, 5, 10, 5),
             };
             
+            // Play/Stop Button
+            _btnPlayStop = new Button
+            {
+                Text = "Play",
+                Location = new Point(10, 10),
+                Size = new Size(60, 30),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(60, 120, 60),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+            };
+            _btnPlayStop.Click += (s, e) => TogglePlayStop();
+            panel.Controls.Add(_btnPlayStop);
+            
             // Snapshot Button
             _btnSnapshot = new Button
             {
-                Text = "[S] Snapshot",
-                Location = new Point(10, 10),
-                Size = new Size(90, 30),
+                Text = "Snap",
+                Location = new Point(75, 10),
+                Size = new Size(55, 30),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(100, 100, 150),
                 ForeColor = Color.White,
@@ -246,9 +262,9 @@ namespace NOMAD.MissionPlanner
             // External Button
             _btnExternal = new Button
             {
-                Text = "[EXT] VLC",
-                Location = new Point(105, 10),
-                Size = new Size(75, 30),
+                Text = "VLC",
+                Location = new Point(135, 10),
+                Size = new Size(50, 30),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(80, 80, 85),
                 ForeColor = Color.White,
@@ -356,6 +372,7 @@ namespace NOMAD.MissionPlanner
 
                     _isPlaying = true;
                     UpdateStatus("Playing (GStreamer)", Color.LimeGreen);
+                    UpdatePlayStopButton();
                 }
                 else
                 {
@@ -389,10 +406,39 @@ namespace NOMAD.MissionPlanner
                 
                 _isPlaying = false;
                 UpdateStatus("Stopped", Color.Gray);
+                UpdatePlayStopButton();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"NOMAD Video: Stop error - {ex.Message}");
+            }
+        }
+        
+        private void TogglePlayStop()
+        {
+            if (_isPlaying)
+            {
+                StopStream();
+            }
+            else
+            {
+                StartStream();
+            }
+        }
+        
+        private void UpdatePlayStopButton()
+        {
+            if (_btnPlayStop == null) return;
+            
+            if (_isPlaying)
+            {
+                _btnPlayStop.Text = "Stop";
+                _btnPlayStop.BackColor = Color.FromArgb(150, 60, 60);
+            }
+            else
+            {
+                _btnPlayStop.Text = "Play";
+                _btnPlayStop.BackColor = Color.FromArgb(60, 120, 60);
             }
         }
         
@@ -404,13 +450,28 @@ namespace NOMAD.MissionPlanner
             
             if (_streamUrl.StartsWith("udp://", StringComparison.OrdinalIgnoreCase))
             {
-                // UDP stream - VLC needs special format for UDP listen
-                // VLC expects: udp://@:5600 (the @ means "listen on all interfaces")
+                // UDP stream - use SDP file for best compatibility
+                // VLC works better with SDP file than raw UDP URL
                 var port = ExtractUdpPort(_streamUrl);
-                var vlcUrl = $"udp://@:{port}";
-                System.Diagnostics.Debug.WriteLine($"NOMAD Video: Opening VLC with UDP URL: {vlcUrl}");
-                vlcArgs = $"--network-caching={_networkCaching} {vlcUrl}";
-                ffplayArgs = $"-fflags nobuffer -flags low_delay -i udp://0.0.0.0:{port}";
+                
+                // Create a temporary SDP file for VLC
+                var sdpContent = $@"v=0
+o=- 0 0 IN IP4 127.0.0.1
+s=NOMAD ZED Camera
+c=IN IP4 127.0.0.1
+t=0 0
+m=video {port} RTP/AVP 96
+a=rtpmap:96 H264/90000
+a=fmtp:96 profile-level-id=42c01f;packetization-mode=1
+a=framerate:30
+a=recvonly";
+                
+                var sdpPath = Path.Combine(Path.GetTempPath(), "nomad_stream.sdp");
+                File.WriteAllText(sdpPath, sdpContent);
+                
+                System.Diagnostics.Debug.WriteLine($"NOMAD Video: Opening VLC with SDP file: {sdpPath}");
+                vlcArgs = $"--network-caching={_networkCaching} --live-caching={_networkCaching} \"{sdpPath}\"";
+                ffplayArgs = $"-fflags nobuffer -flags low_delay -protocol_whitelist file,udp,rtp -i \"{sdpPath}\"";
             }
             else
             {
