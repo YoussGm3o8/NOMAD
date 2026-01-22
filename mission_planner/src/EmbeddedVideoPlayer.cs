@@ -61,11 +61,12 @@ namespace NOMAD.MissionPlanner
         private string _cameraView = "left";  // Current camera view: left, right, both
         
         // Camera view options with display names
-        private static readonly (string View, string DisplayName, string UrlSuffix)[] CameraViews = new[]
+        // Note: Only "Left Camera" is currently available. Other views require backend changes.
+        private static readonly (string View, string DisplayName, string UrlSuffix, bool Available)[] CameraViews = new[]
         {
-            ("left", "Left Camera (Nav)", ""),          // /zed
-            ("right", "Right Camera", "-right"),        // /zed-right
-            ("both", "Side-by-Side (Wide)", "-both"),   // /zed-both
+            ("left", "Left Camera (Nav)", "", true),                      // /zed - AVAILABLE
+            ("right", "Right Camera (Soon)", "-right", false),            // /zed-right - NOT YET AVAILABLE  
+            ("both", "Side-by-Side Wide (Soon)", "-both", false),         // /zed-both - NOT YET AVAILABLE
         };
         
         // ============================================================
@@ -350,13 +351,13 @@ namespace NOMAD.MissionPlanner
             _cmbCameraView = new ComboBox
             {
                 Location = new Point(320, 10),
-                Size = new Size(150, 25),
+                Size = new Size(170, 25),
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 BackColor = Color.FromArgb(30, 30, 30),
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 9),
             };
-            foreach (var (view, displayName, _) in CameraViews)
+            foreach (var (view, displayName, _, available) in CameraViews)
             {
                 _cmbCameraView.Items.Add(displayName);
             }
@@ -400,7 +401,22 @@ namespace NOMAD.MissionPlanner
             if (_cmbCameraView.SelectedIndex < 0 || _cmbCameraView.SelectedIndex >= CameraViews.Length)
                 return;
                 
-            var (view, displayName, urlSuffix) = CameraViews[_cmbCameraView.SelectedIndex];
+            var (view, displayName, urlSuffix, available) = CameraViews[_cmbCameraView.SelectedIndex];
+            
+            // Check if view is available
+            if (!available)
+            {
+                CustomMessageBox.Show(
+                    $"'{displayName}' is not yet available.\n\n" +
+                    "Multi-camera support requires backend changes to the Jetson.\n" +
+                    "Currently only 'Left Camera (Nav)' is available.",
+                    "View Not Available"
+                );
+                // Reset to left camera
+                _cmbCameraView.SelectedIndex = 0;
+                return;
+            }
+            
             _cameraView = view;
             
             // Build new URL with the appropriate suffix
