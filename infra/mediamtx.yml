@@ -76,15 +76,15 @@ srtAddress: :8890
 record: no
 
 # ============================================================
-# Paths (stream endpoints)
+# Paths (stream endpoints) - ZED2i Multi-Camera Views
 # ============================================================
 
 paths:
-  # Main live stream from ZED camera
-  # GStreamer publishes to this endpoint
+  # ZED2i Stereo Stream
+  # Full 2560x720 side-by-side stereo frame @ 30fps H.264
+  # Mission Planner crops to Left/Right/Both views client-side
   zed:
     source: publisher
 
-  # Alternative endpoint
+  # Alternative generic endpoint
   live:
-    source: publisher

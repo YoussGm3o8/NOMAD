@@ -70,19 +70,22 @@ else
 fi
 
 # Start ZED Video Stream -> MediaMTX
-echo "[5/5] Starting ZED Video Stream (Ultra-Low Latency)..."
+echo "[5/5] Starting ZED Video Stream (Full Stereo Frame)..."
+# Streams full 2560x720 side-by-side stereo frame
+# Mission Planner crops to left/right/both views client-side
+# This is more efficient than encoding 3 separate streams
+#
 # Ultra-low latency H.264 pipeline:
-# - Convert to I420 (YUV 4:2:0) for compatibility
+# - Full stereo frame: 2560x720 @ 30fps
 # - x264enc: zerolatency tune, ultrafast preset, no B-frames
-# - baseline profile: maximum compatibility
+# - Higher bitrate (6000) for wider frame
 # - key-int-max=15: Frequent keyframes for fast recovery
 gst-launch-1.0 -q \
   v4l2src device=/dev/video0 do-timestamp=true ! \
   "video/x-raw,width=2560,height=720,framerate=30/1" ! \
-  videocrop left=0 right=1280 ! \
   videoconvert ! \
   "video/x-raw,format=I420" ! \
-  x264enc tune=zerolatency bitrate=4000 speed-preset=ultrafast \
+  x264enc tune=zerolatency bitrate=6000 speed-preset=ultrafast \
     sliced-threads=true key-int-max=15 bframes=0 \
     rc-lookahead=0 sync-lookahead=0 ! \
   h264parse ! \
@@ -122,11 +125,12 @@ echo "=========================================="
 echo "  NOMAD System Running"
 echo "=========================================="
 echo "API:    http://$JETSON_IP:$API_PORT"
-echo "Video:  rtsp://$JETSON_IP:$RTSP_PORT/zed"
+echo "Video:  rtsp://$JETSON_IP:$RTSP_PORT/zed (2560x720 stereo)"
 echo "Logs:   $LOG_DIR/"
 echo ""
+echo "Stereo stream: Full 2560x720 side-by-side frame"
+echo "Mission Planner crops to Left/Right/Both views"
 echo "MediaMTX supports multiple viewers simultaneously!"
-echo "Use in: Mission Planner, VLC, or any RTSP client"
 echo ""
 echo "Press Ctrl+C to stop all services"
 echo ""

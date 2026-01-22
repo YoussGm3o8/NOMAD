@@ -28,8 +28,7 @@ namespace NOMAD.MissionPlanner
         // ============================================================
         
         private string _streamTitle;
-        private string _streamUrl;
-        private string _baseStreamUrl;  // Base URL without camera view suffix
+        private string _streamUrl;       // RTSP URL for stereo stream
         private bool _isPlaying;
         private bool _useGStreamer;
         
@@ -60,13 +59,13 @@ namespace NOMAD.MissionPlanner
         private string _quality = "auto";
         private string _cameraView = "left";  // Current camera view: left, right, both
         
-        // Camera view options with display names
-        // Note: Only "Left Camera" is currently available. Other views require backend changes.
-        private static readonly (string View, string DisplayName, string UrlSuffix, bool Available)[] CameraViews = new[]
+        // Camera view options - all available (client-side cropping)
+        // Stream is 2560x720 stereo, we crop to show left/right/both
+        private static readonly (string View, string DisplayName)[] CameraViews = new[]
         {
-            ("left", "Left Camera (Nav)", "", true),                      // /zed - AVAILABLE
-            ("right", "Right Camera (Soon)", "-right", false),            // /zed-right - NOT YET AVAILABLE  
-            ("both", "Side-by-Side Wide (Soon)", "-both", false),         // /zed-both - NOT YET AVAILABLE
+            ("left", "Left Camera (Nav)"),       // Crop left half: 0-1280
+            ("right", "Right Camera"),           // Crop right half: 1280-2560
+            ("both", "Side-by-Side (Wide)"),     // Full frame: 2560x720
         };
         
         // ============================================================
@@ -76,8 +75,7 @@ namespace NOMAD.MissionPlanner
         public EmbeddedVideoPlayer(string title, string rtspUrl)
         {
             _streamTitle = title;
-            _baseStreamUrl = rtspUrl;  // Store the base URL (e.g., rtsp://ip:8554/zed)
-            _streamUrl = rtspUrl;       // Current active URL
+            _streamUrl = rtspUrl;  // Single stereo stream URL (e.g., rtsp://ip:8554/zed)
             _isPlaying = false;
             _useGStreamer = CheckGStreamerAvailable();
             
@@ -351,13 +349,13 @@ namespace NOMAD.MissionPlanner
             _cmbCameraView = new ComboBox
             {
                 Location = new Point(320, 10),
-                Size = new Size(170, 25),
+                Size = new Size(155, 25),
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 BackColor = Color.FromArgb(30, 30, 30),
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 9),
             };
-            foreach (var (view, displayName, _, available) in CameraViews)
+            foreach (var (view, displayName) in CameraViews)
             {
                 _cmbCameraView.Items.Add(displayName);
             }
@@ -395,43 +393,23 @@ namespace NOMAD.MissionPlanner
         
         /// <summary>
         /// Handles camera view selection change.
+        /// Cropping is done client-side when rendering frames.
         /// </summary>
         private void CmbCameraView_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (_cmbCameraView.SelectedIndex < 0 || _cmbCameraView.SelectedIndex >= CameraViews.Length)
                 return;
                 
-            var (view, displayName, urlSuffix, available) = CameraViews[_cmbCameraView.SelectedIndex];
-            
-            // Check if view is available
-            if (!available)
-            {
-                CustomMessageBox.Show(
-                    $"'{displayName}' is not yet available.\n\n" +
-                    "Multi-camera support requires backend changes to the Jetson.\n" +
-                    "Currently only 'Left Camera (Nav)' is available.",
-                    "View Not Available"
-                );
-                // Reset to left camera
-                _cmbCameraView.SelectedIndex = 0;
-                return;
-            }
-            
+            var (view, displayName) = CameraViews[_cmbCameraView.SelectedIndex];
             _cameraView = view;
             
-            // Build new URL with the appropriate suffix
-            // Base URL is like rtsp://ip:8554/zed
-            // For right camera: rtsp://ip:8554/zed-right
-            // For both: rtsp://ip:8554/zed-both
-            _streamUrl = _baseStreamUrl + urlSuffix;
+            System.Diagnostics.Debug.WriteLine($"NOMAD Video: Camera view changed to {displayName} (client-side crop)");
             
-            System.Diagnostics.Debug.WriteLine($"NOMAD Video: Camera view changed to {displayName} -> {_streamUrl}");
-            
-            // If currently playing, restart with new URL
+            // Update status to show current view
             if (_isPlaying)
             {
-                StopStream();
-                StartStream();
+                var viewName = _cameraView == "both" ? "Wide" : (_cameraView == "right" ? "Right" : "Left");
+                UpdateStatus($"Playing [{viewName}]", Color.LimeGreen);
             }
         }
         
@@ -847,6 +825,26 @@ a=recvonly";
         private int _frameCount = 0;
         private DateTime _lastFrameTime = DateTime.MinValue;
         
+        /// <summary>
+        /// Crops the incoming stereo frame (2560x720) based on selected camera view.
+        /// </summary>
+        private Rectangle GetCropRegion(int frameWidth, int frameHeight)
+        {
+            // Stereo frame is 2560x720 (side-by-side)
+            // Left camera: left half (0-1280)
+            // Right camera: right half (1280-2560)
+            // Both: full frame
+            int halfWidth = frameWidth / 2;
+            
+            return _cameraView switch
+            {
+                "left" => new Rectangle(0, 0, halfWidth, frameHeight),
+                "right" => new Rectangle(halfWidth, 0, halfWidth, frameHeight),
+                "both" => new Rectangle(0, 0, frameWidth, frameHeight),
+                _ => new Rectangle(0, 0, halfWidth, frameHeight)  // Default to left
+            };
+        }
+        
         private void OnGstNewImage(object sender, MPBitmap frame)
         {
             if (frame == null)
@@ -872,7 +870,7 @@ a=recvonly";
             _frameCount++;
             if (_frameCount % 30 == 1) // Log every 30 frames (once per second)
             {
-                System.Diagnostics.Debug.WriteLine($"NOMAD Video: Frame #{_frameCount} received, Size: {frame.Width}x{frame.Height}");
+                System.Diagnostics.Debug.WriteLine($"NOMAD Video: Frame #{_frameCount} received, Size: {frame.Width}x{frame.Height}, View: {_cameraView}");
             }
 
             if (InvokeRequired)
@@ -884,15 +882,29 @@ a=recvonly";
             try
             {
                 // Create a System.Drawing.Bitmap from the SkiaSharp bitmap data
-                // This matches Mission Planner's GimbalVideoControl approach:
-                // Uses LockBits to get raw pixel data pointer and creates bitmap from it
-                var displayBitmap = new Bitmap(
+                var fullBitmap = new Bitmap(
                     frame.Width, 
                     frame.Height, 
                     4 * frame.Width,  // stride = 4 bytes per pixel (BGRA)
                     System.Drawing.Imaging.PixelFormat.Format32bppPArgb,
                     frame.LockBits(Rectangle.Empty, null, SkiaSharp.SKColorType.Bgra8888).Scan0
                 );
+
+                // Crop based on selected camera view
+                var cropRegion = GetCropRegion(frame.Width, frame.Height);
+                Bitmap displayBitmap;
+                
+                if (cropRegion.Width == frame.Width && cropRegion.Height == frame.Height)
+                {
+                    // No crop needed (both view)
+                    displayBitmap = fullBitmap;
+                }
+                else
+                {
+                    // Crop to selected region
+                    displayBitmap = fullBitmap.Clone(cropRegion, fullBitmap.PixelFormat);
+                    fullBitmap.Dispose();
+                }
 
                 // Update video display
                 var old = _videoBox?.Image;
@@ -906,14 +918,8 @@ a=recvonly";
                 if (_fullscreenBox != null)
                 {
                     var oldFull = _fullscreenBox.Image;
-                    var fullBitmap = new Bitmap(
-                        frame.Width, 
-                        frame.Height, 
-                        4 * frame.Width,
-                        System.Drawing.Imaging.PixelFormat.Format32bppPArgb,
-                        frame.LockBits(Rectangle.Empty, null, SkiaSharp.SKColorType.Bgra8888).Scan0
-                    );
-                    _fullscreenBox.Image = fullBitmap;
+                    // Clone for fullscreen (displayBitmap is used by main view)
+                    _fullscreenBox.Image = (Bitmap)displayBitmap.Clone();
                     oldFull?.Dispose();
                 }
 
@@ -925,8 +931,8 @@ a=recvonly";
                 // Update status periodically
                 if (_frameCount % 30 == 1)
                 {
-                    var fps = 30.0; // Estimate since we log every second
-                    UpdateStatus($"Playing @ ~{fps:F0}fps ({frame.Width}x{frame.Height})", Color.LimeGreen);
+                    var viewName = _cameraView == "both" ? "Wide" : (_cameraView == "right" ? "Right" : "Left");
+                    UpdateStatus($"Playing [{viewName}] ({cropRegion.Width}x{cropRegion.Height})", Color.LimeGreen);
                 }
             }
             catch (Exception ex)
