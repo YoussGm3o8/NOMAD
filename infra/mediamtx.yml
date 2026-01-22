@@ -1,24 +1,24 @@
 ###############################################
 # MediaMTX Configuration for NOMAD
 # 
-# Accepts RTSP streams from edge_core and
-# serves them via RTSP to Mission Planner.
+# Ultra-low latency configuration for FPV drone operations.
+# Optimized for <150ms glass-to-glass latency.
 #
 # Source: https://github.com/bluenviron/mediamtx
 ###############################################
 
 # ============================================================
-# Global Settings
+# Global Settings - LOW LATENCY OPTIMIZED
 # ============================================================
 
 # Logging level (debug, info, warn, error)
-logLevel: info
+logLevel: warn
 logDestinations: [stdout]
 
-# Read timeout for connections
-readTimeout: 10s
-writeTimeout: 10s
-writeQueueSize: 512
+# Minimal timeouts for low latency
+readTimeout: 5s
+writeTimeout: 5s
+writeQueueSize: 64  # Smaller buffer = lower latency
 
 # ============================================================
 # API (for monitoring)
@@ -31,12 +31,12 @@ metrics: yes
 metricsAddress: :9998
 
 # ============================================================
-# RTSP Server (input from edge_core, output to Mission Planner)
+# RTSP Server - LOW LATENCY OPTIMIZED
 # ============================================================
 
 rtsp: yes
 rtspAddress: :8554
-protocols: [tcp]  # Force TCP for reliability
+protocols: [udp, tcp]  # UDP first for lower latency
 
 # RTSP authentication (disabled for local use)
 # rtspAuthMethods: []

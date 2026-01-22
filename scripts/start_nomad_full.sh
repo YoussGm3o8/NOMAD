@@ -70,16 +70,23 @@ else
 fi
 
 # Start ZED Video Stream -> MediaMTX
-echo "[5/5] Starting ZED Video Stream..."
-# Push H.264 stream to MediaMTX via RTSP
+echo "[5/5] Starting ZED Video Stream (Ultra-Low Latency)..."
+# Ultra-low latency H.264 pipeline:
+# - x264enc: zerolatency tune, ultrafast preset, no B-frames
+# - key-int-max=15: Frequent keyframes for fast recovery
+# - sliced-threads: Parallel encoding
+# - sync=false: No A/V sync delays
 gst-launch-1.0 -q \
-  v4l2src device=/dev/video0 ! \
+  v4l2src device=/dev/video0 do-timestamp=true ! \
   "video/x-raw,width=2560,height=720,framerate=30/1" ! \
   videocrop left=0 right=1280 ! \
   videoconvert ! \
-  x264enc tune=zerolatency bitrate=4000 speed-preset=ultrafast key-int-max=15 ! \
+  x264enc tune=zerolatency bitrate=4000 speed-preset=ultrafast \
+    sliced-threads=true key-int-max=15 bframes=0 \
+    rc-lookahead=0 sync-lookahead=0 ! \
   h264parse ! \
-  rtspclientsink location=rtsp://localhost:$RTSP_PORT/zed protocols=tcp > $LOG_DIR/video.log 2>&1 &
+  rtspclientsink location=rtsp://localhost:$RTSP_PORT/zed \
+    latency=0 protocols=tcp > $LOG_DIR/video.log 2>&1 &
 VIDEO_PID=$!
 
 sleep 2

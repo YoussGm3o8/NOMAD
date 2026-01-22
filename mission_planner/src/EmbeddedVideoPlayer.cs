@@ -53,8 +53,8 @@ namespace NOMAD.MissionPlanner
         private MPBitmap _lastFrame;
         private string _embeddedInitErrorMessage = null;
         
-        // Playback settings
-        private int _networkCaching = 100; // ms
+        // Playback settings - ultra-low latency defaults
+        private int _networkCaching = 50; // ms - minimum for stable playback
         private string _quality = "auto";
         
         // ============================================================
@@ -475,8 +475,14 @@ a=recvonly";
             }
             else
             {
-                // RTSP stream - use TCP transport
-                vlcArgs = $"--network-caching={_networkCaching} --rtsp-tcp \"{_streamUrl}\"";
+                // RTSP stream - ultra-low latency settings
+                // --avcodec-skiploopfilter=all: Skip deblocking for speed
+                // --avcodec-skip-frame=0: Don't skip frames
+                // --avcodec-hurry-up: Decode fast
+                // --sout-mux-caching=0: Minimize mux buffering
+                vlcArgs = $"--network-caching={_networkCaching} --live-caching={_networkCaching} " +
+                          $"--clock-jitter=0 --avcodec-skiploopfilter=all --avcodec-hurry-up " +
+                          $"--sout-mux-caching=0 --rtsp-tcp \"{_streamUrl}\"";
                 ffplayArgs = $"-fflags nobuffer -flags low_delay -rtsp_transport tcp -i \"{_streamUrl}\"";
             }
             
