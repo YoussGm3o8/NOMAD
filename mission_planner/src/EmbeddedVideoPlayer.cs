@@ -732,12 +732,13 @@ a=recvonly";
                 var port = ExtractUdpPort(_streamUrl);
                 
                 // Match Mission Planner's AutoConnect format for UDP H264
-                return $"udpsrc port={port} buffer-size=90000 ! application/x-rtp,media=(string)video,clock-rate=(int)90000,encoding-name=(string)H264 ! decodebin3 ! queue max-size-buffers=1 leaky=2 ! videoconvert ! video/x-raw,format=BGRA ! appsink name=outsink sync=false";
+                return $"udpsrc port={port} buffer-size=90000 ! application/x-rtp,media=(string)video,clock-rate=(int)90000,encoding-name=(string)H264 ! rtph264depay ! avdec_h264 ! videoconvert ! video/x-raw,format=BGRA ! appsink name=outsink sync=false";
             }
             else
             {
-                // RTSP stream - match Mission Planner's HereLink format
-                return $"rtspsrc location={_streamUrl} latency=41 udp-reconnect=1 timeout=0 do-retransmission=false ! application/x-rtp ! decodebin3 ! queue max-size-buffers=1 leaky=2 ! videoconvert ! video/x-raw,format=BGRA ! appsink name=outsink sync=false";
+                // RTSP stream - explicit H264 decoding pipeline for reliability
+                // Uses rtph264depay + avdec_h264 instead of decodebin3 for direct decoding
+                return $"rtspsrc location={_streamUrl} latency=0 protocols=tcp ! rtph264depay ! avdec_h264 ! videoconvert ! video/x-raw,format=BGRA ! appsink name=outsink sync=false drop=true";
             }
         }
 
