@@ -28,6 +28,7 @@ namespace NOMAD.MissionPlanner
         // ============================================================
         
         private readonly DualLinkSender _sender;
+        private readonly MAVLinkConnectionManager _connectionManager;
         private NOMADConfig _config;
         
         // Tab Control
@@ -40,7 +41,11 @@ namespace NOMAD.MissionPlanner
         private TabPage _tabVideo;
         private TabPage _tabTerminal;
         private TabPage _tabHealth;
+        private TabPage _tabLinks;
         private TabPage _tabSettings;
+        
+        // Link Tab Controls
+        private LinkHealthPanel _linkHealthPanel;
         
         // Dashboard Tab Controls
         private Label _lblConnectionStatus;
@@ -75,10 +80,11 @@ namespace NOMAD.MissionPlanner
         // Constructor
         // ============================================================
         
-        public NOMADFullPage(DualLinkSender sender, NOMADConfig config)
+        public NOMADFullPage(DualLinkSender sender, NOMADConfig config, MAVLinkConnectionManager connectionManager = null)
         {
             _sender = sender ?? throw new ArgumentNullException(nameof(sender));
             _config = config ?? throw new ArgumentNullException(nameof(config));
+            _connectionManager = connectionManager;  // Can be null if not using dual link
             
             // Initialize helper services
             try
@@ -124,6 +130,7 @@ namespace NOMAD.MissionPlanner
             CreateVideoTab();
             CreateTerminalTab();
             CreateHealthTab();
+            CreateLinksTab();
             CreateSettingsTab();
             
             // Add tabs to control
@@ -133,6 +140,7 @@ namespace NOMAD.MissionPlanner
             _tabControl.TabPages.Add(_tabVideo);
             _tabControl.TabPages.Add(_tabTerminal);
             _tabControl.TabPages.Add(_tabHealth);
+            _tabControl.TabPages.Add(_tabLinks);
             _tabControl.TabPages.Add(_tabSettings);
             
             this.Controls.Add(_tabControl);
@@ -889,6 +897,43 @@ namespace NOMAD.MissionPlanner
             _healthDashboard.Dock = DockStyle.Fill;
             
             _tabHealth.Controls.Add(_healthDashboard);
+        }
+        
+        // ============================================================
+        // Links Tab (MAVLink Dual-Link Management)
+        // ============================================================
+        
+        private void CreateLinksTab()
+        {
+            _tabLinks = new TabPage("Links")
+            {
+                BackColor = Color.FromArgb(30, 30, 30),
+                Padding = new Padding(10),
+            };
+            
+            // Get connection manager and config
+            var connectionManager = _connectionManager;
+            var config = _config;
+            
+            // Only create panel if we have both required dependencies
+            if (connectionManager != null && config != null)
+            {
+                _linkHealthPanel = new LinkHealthPanel(connectionManager, config);
+                _linkHealthPanel.Dock = DockStyle.Fill;
+                _tabLinks.Controls.Add(_linkHealthPanel);
+            }
+            else
+            {
+                // Show placeholder if dependencies not available
+                var placeholder = new Label
+                {
+                    Text = "Link monitoring not available",
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    ForeColor = Color.Gray
+                };
+                _tabLinks.Controls.Add(placeholder);
+            }
         }
         
         // ============================================================

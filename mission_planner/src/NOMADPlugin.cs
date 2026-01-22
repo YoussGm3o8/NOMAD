@@ -456,7 +456,7 @@ namespace NOMAD.MissionPlanner
                 // Create the full page control if needed
                 if (_fullPageDocked == null || _fullPageDocked.IsDisposed)
                 {
-                    _fullPageDocked = new NOMADFullPage(_sender, _config);
+                    _fullPageDocked = new NOMADFullPage(_sender, _config, _connectionManager);
                 }
 
                 // Create the tab if needed
@@ -659,7 +659,7 @@ namespace NOMAD.MissionPlanner
             if (_fullPageForm == null || _fullPageForm.IsDisposed)
             {
                 // Create new full page instance
-                _fullPage = new NOMADFullPage(_sender, _config);
+                _fullPage = new NOMADFullPage(_sender, _config, _connectionManager);
                 
                 _fullPageForm = new Form
                 {

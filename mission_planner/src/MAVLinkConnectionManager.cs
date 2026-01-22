@@ -21,6 +21,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 using MissionPlanner;
 using MissionPlanner.Comms;
 using MissionPlanner.Utilities;
