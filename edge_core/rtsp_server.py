@@ -42,49 +42,28 @@ logging.basicConfig(
 logger = logging.getLogger("edge_core.rtsp_server")
 
 
-class ZEDRtspFactory(GstRtspServer.RTSPMediaFactory):
-    """
-    Custom RTSP Media Factory for ZED Camera.
-    
-    Overrides do_create_element to build pipeline dynamically.
-    """
-    
-    def __init__(self, device: str = "/dev/video0", bitrate: int = 4000):
-        super().__init__()
-        self.device = device
-        self.bitrate = bitrate
-        self.set_shared(True)
-        
-    def do_create_element(self, url):
-        """Create the GStreamer pipeline for this stream."""
-        # Try NVIDIA hardware encoding first
-        try:
-            pipeline_str = (
-                f"v4l2src device={self.device} ! "
-                f"video/x-raw,width=2560,height=720,framerate=30/1 ! "
-                f"videocrop left=0 right=1280 ! "
-                f"nvvidconv ! video/x-raw(memory:NVMM) ! "
-                f"nvv4l2h264enc bitrate={self.bitrate * 1000} preset-level=1 "
-                f"iframeinterval=15 insert-sps-pps=true ! "
-                f"h264parse ! rtph264pay name=pay0 pt=96 config-interval=1"
-            )
-            pipeline = Gst.parse_launch(pipeline_str)
-            logger.info("Using NVIDIA hardware encoding")
-            return pipeline
-        except Exception as e:
-            logger.warning(f"NVIDIA encoding failed: {e}, using software")
-        
-        # Fallback to software encoding
-        pipeline_str = (
-            f"v4l2src device={self.device} ! "
-            f"video/x-raw,width=2560,height=720,framerate=30/1 ! "
-            f"videocrop left=0 right=1280 ! "
-            f"videoconvert ! "
-            f"x264enc tune=zerolatency bitrate={self.bitrate} "
-            f"speed-preset=ultrafast key-int-max=15 ! "
-            f"h264parse ! rtph264pay name=pay0 pt=96 config-interval=1"
-        )
-        return Gst.parse_launch(pipeline_str)
+def build_software_pipeline(device: str, bitrate: int) -> str:
+    """Build software encoding pipeline string."""
+    return (
+        f"( v4l2src device={device} ! "
+        f"video/x-raw,width=2560,height=720,framerate=30/1 ! "
+        f"videocrop left=0 right=1280 ! "
+        f"videoconvert ! "
+        f"x264enc tune=zerolatency bitrate={bitrate} speed-preset=ultrafast key-int-max=15 ! "
+        f"h264parse ! rtph264pay name=pay0 pt=96 config-interval=1 )"
+    )
+
+
+def build_nvidia_pipeline(device: str, bitrate: int) -> str:
+    """Build NVIDIA hardware encoding pipeline string."""
+    return (
+        f"( v4l2src device={device} ! "
+        f"video/x-raw,width=2560,height=720,framerate=30/1 ! "
+        f"videocrop left=0 right=1280 ! "
+        f"nvvidconv ! video/x-raw(memory:NVMM) ! "
+        f"nvv4l2h264enc bitrate={bitrate * 1000} preset-level=1 iframeinterval=15 insert-sps-pps=true ! "
+        f"h264parse ! rtph264pay name=pay0 pt=96 config-interval=1 )"
+    )
 
 
 class ZEDRtspServer:
@@ -109,21 +88,13 @@ class ZEDRtspServer:
         device: str = DEFAULT_DEVICE,
         bitrate: int = 4000,
     ):
-        """
-        Initialize RTSP server.
-        
-        Args:
-            port: RTSP server port (default 8554)
-            mount_point: Stream mount point (default /zed)
-            device: V4L2 device path (default /dev/video0)
-            bitrate: H.264 bitrate in kbps (default 4000)
-        """
         self.port = port
         self.mount_point = mount_point
         self.device = device
         self.bitrate = bitrate
         
         self._server = None
+        self._factory = None
         self._loop = None
         self._running = False
         
@@ -136,14 +107,38 @@ class ZEDRtspServer:
         self._server = GstRtspServer.RTSPServer.new()
         self._server.set_service(str(self.port))
         
-        # Create and configure media factory
-        factory = ZEDRtspFactory(device=self.device, bitrate=self.bitrate)
+        # Create media factory
+        self._factory = GstRtspServer.RTSPMediaFactory.new()
         
-        # Mount the stream
-        mount_points = self._server.get_mount_points()
-        mount_points.add_factory(self.mount_point, factory)
+        # Try NVIDIA pipeline first
+        pipeline_str = None
+        try:
+            nvidia_pipeline = build_nvidia_pipeline(self.device, self.bitrate)
+            # Test parse
+            test = Gst.parse_launch(nvidia_pipeline.strip("() "))
+            if test:
+                pipeline_str = nvidia_pipeline
+                logger.info("Using NVIDIA hardware encoding")
+                del test
+        except Exception as e:
+            logger.warning(f"NVIDIA encoding unavailable: {e}")
         
-        # Attach to default main context
+        # Fall back to software encoding
+        if not pipeline_str:
+            pipeline_str = build_software_pipeline(self.device, self.bitrate)
+            logger.info("Using software encoding (x264)")
+        
+        logger.debug(f"Pipeline: {pipeline_str}")
+        
+        # Set the launch string
+        self._factory.set_launch(pipeline_str)
+        self._factory.set_shared(True)
+        
+        # Get mount points and add factory
+        mounts = self._server.get_mount_points()
+        mounts.add_factory(self.mount_point, self._factory)
+        
+        # Attach server to default main context
         self._server.attach(None)
         
         self._running = True
@@ -152,7 +147,7 @@ class ZEDRtspServer:
         
     def run_loop(self) -> None:
         """Run the GLib main loop (blocking)."""
-        self._loop = GLib.MainLoop()
+        self._loop = GLib.MainLoop.new(None, False)
         
         # Handle shutdown signals
         def signal_handler(signum, frame):
@@ -195,34 +190,16 @@ def main():
         description="NOMAD ZED Camera RTSP Server",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument(
-        "--port", "-p",
-        type=int,
-        default=ZEDRtspServer.DEFAULT_PORT,
-        help="RTSP server port"
-    )
-    parser.add_argument(
-        "--device", "-d",
-        default=ZEDRtspServer.DEFAULT_DEVICE,
-        help="V4L2 device path"
-    )
-    parser.add_argument(
-        "--bitrate", "-b",
-        type=int,
-        default=4000,
-        help="H.264 bitrate (kbps)"
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug logging"
-    )
+    parser.add_argument("--port", "-p", type=int, default=ZEDRtspServer.DEFAULT_PORT, help="RTSP server port")
+    parser.add_argument("--device", "-d", default=ZEDRtspServer.DEFAULT_DEVICE, help="V4L2 device path")
+    parser.add_argument("--bitrate", "-b", type=int, default=4000, help="H.264 bitrate (kbps)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     
     args = parser.parse_args()
     
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
-        os.environ["GST_DEBUG"] = "2"
+        os.environ["GST_DEBUG"] = "3"
     
     # Display banner
     local_ip = get_local_ip()
@@ -249,6 +226,8 @@ def main():
         server.run_loop()
     except Exception as e:
         logger.error(f"Server error: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 
