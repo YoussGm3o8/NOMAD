@@ -70,24 +70,21 @@ else
 fi
 
 # Start ZED Video Stream -> MediaMTX
-echo "[5/5] Starting ZED Video Stream (Auto-Detect Resolution)..."
-# Auto-detect camera capabilities and adapt accordingly
-# Many ZED2i cameras output 1344x376 @ 15fps in certain modes
+echo "[5/5] Starting ZED Video Stream (2560x720 Stereo)..."
+# Force 2560x720 side-by-side stereo mode
+# This provides proper aspect ratio and full resolution
 
-# First, detect actual camera resolution
-CAMERA_INFO=$(v4l2-ctl --device=/dev/video0 --list-formats-ext 2>/dev/null | grep -A1 "YUYV" | tail -1 || echo "")
-echo "    Detected camera format: $CAMERA_INFO"
-
-# Try Method 1: GStreamer with auto-negotiation (most reliable)
-echo "    Attempting GStreamer with auto-negotiation..."
+# Ultra-low latency H.264 pipeline for full stereo frame:
+# - Full stereo: 2560x720 @ 30fps (side-by-side L+R cameras)
+# - x264enc: zerolatency tune, ultrafast preset, no B-frames
+# - Higher bitrate (6000) for wider frame quality
+# - key-int-max=30: Frequent keyframes for fast recovery
 gst-launch-1.0 -q \
   v4l2src device=/dev/video0 do-timestamp=true ! \
-  "video/x-raw,format=YUY2" ! \
-  videoscale ! \
-  "video/x-raw,width=1280,height=720" ! \
+  "video/x-raw,width=2560,height=720,framerate=30/1,format=YUY2" ! \
   videoconvert ! \
   "video/x-raw,format=I420" ! \
-  x264enc tune=zerolatency bitrate=4000 speed-preset=ultrafast \
+  x264enc tune=zerolatency bitrate=6000 speed-preset=ultrafast \
     sliced-threads=true key-int-max=30 bframes=0 \
     rc-lookahead=0 sync-lookahead=0 ! \
   h264parse ! \
@@ -98,47 +95,30 @@ VIDEO_PID=$!
 sleep 3
 
 if ps -p $VIDEO_PID > /dev/null 2>&1; then
-    echo "    OK: Video stream running (PID: $VIDEO_PID)"
+    echo "    OK: Video stream running (PID: $VIDEO_PID) - 2560x720 stereo"
 else
-    echo "    FAIL: GStreamer failed, trying ffmpeg..."
+    echo "    FAIL: Primary method failed, trying without format specification..."
     cat $LOG_DIR/video.log
     
-    # Method 2: Use ffmpeg with auto format detection
-    if command -v ffmpeg &> /dev/null; then
-        # Let ffmpeg auto-detect resolution and scale to 1280x720
-        ffmpeg -f v4l2 -input_format yuyv422 -i /dev/video0 \
-            -vf "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2" \
-            -c:v libx264 -preset ultrafast -tune zerolatency -b:v 3000k \
-            -g 30 -bf 0 -max_delay 0 \
-            -f rtsp -rtsp_transport tcp rtsp://localhost:$RTSP_PORT/zed > $LOG_DIR/video.log 2>&1 &
-        VIDEO_PID=$!
-        sleep 3
-        
-        if ps -p $VIDEO_PID > /dev/null 2>&1; then
-            echo "    OK: Video stream (ffmpeg) running (PID: $VIDEO_PID)"
-        else
-            echo "    FAIL: ffmpeg also failed!"
-            echo "    Trying minimal passthrough mode..."
-            cat $LOG_DIR/video.log
-            
-            # Method 3: Minimal passthrough - just grab and encode whatever we get
-            gst-launch-1.0 -q \
-              v4l2src device=/dev/video0 ! \
-              videoconvert ! \
-              x264enc tune=zerolatency bitrate=3000 speed-preset=ultrafast ! \
-              h264parse ! \
-              rtspclientsink location=rtsp://localhost:$RTSP_PORT/zed \
-                protocols=tcp > $LOG_DIR/video.log 2>&1 &
-            VIDEO_PID=$!
-            sleep 2
-            
-            if ps -p $VIDEO_PID > /dev/null 2>&1; then
-                echo "    OK: Video stream (minimal) running (PID: $VIDEO_PID)"
-            else
-                echo "    FAIL: All methods failed! Check camera connection"
-                cat $LOG_DIR/video.log
-            fi
-        fi
+    # Method 2: Try without specifying format but keep resolution
+    gst-launch-1.0 -q \
+      v4l2src device=/dev/video0 do-timestamp=true ! \
+      "video/x-raw,width=2560,height=720,framerate=30/1" ! \
+      videoconvert ! \
+      "video/x-raw,format=I420" ! \
+      x264enc tune=zerolatency bitrate=6000 speed-preset=ultrafast \
+        sliced-threads=true key-int-max=30 bframes=0 ! \
+      h264parse ! \
+      rtspclientsink location=rtsp://localhost:$RTSP_PORT/zed \
+        latency=0 protocols=tcp > $LOG_DIR/video.log 2>&1 &
+    VIDEO_PID=$!
+    sleep 3
+    
+    if ps -p $VIDEO_PID > /dev/null 2>&1; then
+        echo "    OK: Video stream (method 2) running (PID: $VIDEO_PID)"
+    else
+        echo "    FAIL: All methods failed! Check camera"
+        cat $LOG_DIR/video.log
     fi
 fi
 
@@ -147,11 +127,12 @@ echo "=========================================="
 echo "  NOMAD System Running"
 echo "=========================================="
 echo "API:    http://$JETSON_IP:$API_PORT"
-echo "Video:  rtsp://$JETSON_IP:$RTSP_PORT/zed"
+echo "Video:  rtsp://$JETSON_IP:$RTSP_PORT/zed (2560x720 stereo)"
 echo "Logs:   $LOG_DIR/"
 echo ""
+echo "Stereo stream: 2560x720 side-by-side (Left + Right)"
+echo "Mission Planner crops to left camera (1280x720) in HUD"
 echo "MediaMTX supports multiple viewers simultaneously!"
-echo "Use in: Mission Planner, VLC, or any RTSP client"
 echo ""
 echo "Press Ctrl+C to stop all services"
 echo ""
