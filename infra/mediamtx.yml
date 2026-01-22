@@ -38,8 +38,8 @@ rtsp: yes
 rtspAddress: :8554
 protocols: [udp, tcp]  # UDP first for lower latency
 
-# RTSP authentication (disabled for local use)
-# rtspAuthMethods: []
+# Disable RTSP authentication for local/Tailscale access
+rtspAuthMethods: []
 
 # ============================================================
 # RTMP Server (disabled)
