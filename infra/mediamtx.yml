@@ -81,40 +81,10 @@ record: no
 
 paths:
   # Main live stream from ZED camera
-  # ffmpeg publishes to this endpoint
+  # GStreamer publishes to this endpoint
   zed:
     source: publisher
-    sourceOnDemand: no
-    publishUser: ""
-    publishPass: ""
-    publishIPs: []
-    readUser: ""
-    readPass: ""
-    readIPs: []
-    # Recording for evidence
-    record: no
-    recordPath: /mnt/nvme/recordings/%path/%Y-%m-%d_%H-%M-%S
-    recordFormat: fmp4
-    recordSegmentDuration: 1h
 
   # Alternative endpoint
   live:
-    source: publisher
-    sourceOnDemand: no
-    publishUser: ""
-    publishPass: ""
-    readUser: ""
-    readPass: ""
-
-  # Detection overlay stream (optional - for debug)
-  debug:
-    source: publisher
-    sourceOnDemand: no
-    publishUser: ""
-    publishPass: ""
-    readUser: ""
-    readPass: ""
-
-  # Catch-all for any other streams
-  all_others:
     source: publisher
