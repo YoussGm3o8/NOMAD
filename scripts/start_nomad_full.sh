@@ -2,7 +2,7 @@
 # ============================================================
 # NOMAD Full System Startup Script
 # ============================================================
-# Starts Edge Core API and ZED RTSP Video Server
+# Starts Edge Core API and ZED Video Stream via MediaMTX
 # 
 # Stream URL: rtsp://<JETSON_IP>:8554/zed
 # Multiple viewers supported (Mission Planner, VLC, phone, etc.)
@@ -20,7 +20,7 @@ NOMAD_DIR=/home/mad/NOMAD
 mkdir -p $LOG_DIR
 
 echo "=========================================="
-echo "  NOMAD System Startup (RTSP Mode)"
+echo "  NOMAD System Startup (MediaMTX RTSP)"
 echo "  AEAC 2026 - McGill Aerial Design"
 echo "=========================================="
 echo "Jetson IP:  $JETSON_IP"
@@ -29,22 +29,30 @@ echo "RTSP Port:  $RTSP_PORT"
 echo ""
 
 # Stop any existing services
-echo "[1/4] Stopping existing services..."
+echo "[1/5] Stopping existing services..."
 pkill -9 -f "edge_core.main" 2>/dev/null || true
-pkill -9 -f "edge_core.rtsp_server" 2>/dev/null || true
 pkill -9 -f "gst-launch" 2>/dev/null || true
 sleep 2
 
 # Check if camera is still busy
-echo "[2/4] Checking camera availability..."
+echo "[2/5] Checking camera availability..."
 if lsof /dev/video0 2>/dev/null | grep -v "^COMMAND"; then
     echo "    WARNING: Camera still in use"
     fuser -k /dev/video0 2>/dev/null || true
     sleep 2
 fi
 
+# Check MediaMTX is running
+echo "[3/5] Checking MediaMTX RTSP server..."
+if pgrep -f mediamtx > /dev/null; then
+    echo "    OK: MediaMTX running"
+else
+    echo "    FAIL: MediaMTX not running! Start with: sudo systemctl start mediamtx"
+    exit 1
+fi
+
 # Start Edge Core API
-echo "[3/4] Starting Edge Core API..."
+echo "[4/5] Starting Edge Core API..."
 cd $NOMAD_DIR
 export PATH=/home/mad/.local/bin:$PATH
 export NOMAD_DEBUG=true
@@ -61,19 +69,44 @@ else
     exit 1
 fi
 
-# Start ZED RTSP Video Server
-echo "[4/4] Starting ZED RTSP Server..."
-cd $NOMAD_DIR
-nohup python3 -m edge_core.rtsp_server --port $RTSP_PORT > $LOG_DIR/rtsp_server.log 2>&1 &
-RTSP_PID=$!
+# Start ZED Video Stream -> MediaMTX
+echo "[5/5] Starting ZED Video Stream..."
+# Push H.264 stream to MediaMTX via RTSP
+gst-launch-1.0 -q \
+  v4l2src device=/dev/video0 ! \
+  "video/x-raw,width=2560,height=720,framerate=30/1" ! \
+  videocrop left=0 right=1280 ! \
+  videoconvert ! \
+  x264enc tune=zerolatency bitrate=4000 speed-preset=ultrafast key-int-max=15 ! \
+  h264parse ! \
+  rtspclientsink location=rtsp://localhost:$RTSP_PORT/zed protocols=tcp > $LOG_DIR/video.log 2>&1 &
+VIDEO_PID=$!
+
 sleep 2
 
-if ps -p $RTSP_PID > /dev/null 2>&1; then
-    echo "    OK: RTSP server running (PID: $RTSP_PID)"
+if ps -p $VIDEO_PID > /dev/null 2>&1; then
+    echo "    OK: Video stream running (PID: $VIDEO_PID)"
 else
-    echo "    FAIL: RTSP server failed to start!"
-    cat $LOG_DIR/rtsp_server.log
-    exit 1
+    echo "    FAIL: Video stream failed to start!"
+    echo "    Trying alternative UDP method..."
+    cat $LOG_DIR/video.log
+    
+    # Fallback: Use ffmpeg if rtspclientsink fails
+    if command -v ffmpeg &> /dev/null; then
+        ffmpeg -f v4l2 -framerate 30 -video_size 2560x720 -i /dev/video0 \
+            -filter:v "crop=1280:720:0:0" \
+            -c:v libx264 -preset ultrafast -tune zerolatency -b:v 4000k \
+            -f rtsp rtsp://localhost:$RTSP_PORT/zed > $LOG_DIR/video.log 2>&1 &
+        VIDEO_PID=$!
+        sleep 2
+        
+        if ps -p $VIDEO_PID > /dev/null 2>&1; then
+            echo "    OK: Video stream (ffmpeg) running (PID: $VIDEO_PID)"
+        else
+            echo "    FAIL: ffmpeg also failed!"
+            cat $LOG_DIR/video.log
+        fi
+    fi
 fi
 
 echo ""
@@ -84,7 +117,7 @@ echo "API:    http://$JETSON_IP:$API_PORT"
 echo "Video:  rtsp://$JETSON_IP:$RTSP_PORT/zed"
 echo "Logs:   $LOG_DIR/"
 echo ""
-echo "RTSP supports multiple viewers simultaneously!"
+echo "MediaMTX supports multiple viewers simultaneously!"
 echo "Use in: Mission Planner, VLC, or any RTSP client"
 echo ""
 echo "Press Ctrl+C to stop all services"
@@ -95,7 +128,7 @@ cleanup() {
     echo ""
     echo "Shutting down NOMAD services..."
     kill $EDGE_PID 2>/dev/null || true
-    kill $RTSP_PID 2>/dev/null || true
+    kill $VIDEO_PID 2>/dev/null || true
     echo "Goodbye!"
 }
 trap cleanup EXIT INT TERM
