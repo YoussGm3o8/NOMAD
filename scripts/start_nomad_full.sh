@@ -70,15 +70,11 @@ else
 fi
 
 # Start ZED Video Stream -> MediaMTX
-echo "[5/5] Starting ZED Video Stream (2560x720 Stereo)..."
-# Force 2560x720 side-by-side stereo mode
-# This provides proper aspect ratio and full resolution
+echo "[5/5] Starting ZED Video Stream (Best Available Resolution)..."
+# Try resolutions in priority order: 2560x720 (stereo), 1344x376 (degraded), auto
 
-# Ultra-low latency H.264 pipeline for full stereo frame:
-# - Full stereo: 2560x720 @ 30fps (side-by-side L+R cameras)
-# - x264enc: zerolatency tune, ultrafast preset, no B-frames
-# - Higher bitrate (6000) for wider frame quality
-# - key-int-max=30: Frequent keyframes for fast recovery
+# Method 1: Try full stereo resolution 2560x720 @ 30fps
+echo "    Attempting 2560x720 @ 30fps..."
 gst-launch-1.0 -q \
   v4l2src device=/dev/video0 do-timestamp=true ! \
   "video/x-raw,width=2560,height=720,framerate=30/1,format=YUY2" ! \
@@ -91,22 +87,25 @@ gst-launch-1.0 -q \
   rtspclientsink location=rtsp://localhost:$RTSP_PORT/zed \
     latency=0 protocols=tcp > $LOG_DIR/video.log 2>&1 &
 VIDEO_PID=$!
-
 sleep 3
 
 if ps -p $VIDEO_PID > /dev/null 2>&1; then
-    echo "    OK: Video stream running (PID: $VIDEO_PID) - 2560x720 stereo"
+    echo "    OK: Video stream running at 2560x720 (PID: $VIDEO_PID)"
+    VIDEO_RESOLUTION="2560x720"
 else
-    echo "    FAIL: Primary method failed, trying without format specification..."
+    echo "    Failed: 2560x720 not supported"
     cat $LOG_DIR/video.log
     
-    # Method 2: Try without specifying format but keep resolution
+    # Method 2: Try degraded resolution 1344x376 @ 15fps and scale up
+    echo "    Attempting 1344x376 @ 15fps with upscaling..."
     gst-launch-1.0 -q \
       v4l2src device=/dev/video0 do-timestamp=true ! \
-      "video/x-raw,width=2560,height=720,framerate=30/1" ! \
+      "video/x-raw,width=1344,height=376,framerate=15/1,format=YUY2" ! \
+      videoscale ! \
+      "video/x-raw,width=2560,height=720" ! \
       videoconvert ! \
       "video/x-raw,format=I420" ! \
-      x264enc tune=zerolatency bitrate=6000 speed-preset=ultrafast \
+      x264enc tune=zerolatency bitrate=4000 speed-preset=ultrafast \
         sliced-threads=true key-int-max=30 bframes=0 ! \
       h264parse ! \
       rtspclientsink location=rtsp://localhost:$RTSP_PORT/zed \
@@ -115,10 +114,37 @@ else
     sleep 3
     
     if ps -p $VIDEO_PID > /dev/null 2>&1; then
-        echo "    OK: Video stream (method 2) running (PID: $VIDEO_PID)"
+        echo "    OK: Video stream running at 1344x376 upscaled (PID: $VIDEO_PID)"
+        VIDEO_RESOLUTION="1344x376 (upscaled to 2560x720)"
     else
-        echo "    FAIL: All methods failed! Check camera"
+        echo "    Failed: 1344x376 also failed"
         cat $LOG_DIR/video.log
+        
+        # Method 3: Auto-negotiate and scale to standard resolution
+        echo "    Attempting auto-negotiation with scaling..."
+        gst-launch-1.0 -q \
+          v4l2src device=/dev/video0 do-timestamp=true ! \
+          "video/x-raw,format=YUY2" ! \
+          videoscale ! \
+          "video/x-raw,width=2560,height=720" ! \
+          videoconvert ! \
+          "video/x-raw,format=I420" ! \
+          x264enc tune=zerolatency bitrate=4000 speed-preset=ultrafast \
+            sliced-threads=true key-int-max=30 bframes=0 ! \
+          h264parse ! \
+          rtspclientsink location=rtsp://localhost:$RTSP_PORT/zed \
+            latency=0 protocols=tcp > $LOG_DIR/video.log 2>&1 &
+        VIDEO_PID=$!
+        sleep 3
+        
+        if ps -p $VIDEO_PID > /dev/null 2>&1; then
+            echo "    OK: Video stream running with auto-resolution (PID: $VIDEO_PID)"
+            VIDEO_RESOLUTION="auto (scaled to 2560x720)"
+        else
+            echo "    FAIL: All methods failed! Check camera"
+            cat $LOG_DIR/video.log
+            VIDEO_RESOLUTION="Failed"
+        fi
     fi
 fi
 
