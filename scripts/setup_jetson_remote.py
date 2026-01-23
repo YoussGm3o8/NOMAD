@@ -9,11 +9,12 @@ import sys
 import os
 
 # Jetson Configuration
-JETSON_IP = "100.75.218.89"
-JETSON_USER = "mad"
-JETSON_PASS = "skibidi123"
+# NOTE: Password should be set via environment variable for security
+JETSON_IP = os.environ.get("JETSON_IP", "100.75.218.89")
+JETSON_USER = os.environ.get("JETSON_SSH_USER", "mad")
+JETSON_PASS = os.environ.get("JETSON_SSH_PASS", "")
 
-GCS_IP = "100.76.127.17"
+GCS_IP = os.environ.get("GCS_IP", "100.76.127.17")
 
 def run_command(ssh, cmd, show_output=True):
     """Execute command and return output"""
@@ -31,6 +32,13 @@ def main():
     print("=" * 50)
     print("NOMAD Jetson Remote Setup")
     print("=" * 50)
+    
+    # Validate password is set
+    if not JETSON_PASS:
+        print("ERROR: JETSON_SSH_PASS environment variable not set!")
+        print("Set it before running: export JETSON_SSH_PASS='your-password'")
+        sys.exit(1)
+    
     print(f"Connecting to {JETSON_USER}@{JETSON_IP}...")
     
     # Connect
@@ -52,14 +60,14 @@ def main():
     
     # Check if NOMAD directory exists
     print("\n--- Checking NOMAD Setup ---")
-    out, _ = run_command(ssh, "ls -la /home/ubuntu/NOMAD 2>/dev/null || echo 'NOT_FOUND'")
+    out, _ = run_command(ssh, "ls -la /home/mad/NOMAD 2>/dev/null || echo 'NOT_FOUND'")
     
     if "NOT_FOUND" in out:
         print("NOMAD not found. Cloning repository...")
-        run_command(ssh, "git clone https://github.com/YoussGm3o8/NOMAD.git /home/ubuntu/NOMAD")
+        run_command(ssh, "git clone https://github.com/YoussGm3o8/NOMAD.git /home/mad/NOMAD")
     else:
         print("NOMAD directory exists. Updating...")
-        run_command(ssh, "cd /home/ubuntu/NOMAD && git pull")
+        run_command(ssh, "cd /home/mad/NOMAD && git pull")
     
     # Check Python
     print("\n--- Python Environment ---")
@@ -133,12 +141,12 @@ NOMAD_ENABLE_VISION=true
 NOMAD_ENABLE_ISAAC_ROS=false
 NOMAD_DEBUG=false
 '''
-    run_command(ssh, f"echo '{env_content}' > /home/ubuntu/NOMAD/.env")
+    run_command(ssh, f"echo '{env_content}' > /home/mad/NOMAD/.env")
     print("Environment file created")
     
     # Test Edge Core
     print("\n--- Testing Edge Core ---")
-    out, _ = run_command(ssh, "cd /home/ubuntu/NOMAD && python3 -c 'from edge_core import main; print(\"Edge Core import OK\")' 2>&1")
+    out, _ = run_command(ssh, "cd /home/mad/NOMAD && python3 -c 'from edge_core import main; print(\"Edge Core import OK\")' 2>&1")
     
     # Summary
     print("\n" + "=" * 50)
@@ -151,7 +159,7 @@ Configuration:
   
 To start Edge Core manually:
   ssh {JETSON_USER}@{JETSON_IP}
-  cd /home/ubuntu/NOMAD
+  cd /home/mad/NOMAD
   python3 -m edge_core.main
 
 To test from Windows:

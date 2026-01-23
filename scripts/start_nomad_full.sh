@@ -59,7 +59,7 @@ else
     echo "    Starting MAVLink Router..."
     # Check if binary exists
     if command -v mavlink-routerd &> /dev/null; then
-        nohup mavlink-routerd -c $NOMAD_DIR/transport/mavlink_router/mavlink-router.conf > $LOG_DIR/mavlink.log 2>&1 &
+        nohup mavlink-routerd -c $NOMAD_DIR/transport/mavlink_router/main.conf > $LOG_DIR/mavlink.log 2>&1 &
         sleep 2
     else
         echo "    WARNING: mavlink-routerd not found! Systems may not connect to Flight Controller."

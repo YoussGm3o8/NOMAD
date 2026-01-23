@@ -1,6 +1,6 @@
 [Unit]
 Description=NOMAD Tailscale Connection Watchdog
-Documentation=https://github.com/McGill-Aerial-Design/NOMAD
+Documentation=https://github.com/YoussGm3o8/NOMAD
 After=tailscaled.service network-online.target
 Wants=network-online.target
 Requires=tailscaled.service

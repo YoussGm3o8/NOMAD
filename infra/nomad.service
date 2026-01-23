@@ -21,14 +21,14 @@ Requires=mavlink-router.service
 
 [Service]
 Type=simple
-User=nomad
-Group=nomad
-WorkingDirectory=/home/nomad/NOMAD
+User=mad
+Group=mad
+WorkingDirectory=/home/mad/NOMAD
 
 # Environment variables
 Environment="NOMAD_SIM_MODE=false"
 Environment="PYTHONUNBUFFERED=1"
-Environment="PYTHONPATH=/home/nomad/NOMAD"
+Environment="PYTHONPATH=/home/mad/NOMAD"
 
 # Main command - run orchestrator with uvicorn
 ExecStart=/usr/bin/python3 -m uvicorn edge_core.main:app --host 0.0.0.0 --port 8000 --log-level info

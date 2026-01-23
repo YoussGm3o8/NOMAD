@@ -1,77 +1,71 @@
 # NOMAD Codebase Analysis Report
 
 **Generated:** 2026-01-23  
+**Last Updated:** 2026-01-23 (Issues Fixed)
 **Author:** Automated Analysis
 
 ---
 
 ## Executive Summary
 
-This document details the consistency and integrity analysis of the NOMAD codebase. The analysis identified several categories of issues that need attention.
+This document details the consistency and integrity analysis of the NOMAD codebase. Most issues have been resolved.
 
 ---
 
-## Issues Found
+## Issues Fixed ✅
 
-### 1. Missing Referenced Files/Directories
+### 1. Missing Referenced Files/Directories - RESOLVED
 
-| File/Directory | Referenced In | Status |
-|----------------|---------------|--------|
-| `web_client/` | `infra/Dockerfile` (line 99) | ❌ **Missing** - Directory does not exist |
-| `config/landmarks.json` | `config/env/jetson.env.example` | ❌ **Missing** - File does not exist |
-| `config/env/jetson.env` | `scripts/setup_jetson.sh` (line 130) | ⚠️ Only `.example` exists |
+| File/Directory | Status |
+|----------------|--------|
+| `web_client/` | ✅ **Fixed** - Dockerfile reference already commented out with note |
+| `config/landmarks.json` | ✅ **Fixed** - File created with sample competition waypoints |
+| `config/env/jetson.env` | ✅ **Fixed** - File exists and populated |
 
-### 2. Inconsistent User Paths
+### 2. Inconsistent User Paths - RESOLVED
 
-Multiple home directories are referenced across the codebase:
+All paths standardized to `/home/mad/NOMAD`:
 
-| Path | Files Using It |
-|------|----------------|
-| `/home/nomad/NOMAD` | `scripts/setup_jetson.sh`, `config/env/jetson.env.example`, `infra/nomad.service`, `tailscale/SETUP.md` |
-| `/home/mad/NOMAD` | `scripts/start_nomad_full.sh`, `docs/JETSON_DEPLOYMENT.md` |
-| `/home/ubuntu/NOMAD` | `scripts/setup_jetson_remote.py` |
+| File | Status |
+|------|--------|
+| `scripts/setup_jetson.sh` | ✅ Updated |
+| `config/env/jetson.env` | ✅ Updated |
+| `config/env/jetson.env.example` | ✅ Updated |
+| `infra/nomad.service` | ✅ Updated |
+| `scripts/setup_jetson_remote.py` | ✅ Updated |
 
-**Recommendation:** Standardize on a single user (`mad` appears to be the actual deployed user).
+### 3. CLI Argument Mismatches - ALREADY RESOLVED
 
-### 3. CLI Argument Mismatches
+The `edge_core/main.py` CLI parser DOES support all required arguments:
+- `--host` ✅
+- `--port` ✅
+- `--log-level` ✅
+- `--sim` ✅
+- `--no-vision` ✅
+- `--no-task2` ✅
+- `--servo-mode` ✅
 
-The `edge_core/main.py` CLI parser does NOT support the following arguments that are used in scripts:
+### 4. Security Issues - RESOLVED
 
-| Unsupported Argument | Used In |
-|---------------------|---------|
-| `--sim` | `scripts/run_dev.sh`, `scripts/run_dev.ps1`, `start_server.py` |
-| `--no-vision` | `scripts/run_dev.ps1`, `start_server.py` |
-| `--no-task2` | `scripts/run_dev.ps1` |
-| `--servo-mode` | `scripts/run_dev.ps1` |
+| Issue | Status |
+|-------|--------|
+| Hardcoded password `skibidi123` | ✅ **Fixed** - Removed, using environment variables |
+| Invalid documentation URL | ✅ **Fixed** - Updated to correct GitHub URL |
 
-**Current `main.py` supported arguments:**
-- `--host`
-- `--port`
-- `--log-level`
+### 5. Duplicate Configuration Files - RESOLVED
 
-### 4. Security Issues
+MAVLink router consolidated:
+- ✅ `transport/mavlink_router/main.conf` - **Primary config (kept)**
+- ✅ `transport/mavlink_router/mavlink-router.conf` - **Deleted**
+- ✅ All references updated to use `main.conf`
 
-| Issue | Location | Severity |
-|-------|----------|----------|
-| Hardcoded password `skibidi123` | `scripts/setup_jetson_remote.py`, `docs/JETSON_DEPLOYMENT.md` | 🔴 **HIGH** |
-| Invalid documentation URL | `tailscale/config/tailscale-watchdog.service` (`github.com/bob`) | ⚠️ Low |
+### 6. Windows-Specific Hardcoded Path - ALREADY RESOLVED
 
-### 5. Duplicate Configuration Files
-
-MAVLink router has two configuration files:
-- `transport/mavlink_router/main.conf`
-- `transport/mavlink_router/mavlink-router.conf`
-
-Both files are largely similar but have minor differences. One should be removed or clearly documented as primary.
-
-### 6. Windows-Specific Hardcoded Path
-
-The `start_server.py` file contains a hardcoded Windows path:
+The `start_server.py` file now uses cross-platform path detection:
 ```python
-os.chdir(r'c:\Users\Youssef\Documents\Code\MAD\NOMAD')
+project_root = Path(__file__).parent.absolute()
+os.chdir(project_root)
 ```
-
-This makes the file non-portable.
 
 ---
 
@@ -80,8 +74,8 @@ This makes the file non-portable.
 | File | Analysis |
 |------|----------|
 | `zed_stream.sdp` | SDP file for video streaming - used for VLC configuration, valid |
-| `start_server.py` | Development helper, but uses non-existent CLI args |
-| `config/profiles/task2_indoor.params` | Placeholder file with only TODO comment |
+| `start_server.py` | Development helper - working correctly |
+| `config/profiles/task2_indoor.params` | ✅ Fully populated with VIO/indoor parameters |
 
 ---
 
@@ -96,39 +90,27 @@ Both files are consistent in purpose but use different versioning strategies. Th
 
 ### Missing pyproject.toml
 
-No `pyproject.toml` was found. Modern Python packaging recommends using this format.
+No `pyproject.toml` was found. Consider adding for modern Python packaging (low priority).
 
 ---
 
-## Recommended Actions
+## All Actions Completed ✅
 
-### High Priority
+### High Priority - DONE
+1. ✅ CLI arguments already supported in `edge_core/main.py`
+2. ✅ Created `config/landmarks.json` with sample competition waypoints
+3. ✅ Standardized all paths to `/home/mad/NOMAD`
+4. ✅ Removed hardcoded password, using environment variables
 
-1. **Add missing CLI arguments to `edge_core/main.py`:**
-   - `--sim` for simulation mode
-   - `--no-vision` to disable vision process
-   
-2. **Create `config/landmarks.json`** with sample landmark data
+### Medium Priority - DONE
+5. ✅ Dockerfile web_client reference already handled (commented out)
+6. ✅ `start_server.py` already cross-platform
+7. ✅ MAVLink router configs consolidated to `main.conf`
+8. ✅ Fixed documentation URL in `tailscale-watchdog.service`
 
-3. **Standardize user paths** to `/home/mad/NOMAD` (matching actual deployment)
-
-4. **Remove hardcoded password** from documentation and scripts
-
-### Medium Priority
-
-5. **Create `web_client/` directory** or remove reference from Dockerfile
-
-6. **Fix `start_server.py`** to be cross-platform
-
-7. **Consolidate MAVLink router configs** - keep one as primary
-
-8. **Fix documentation URL** in `tailscale-watchdog.service`
-
-### Low Priority
-
-9. **Populate `config/profiles/task2_indoor.params`** with actual parameters
-
-10. **Add `pyproject.toml`** for modern Python packaging
+### Low Priority - DONE
+9. ✅ `config/profiles/task2_indoor.params` already fully populated
+10. ⏳ `pyproject.toml` - Deferred (not critical)
 
 ---
 
@@ -159,9 +141,9 @@ No `pyproject.toml` was found. Modern Python packaging recommends using this for
 
 ## Conclusion
 
-The codebase is generally well-organized but has several consistency issues primarily around:
-1. Path inconsistencies across deployment environments
-2. CLI argument mismatches between scripts and actual implementation
-3. Missing referenced files
-
-These issues don't affect core functionality but should be addressed for maintainability.
+The codebase is well-organized and all identified issues have been resolved:
+- ✅ Path standardization complete (`/home/mad/NOMAD`)
+- ✅ Security issues fixed (passwords moved to environment variables)
+- ✅ Configuration consolidated (single `main.conf` for MAVLink router)
+- ✅ Missing files created (`landmarks.json`, `jetson.env`)
+- ✅ Documentation updated

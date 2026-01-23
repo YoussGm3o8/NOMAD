@@ -348,7 +348,8 @@ dmesg | tail -50
 ### SSH Access
 ```bash
 ssh mad@100.75.218.89
-# Password: skibidi123
+# Password: Set via JETSON_SSH_PASS environment variable
+# DO NOT commit passwords to version control
 ```
 
 ### Start NOMAD
