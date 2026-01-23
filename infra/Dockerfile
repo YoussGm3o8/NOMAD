@@ -96,7 +96,8 @@ WORKDIR /app
 # Copy application code
 COPY --chown=nomad:nomad edge_core/ /app/edge_core/
 COPY --chown=nomad:nomad config/ /app/config/
-COPY --chown=nomad:nomad web_client/ /app/web_client/
+# Note: web_client is optional - uncomment when frontend is implemented
+# COPY --chown=nomad:nomad web_client/ /app/web_client/
 
 # Create __init__.py for package if not exists
 RUN touch /app/__init__.py
