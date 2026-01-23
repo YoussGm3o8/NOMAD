@@ -24,6 +24,12 @@ EKF3_SRC2_VELXY,6      # External Navigation
 EKF3_SRC2_POSZ,6       # External Navigation
 EKF3_SRC2_YAW,6        # External Navigation
 
+# Tertiary Source: Optical Flow (additional backup)
+EKF3_SRC3_POSXY,0      # None (optical flow doesn't provide position)
+EKF3_SRC3_VELXY,5      # Optical Flow
+EKF3_SRC3_POSZ,1       # Baro
+EKF3_SRC3_YAW,1        # Compass (if available)
+
 # ==================== GPS Configuration ====================
 GPS_TYPE,0             # Disable GPS for indoor flight
 
