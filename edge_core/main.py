@@ -247,7 +247,8 @@ def main() -> None:
         os.environ["NOMAD_ENABLE_VISION"] = "false"
     if args.no_task2:
         os.environ["TASK2_ENABLED"] = "false"
-    os.environ["SERVO_MODE"] = args.servo_mode
+    if args.servo_mode != "gimbal":
+        os.environ["SERVO_MODE"] = args.servo_mode
     
     # Run the server
     run(
