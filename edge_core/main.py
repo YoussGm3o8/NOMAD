@@ -214,7 +214,40 @@ def main() -> None:
         help="Logging level",
     )
     
+    # Simulation/Development arguments
+    parser.add_argument(
+        "--sim",
+        action="store_true",
+        help="Enable simulation mode (mock hardware)",
+    )
+    parser.add_argument(
+        "--no-vision",
+        action="store_true",
+        help="Disable vision process",
+    )
+    parser.add_argument(
+        "--no-task2",
+        action="store_true",
+        help="Disable Task 2 features",
+    )
+    parser.add_argument(
+        "--servo-mode",
+        type=str,
+        default="gimbal",
+        choices=["gimbal", "direct", "disabled"],
+        help="Servo control mode",
+    )
+    
     args = parser.parse_args()
+    
+    # Set environment variables based on CLI args
+    if args.sim:
+        os.environ["NOMAD_SIM_MODE"] = "true"
+    if args.no_vision:
+        os.environ["NOMAD_ENABLE_VISION"] = "false"
+    if args.no_task2:
+        os.environ["TASK2_ENABLED"] = "false"
+    os.environ["SERVO_MODE"] = args.servo_mode
     
     # Run the server
     run(

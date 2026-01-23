@@ -1,2 +1,76 @@
-# ArduPilot params for Task 2 (Wingless/Indoor)
-# TODO: populate with approved parameter file.
+# ============================================================
+# NOMAD Task 2: Indoor Fire Extinguishing
+# ============================================================
+# Competition: AEAC 2026
+# Mission: VIO-based indoor navigation and fire extinguishing
+# Platform: Multirotor drone with ZED 2i camera
+#
+# SAFETY: Always verify these parameters match your aircraft
+# before flight. Incorrect settings can cause loss of control.
+# ============================================================
+
+# ==================== Position Source ====================
+# Task 2 uses Visual Inertial Odometry (VIO) for navigation
+# GPS is disabled indoors - rely on ZED camera tracking
+
+EKF3_SRC1_POSXY,6      # External Navigation (VIO)
+EKF3_SRC1_VELXY,6      # External Navigation (VIO)
+EKF3_SRC1_POSZ,6       # External Navigation (VIO)
+EKF3_SRC1_YAW,6        # External Navigation (VIO)
+
+# Backup also External Nav (no GPS indoors)
+EKF3_SRC2_POSXY,6      # External Navigation
+EKF3_SRC2_VELXY,6      # External Navigation
+EKF3_SRC2_POSZ,6       # External Navigation
+EKF3_SRC2_YAW,6        # External Navigation
+
+# ==================== GPS Configuration ====================
+GPS_TYPE,0             # Disable GPS for indoor flight
+
+# ==================== External Navigation ====================
+VISO_TYPE,2            # VIO vision position estimate
+
+# EKF tuning for VIO
+EK3_SRC_OPTIONS,1      # External Nav enabled
+EK3_POSNE_M_NSE,0.5    # Position noise
+EK3_VELD_M_NSE,0.7     # Vertical velocity noise
+EK3_VELNE_M_NSE,0.5    # Horizontal velocity noise
+
+# ==================== Compass ====================
+# Disabled for indoor - magnetic interference
+COMPASS_USE,0          # Disable primary compass
+COMPASS_USE2,0         # Disable secondary compass
+
+# ==================== Altitude ====================
+# Use VIO for altitude (rangefinder optional backup)
+RNGFND1_TYPE,25        # Rangefinder type (if equipped)
+RNGFND1_MAX_CM,1000    # 10m max range
+
+# ==================== Flight Limits ====================
+# Conservative limits for indoor flight
+FENCE_ENABLE,1         # Enable geofence
+FENCE_ALT_MAX,10       # Max altitude 10m AGL
+FENCE_ACTION,3         # Brake on fence breach
+
+# ==================== Failsafe ====================
+FS_EKF_ACTION,1        # Land on EKF failure
+FS_GCS_ENABLE,0        # GCS failsafe disabled (indoor)
+FS_THR_ENABLE,0        # Throttle failsafe disabled
+
+# ==================== Loiter/Position Hold ====================
+LOIT_SPEED,250         # 2.5 m/s max loiter speed (slow for indoor)
+LOIT_ACC_MAX,250       # 2.5 m/s^2 acceleration
+WPNAV_SPEED,300        # 3 m/s waypoint speed
+
+# ==================== Camera/Gimbal ====================
+# ZED2i connected to Jetson via USB, not ArduPilot
+MNT_TYPE,0             # No gimbal via ArduPilot
+
+# ==================== Logging ====================
+LOG_BITMASK,176126     # Comprehensive logging
+LOG_DISARMED,0         # Don't log when disarmed
+
+# ==================== Notes ====================
+# VIO position streaming via edge_core/vio_pipeline.py
+# VISION_POSITION_ESTIMATE messages at 30Hz
+# ZED camera must be initialized before arming
