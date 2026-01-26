@@ -61,6 +61,35 @@ check_prerequisites() {
         exit 1
     fi
     
+    # Check if ZED SDK is in the Docker image
+    if ! docker run --rm "$IMAGE_NAME" test -f /usr/local/zed/lib/libsl_zed.so 2>/dev/null; then
+        log_warn "ZED SDK not found in Docker image!"
+        log_warn ""
+        log_warn "To add ZED SDK to your Isaac ROS Docker image:"
+        log_warn "1. Create ~/.isaac_ros_common-config with:"
+        log_warn '   CONFIG_IMAGE_KEY="ros2_humble.user"'
+        log_warn '   CONFIG_DOCKER_SEARCH_DIRS=("\$HOME/ros2/isaac_ros_ws/src/zed-ros2-wrapper/docker")'
+        log_warn ""
+        log_warn "2. Create a Dockerfile at ~/ros2/isaac_ros_ws/src/zed-ros2-wrapper/docker/Dockerfile.user:"
+        log_warn '   ARG BASE_IMAGE'
+        log_warn '   FROM \${BASE_IMAGE}'
+        log_warn '   # Install ZED SDK'
+        log_warn '   RUN apt-get update && apt-get install -y --no-install-recommends curl && \\'
+        log_warn '       curl -L -o /tmp/zed_sdk.run https://download.stereolabs.com/zedsdk/4.2/l4t36.4/jetsons && \\'
+        log_warn '       chmod +x /tmp/zed_sdk.run && \\'
+        log_warn '       /tmp/zed_sdk.run -- silent skip_od_module skip_python skip_tools && \\'
+        log_warn '       rm /tmp/zed_sdk.run && \\'
+        log_warn '       ldconfig'
+        log_warn ""
+        log_warn "3. Rebuild: cd ~/ros2/isaac_ros_ws && ./src/isaac_ros_common/scripts/run_dev.sh"
+        log_warn ""
+        log_warn "Continuing without ZED SDK (VIO will not work)..."
+        ZED_SDK_AVAILABLE=false
+    else
+        ZED_SDK_AVAILABLE=true
+        log_info "ZED SDK found in Docker image"
+    fi
+    
     # Check ZED camera
     if [ ! -e /dev/video0 ]; then
         log_warn "ZED camera not detected at /dev/video0"
