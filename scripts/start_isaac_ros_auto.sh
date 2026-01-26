@@ -95,10 +95,12 @@ start_container() {
         -v /tmp/argus_socket:/tmp/argus_socket \
         -v /etc/localtime:/etc/localtime:ro \
         -v /usr/local/zed:/usr/local/zed:ro \
+        -v /usr/local/zed/lib:/usr/local/zed/lib:ro \
         -e DISPLAY=$DISPLAY \
         -e NVIDIA_VISIBLE_DEVICES=all \
         -e NVIDIA_DRIVER_CAPABILITIES=all \
         -e ROS_DOMAIN_ID=0 \
+        -e LD_LIBRARY_PATH=/usr/local/zed/lib:/opt/ros/humble/lib \
         -w /workspaces/isaac_ros-dev \
         "$IMAGE_NAME" \
         sleep infinity
@@ -173,6 +175,7 @@ launch_zed_nvblox() {
 source /opt/ros/humble/setup.bash
 source /workspaces/isaac_ros-dev/install/setup.bash
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export LD_LIBRARY_PATH=/usr/local/zed/lib:\$LD_LIBRARY_PATH
 ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2
 LAUNCH_SCRIPT
             chmod +x /tmp/launch_zed_only.sh
