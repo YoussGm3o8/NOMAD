@@ -21,10 +21,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libusb-1.0-0-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install ZED SDK (silent mode, skip optional modules)
+# Download and install ZED SDK (silent mode with development files)
+# We skip the Python API and object detection module to save space
+# but keep the tools and cmake files for development
 RUN curl -L -o /tmp/zed_sdk.run ${ZED_SDK_URL} && \
     chmod +x /tmp/zed_sdk.run && \
-    /tmp/zed_sdk.run -- silent skip_od_module skip_python skip_tools && \
+    /tmp/zed_sdk.run -- silent skip_od_module skip_python && \
     rm /tmp/zed_sdk.run && \
     ldconfig
 

@@ -112,6 +112,8 @@ start_container() {
     docker rm "$CONTAINER_NAME" 2>/dev/null || true
     
     # Start container with all necessary mounts and devices
+    # Note: We do NOT mount /usr/local/zed from host - the ZED SDK
+    # should be installed INSIDE the container image
     docker run -d \
         --name "$CONTAINER_NAME" \
         --runtime nvidia \
@@ -123,8 +125,6 @@ start_container() {
         -v /tmp/.X11-unix:/tmp/.X11-unix \
         -v /tmp/argus_socket:/tmp/argus_socket \
         -v /etc/localtime:/etc/localtime:ro \
-        -v /usr/local/zed:/usr/local/zed:ro \
-        -v /usr/local/zed/lib:/usr/local/zed/lib:ro \
         -e DISPLAY=$DISPLAY \
         -e NVIDIA_VISIBLE_DEVICES=all \
         -e NVIDIA_DRIVER_CAPABILITIES=all \
