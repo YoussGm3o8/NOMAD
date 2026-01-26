@@ -507,7 +507,7 @@ namespace NOMAD.MissionPlanner
                         foreach (var item in items)
                         {
                             var name = item["name"]?.ToString();
-                            var ready = item["ready"]?.Value<bool>() ?? false;
+                            var ready = item["ready"]?.ToObject<bool>() ?? false;
                             var tracks = item["tracks"] as Newtonsoft.Json.Linq.JArray;
                             
                             if (!string.IsNullOrEmpty(name))
@@ -1041,12 +1041,7 @@ a=recvonly";
                 _lastFrame = (MPBitmap)frame.Clone();
                 oldLastFrame?.Dispose();
                 
-                // Update status periodically
-                if (_frameCount % 30 == 1)
-                {
-                    var viewName = _cameraView == "both" ? "Wide" : (_cameraView == "right" ? "Right" : "Left");
-                    UpdateStatus($"Playing [{viewName}] ({cropRegion.Width}x{cropRegion.Height})", Color.LimeGreen);
-                }
+                // Status update handled periodically above
             }
             catch (Exception ex)
             {
