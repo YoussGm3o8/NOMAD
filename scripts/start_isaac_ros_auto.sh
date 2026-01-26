@@ -297,29 +297,24 @@ launch_video_bridge() {
     # Copy the video bridge script into container
     docker cp "$SCRIPT_DIR/../edge_core/ros_video_bridge.py" "$CONTAINER_NAME:/tmp/ros_video_bridge.py"
     
-    # Install GStreamer and opencv for video processing
+    # Install opencv for video processing (numpy should be correct version)
     docker exec "$CONTAINER_NAME" bash -c "
-        apt-get update -qq
-        apt-get install -y --no-install-recommends gstreamer1.0-tools gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly 2>/dev/null
-        pip3 install 'opencv-python-headless==4.8.1.78' 'numpy==1.26.4' 2>/dev/null || true
+        pip3 install 'opencv-python-headless==4.8.1.78' 'numpy==1.26.4' --quiet 2>/dev/null || true
     " 2>&1 | tail -3
     
     # Create a launch script for the video bridge
-    # Note: With --network host, MediaMTX is accessible on localhost
-    # IMPORTANT: Fix numpy version before importing cv_bridge to avoid ABI mismatch
+    # The video bridge runs inside container, outputs raw frames via TCP port 9999
+    # FFmpeg runs on HOST to encode with libx264 and stream to MediaMTX
     docker exec "$CONTAINER_NAME" bash -c "
         cat > /tmp/launch_video_bridge.sh << 'VIDEO_SCRIPT'
 #!/bin/bash
 source /opt/ros/humble/setup.bash
 source /workspaces/isaac_ros-dev/install/setup.bash
 
-# Fix numpy version - cv_bridge was compiled with numpy 1.x
-pip3 install 'numpy==1.26.4' --quiet 2>/dev/null
-
 # Wait for ZED images to be publishing
 sleep 8
-# Start the video bridge
-# With --network host, MediaMTX is accessible on localhost
+
+# Start the video bridge - outputs raw frames via TCP port 9999
 python3 /tmp/ros_video_bridge.py \\
     --topic /zed/zed_node/rgb/image_rect_color \\
     --stream zed \\
@@ -332,12 +327,26 @@ VIDEO_SCRIPT
         chmod +x /tmp/launch_video_bridge.sh
     "
     
-    # Launch video bridge in background
+    # Launch video bridge in container background
     docker exec -d "$CONTAINER_NAME" bash -c "
         nohup /tmp/launch_video_bridge.sh > /tmp/video_bridge.log 2>&1 &
         echo \$! > /tmp/video_bridge.pid
     "
     
+    # Give the video bridge time to start TCP server
+    sleep 3
+    
+    # Start FFmpeg encoder on HOST to receive frames and stream to MediaMTX
+    # This runs with --network host so container port 9999 is accessible
+    log_info "Starting FFmpeg encoder on host..."
+    nohup ffmpeg -f rawvideo -pix_fmt bgr24 -s 1280x720 -r 30 \
+        -i tcp://localhost:9999 \
+        -c:v libx264 -preset ultrafast -tune zerolatency -b:v 4M -g 30 \
+        -f rtsp -rtsp_transport tcp rtsp://localhost:8554/zed \
+        > /tmp/ffmpeg_encoder.log 2>&1 &
+    echo $! > /tmp/ffmpeg_encoder.pid
+    
+    log_info "Video bridge launched - TCP server in container, FFmpeg encoder on host"
     log_info "Video bridge launched (logs at /tmp/video_bridge.log inside container)"
 }
 

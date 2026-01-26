@@ -80,52 +80,43 @@ class ROSVideoPublisher(Node):
         logger.info(f"Subscribed to {topic}, publishing to {rtsp_url}")
 
     def _start_ffmpeg(self):
-        """Start GStreamer pipeline for RTP streaming."""
-        # GStreamer pipeline outputs H264 RTP to UDP
-        # MediaMTX or another process can read this RTP stream
-        cmd = [
-            'gst-launch-1.0', '-q',
-            'fdsrc', 'fd=0',
-            '!', f'video/x-raw,format=BGR,width={self.width},height={self.height},framerate={self.fps}/1',
-            '!', 'videoconvert',
-            '!', 'video/x-raw,format=I420',
-            '!', 'x264enc', 'tune=zerolatency', 'bitrate=4000', 'speed-preset=ultrafast', 'key-int-max=30',
-            '!', 'rtph264pay', 'config-interval=1', 'pt=96',
-            '!', 'udpsink', 'host=127.0.0.1', 'port=8000', 'sync=false'
-        ]
+        """Start TCP server to send raw frames to host encoder."""
+        # We'll send raw BGR frames via TCP to the host
+        # The host runs FFmpeg with libx264 to encode and stream
+        # TCP server binds to 0.0.0.0:9999 for external access
+        import socket
         
-        logger.info(f"Starting GStreamer: {' '.join(cmd)}")
+        self.tcp_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.tcp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.tcp_server.bind(('0.0.0.0', 9999))
+        self.tcp_server.listen(1)
+        self.tcp_server.setblocking(False)
+        self.tcp_client = None
         
-        try:
-            self.ffmpeg_process = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE
-            )
-            logger.info("GStreamer started successfully - streaming to UDP port 8000")
-        except Exception as e:
-            logger.error(f"Failed to start GStreamer: {e}")
-            raise
+        logger.info("TCP server started on port 9999 - waiting for encoder connection")
+        logger.info("Run on host: ffmpeg -f rawvideo -pix_fmt bgr24 -s 1280x720 -r 30 -i tcp://localhost:9999 -c:v libx264 -preset ultrafast -tune zerolatency -f rtsp rtsp://localhost:8554/zed")
+        
+        # Set ffmpeg_process to a dummy for compatibility
+        self.ffmpeg_process = type('obj', (object,), {'stdin': None, 'poll': lambda: None, 'stderr': None})()
     
     def _get_encoder_command(self) -> list:
-        """Get the best available encoder command."""
-        # Not used with GStreamer approach
+        """Not used with TCP approach."""
         return []
 
     def _image_callback(self, msg: Image):
-        """Process incoming ROS image and send to FFmpeg."""
-        if self.ffmpeg_process is None or self.ffmpeg_process.stdin is None:
-            return
-        
-        # Check if FFmpeg is still running
-        if self.ffmpeg_process.poll() is not None:
-            # FFmpeg has exited, log stderr and return
-            if self.ffmpeg_process.stderr:
-                stderr_output = self.ffmpeg_process.stderr.read().decode('utf-8', errors='ignore')
-                logger.error(f"FFmpeg exited with code {self.ffmpeg_process.returncode}")
-                logger.error(f"FFmpeg stderr: {stderr_output[-2000:]}")  # Last 2000 chars
-            return
+        """Process incoming ROS image and send via TCP."""
+        # Try to accept new client connection
+        if self.tcp_client is None:
+            try:
+                self.tcp_client, addr = self.tcp_server.accept()
+                self.tcp_client.setblocking(True)
+                logger.info(f"Encoder connected from {addr}")
+            except BlockingIOError:
+                # No client connected yet
+                return
+            except Exception as e:
+                logger.debug(f"No encoder connected yet: {e}")
+                return
         
         try:
             # Convert ROS image to numpy array directly (avoid cv_bridge ABI issues)
@@ -157,11 +148,16 @@ class ROSVideoPublisher(Node):
             if cv_image.shape[1] != self.width or cv_image.shape[0] != self.height:
                 cv_image = cv2.resize(cv_image, (self.width, self.height))
             
-            # Write to FFmpeg stdin
+            # Send via TCP
             with self.lock:
-                self.ffmpeg_process.stdin.write(cv_image.tobytes())
-                self.frame_count += 1
-                self.last_frame_time = time.time()
+                try:
+                    self.tcp_client.sendall(cv_image.tobytes())
+                    self.frame_count += 1
+                    self.last_frame_time = time.time()
+                except (BrokenPipeError, ConnectionResetError):
+                    logger.warning("Encoder disconnected, waiting for reconnection...")
+                    self.tcp_client.close()
+                    self.tcp_client = None
                 
         except Exception as e:
             logger.error(f"Error processing image: {e}")
@@ -178,11 +174,17 @@ class ROSVideoPublisher(Node):
         """Cleanup resources."""
         logger.info("Shutting down ROS Video Bridge...")
         
-        if self.ffmpeg_process:
-            with self.lock:
-                if self.ffmpeg_process.stdin:
-                    self.ffmpeg_process.stdin.close()
-                self.ffmpeg_process.terminate()
+        with self.lock:
+            if hasattr(self, 'tcp_client') and self.tcp_client:
+                try:
+                    self.tcp_client.close()
+                except:
+                    pass
+            if hasattr(self, 'tcp_server') and self.tcp_server:
+                try:
+                    self.tcp_server.close()
+                except:
+                    pass
                 try:
                     self.ffmpeg_process.wait(timeout=5)
                 except subprocess.TimeoutExpired:

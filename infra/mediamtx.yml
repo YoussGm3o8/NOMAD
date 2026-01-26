@@ -79,24 +79,11 @@ record: no
 # Paths (stream endpoints) - ZED2i Multi-Camera Views
 # ============================================================
 
-# Default path settings for all paths
-pathDefaults:
-  # SDP for RTP source - describes H264 RTP stream
-  rtpSDP: |
-    v=0
-    o=- 0 0 IN IP4 127.0.0.1
-    s=ZED Camera Stream
-    c=IN IP4 127.0.0.1
-    t=0 0
-    m=video 8000 RTP/AVP 96
-    a=rtpmap:96 H264/90000
-    a=fmtp:96 packetization-mode=1
-
 paths:
-  # ZED2i stream from RTP/UDP
-  # GStreamer sends H264 RTP packets to UDP port 8000
+  # ZED2i stream - publisher endpoint
+  # Accepts RTSP ANNOUNCE from FFmpeg/GStreamer
   zed:
-    source: udp+rtp://127.0.0.1:8000
+    source: publisher
 
   # Alternative endpoint for direct RTSP publish
   live:
