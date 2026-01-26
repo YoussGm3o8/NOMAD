@@ -531,6 +531,12 @@ namespace NOMAD.MissionPlanner
                     }
                 }
             }
+            catch (System.Net.Http.HttpRequestException ex) when (ex.Message.Contains("401") || ex.Message.Contains("Unauthorized"))
+            {
+                // Authentication required - use default stream list
+                System.Diagnostics.Debug.WriteLine("NOMAD Video: API requires authentication - using defaults");
+                UpdateStatus("Using default streams (API auth required)", Color.Yellow);
+            }
             catch (Exception ex)
             {
                 var errorMsg = ex.Message;
