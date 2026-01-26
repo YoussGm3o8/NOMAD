@@ -297,13 +297,15 @@ launch_video_bridge() {
     # Copy the video bridge script into container
     docker cp "$SCRIPT_DIR/../edge_core/ros_video_bridge.py" "$CONTAINER_NAME:/tmp/ros_video_bridge.py"
     
-    # Install cv_bridge if not present
+    # Install GStreamer and opencv for video processing
     docker exec "$CONTAINER_NAME" bash -c "
-        pip3 install opencv-python-headless 2>/dev/null || true
-    "
+        apt-get update -qq
+        apt-get install -y --no-install-recommends gstreamer1.0-tools gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly 2>/dev/null
+        pip3 install 'opencv-python-headless==4.8.1.78' 'numpy==1.26.4' 2>/dev/null || true
+    " 2>&1 | tail -3
     
     # Create a launch script for the video bridge
-    # Note: With --network host, use localhost for MediaMTX
+    # Note: With --network host, MediaMTX is accessible on localhost
     docker exec "$CONTAINER_NAME" bash -c "
         cat > /tmp/launch_video_bridge.sh << 'VIDEO_SCRIPT'
 #!/bin/bash

@@ -82,28 +82,21 @@ class ROSVideoPublisher(Node):
         logger.info(f"Subscribed to {topic}, publishing to {rtsp_url}")
 
     def _start_ffmpeg(self):
-        """Start FFmpeg process for RTSP streaming."""
-        # FFmpeg command for RTSP streaming via MediaMTX
-        # Uses pipe input for raw video frames
-        # Use V4L2 M2M encoder (Jetson hardware encoder)
+        """Start GStreamer pipeline for RTSP streaming."""
+        # GStreamer pipeline for RTSP streaming via MediaMTX
+        # Uses pipe input for raw video frames and x264 encoder
         cmd = [
-            'ffmpeg',
-            '-y',  # Overwrite output
-            '-f', 'rawvideo',
-            '-vcodec', 'rawvideo',
-            '-pix_fmt', 'bgr24',
-            '-s', f'{self.width}x{self.height}',
-            '-r', str(self.fps),
-            '-i', '-',  # Input from pipe
-            '-c:v', 'h264_v4l2m2m',  # Use V4L2 M2M encoder (Jetson HW)
-            '-b:v', '4M',  # 4 Mbps bitrate
-            '-g', '60',  # GOP size
-            '-f', 'rtsp',
-            '-rtsp_transport', 'tcp',
-            self.rtsp_url
+            'gst-launch-1.0', '-q',
+            'fdsrc', 'fd=0',  # Read from stdin
+            '!', f'video/x-raw,format=BGR,width={self.width},height={self.height},framerate={self.fps}/1',
+            '!', 'videoconvert',
+            '!', 'video/x-raw,format=I420',
+            '!', 'x264enc', 'tune=zerolatency', 'bitrate=4000', 'speed-preset=ultrafast', 'key-int-max=60',
+            '!', 'h264parse',
+            '!', 'rtspclientsink', f'location={self.rtsp_url}', 'latency=0', 'protocols=tcp'
         ]
         
-        logger.info(f"Starting FFmpeg: {' '.join(cmd)}")
+        logger.info(f"Starting GStreamer: {' '.join(cmd)}")
         
         try:
             self.ffmpeg_process = subprocess.Popen(
@@ -112,14 +105,23 @@ class ROSVideoPublisher(Node):
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE
             )
-            logger.info("FFmpeg started successfully")
+            logger.info("GStreamer started successfully")
         except Exception as e:
-            logger.error(f"Failed to start FFmpeg: {e}")
+            logger.error(f"Failed to start GStreamer: {e}")
             raise
 
     def _image_callback(self, msg: Image):
         """Process incoming ROS image and send to FFmpeg."""
         if self.ffmpeg_process is None or self.ffmpeg_process.stdin is None:
+            return
+        
+        # Check if FFmpeg is still running
+        if self.ffmpeg_process.poll() is not None:
+            # FFmpeg has exited, log stderr and return
+            if self.ffmpeg_process.stderr:
+                stderr_output = self.ffmpeg_process.stderr.read().decode('utf-8', errors='ignore')
+                logger.error(f"FFmpeg exited with code {self.ffmpeg_process.returncode}")
+                logger.error(f"FFmpeg stderr: {stderr_output[-2000:]}")  # Last 2000 chars
             return
         
         try:
