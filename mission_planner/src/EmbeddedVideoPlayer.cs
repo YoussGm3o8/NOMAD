@@ -53,6 +53,11 @@ namespace NOMAD.MissionPlanner
         private MPBitmap _lastFrame;
         private string _embeddedInitErrorMessage = null;
         
+        // SAFETY: Synchronization for thread-safe stream switching
+        private readonly object _streamLock = new object();
+        private volatile bool _isStreamSwitching = false;
+        private volatile bool _disposed = false;
+        
         // Playback settings - ultra-low latency defaults
         private int _networkCaching = 50; // ms - minimum for stable playback
         private string _quality = "auto";
@@ -556,6 +561,9 @@ namespace NOMAD.MissionPlanner
         /// <summary>
         /// Handles stream selection change.
         /// Restarts playback with the new stream.
+        /// 
+        /// SAFETY: Stream switching is serialized to prevent race conditions
+        /// that could cause memory access violations in GStreamer.
         /// </summary>
         private void CmbStreamSelect_SelectedIndexChanged(object sender, EventArgs e)
         {
@@ -567,18 +575,50 @@ namespace NOMAD.MissionPlanner
             // Don't restart if same stream
             if (name == _selectedStream)
                 return;
-                
-            _selectedStream = name;
-            _streamUrl = $"{_baseRtspUrl}/{_selectedStream}";
             
-            System.Diagnostics.Debug.WriteLine($"NOMAD Video: Stream changed to {displayName} -> {_streamUrl}");
-            
-            // Restart stream with new URL if currently playing
-            if (_isPlaying)
+            // SAFETY: Prevent concurrent stream switches
+            lock (_streamLock)
             {
-                StopStream();
-                System.Threading.Thread.Sleep(100);
-                StartStream();
+                if (_isStreamSwitching)
+                {
+                    System.Diagnostics.Debug.WriteLine("NOMAD Video: Stream switch already in progress, ignoring");
+                    return;
+                }
+                _isStreamSwitching = true;
+            }
+            
+            try
+            {
+                _selectedStream = name;
+                _streamUrl = $"{_baseRtspUrl}/{_selectedStream}";
+                
+                System.Diagnostics.Debug.WriteLine($"NOMAD Video: Stream changed to {displayName} -> {_streamUrl}");
+                
+                // Restart stream with new URL if currently playing
+                if (_isPlaying)
+                {
+                    // SAFETY: Full stop with cleanup before starting new stream
+                    StopStreamSafe();
+                    
+                    // SAFETY: Allow time for GStreamer to fully release resources
+                    // This prevents "attempted to read or write protected memory" errors
+                    System.Threading.Thread.Sleep(300);
+                    
+                    // Force garbage collection to release GStreamer resources
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    
+                    System.Threading.Thread.Sleep(100);
+                    
+                    StartStream();
+                }
+            }
+            finally
+            {
+                lock (_streamLock)
+                {
+                    _isStreamSwitching = false;
+                }
             }
         }
         
@@ -588,7 +628,24 @@ namespace NOMAD.MissionPlanner
         
         public void StartStream()
         {
+            // SAFETY: Check for disposed state
+            if (_disposed)
+            {
+                System.Diagnostics.Debug.WriteLine("NOMAD Video: Cannot start - control is disposed");
+                return;
+            }
+            
             if (_isPlaying) return;
+            
+            // SAFETY: Prevent starting during a stream switch
+            lock (_streamLock)
+            {
+                if (_isStreamSwitching && _gst != null)
+                {
+                    System.Diagnostics.Debug.WriteLine("NOMAD Video: Cannot start during stream switch");
+                    return;
+                }
+            }
             
             try
             {
@@ -600,26 +657,34 @@ namespace NOMAD.MissionPlanner
                     return;
                 }
 
-                // Create a fresh GStreamer instance for each session
-                // This prevents "attempted to read or write protected memory" errors
-                // that occur when reusing a stopped GStreamer instance
-                if (_gst != null)
+                // SAFETY: Ensure previous instance is fully cleaned up
+                lock (_streamLock)
                 {
-                    try { _gst.OnNewImage -= OnGstNewImage; } catch { }
-                    try { _gst.Stop(); } catch { }
-                    _gst = null;
+                    if (_gst != null)
+                    {
+                        try { _gst.OnNewImage -= OnGstNewImage; } catch { }
+                        try { _gst.Stop(); } catch { }
+                        _gst = null;
+                        
+                        // Extra cleanup time
+                        System.Threading.Thread.Sleep(100);
+                    }
+
+                    // SAFETY: Create new instance within lock to prevent races
+                    _gst = new GStreamer();
+                    _gst.OnNewImage += OnGstNewImage;
                 }
-
-                // Small delay to ensure cleanup
-                System.Threading.Thread.Sleep(50);
-
-                // Create new instance
-                _gst = new GStreamer();
-                _gst.OnNewImage += OnGstNewImage;
 
                 var pipeline = BuildGStreamerPipeline();
                 System.Diagnostics.Debug.WriteLine($"NOMAD Video: Starting pipeline: {pipeline}");
-                _gst.Start(pipeline);
+                
+                lock (_streamLock)
+                {
+                    if (_gst != null)
+                    {
+                        _gst.Start(pipeline);
+                    }
+                }
 
                 _isPlaying = true;
                 _frameCount = 0; // Reset frame counter
@@ -632,28 +697,70 @@ namespace NOMAD.MissionPlanner
             {
                 System.Diagnostics.Debug.WriteLine($"NOMAD Video: Play error - {ex.Message}\n{ex.StackTrace}");
                 UpdateStatus($"Error: {ex.Message}", Color.Red);
+                
+                // SAFETY: Cleanup on failure
+                lock (_streamLock)
+                {
+                    if (_gst != null)
+                    {
+                        try { _gst.OnNewImage -= OnGstNewImage; } catch { }
+                        try { _gst.Stop(); } catch { }
+                        _gst = null;
+                    }
+                }
             }
         }
         
         public void StopStream()
         {
+            StopStreamSafe();
+        }
+        
+        /// <summary>
+        /// Safely stops the stream with proper resource cleanup.
+        /// 
+        /// SAFETY CRITICAL: This method must be called before switching streams
+        /// to prevent illegal memory access in GStreamer. The GStreamer instance
+        /// must be fully stopped and dereferenced before creating a new one.
+        /// </summary>
+        private void StopStreamSafe()
+        {
             try
             {
                 _isPlaying = false;
                 
-                if (_gst != null)
+                lock (_streamLock)
                 {
-                    // Unhook the event handler first to prevent callbacks during cleanup
-                    try { _gst.OnNewImage -= OnGstNewImage; } catch { }
-                    
-                    // Stop the pipeline
-                    try { _gst.Stop(); } catch { }
-                    
-                    // Give GStreamer a moment to clean up
-                    System.Threading.Thread.Sleep(100);
-                    
-                    // Clear the reference - we'll create a new instance on next Start
-                    _gst = null;
+                    if (_gst != null)
+                    {
+                        // SAFETY: Unhook event handler FIRST to prevent callbacks during cleanup
+                        // This is critical - callbacks during shutdown cause memory violations
+                        try 
+                        { 
+                            _gst.OnNewImage -= OnGstNewImage; 
+                        } 
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"NOMAD Video: Error unhooking event - {ex.Message}");
+                        }
+                        
+                        // SAFETY: Stop the pipeline with error handling
+                        try 
+                        { 
+                            _gst.Stop(); 
+                        } 
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"NOMAD Video: Error stopping GStreamer - {ex.Message}");
+                        }
+                        
+                        // SAFETY: Give GStreamer time to clean up internal resources
+                        // This is essential to prevent memory access violations
+                        System.Threading.Thread.Sleep(150);
+                        
+                        // Clear the reference - we'll create a new instance on next Start
+                        _gst = null;
+                    }
                 }
                 
                 UpdateStatus("Stopped", Color.Gray);
@@ -920,20 +1027,35 @@ a=recvonly";
         // Cleanup
         // ============================================================
         
+        /// <summary>
+        /// Disposes the video player and all resources.
+        /// 
+        /// SAFETY: Sets disposed flag FIRST to prevent any further operations,
+        /// then cleans up in safe order (GStreamer first, then UI resources).
+        /// </summary>
         protected override void Dispose(bool disposing)
         {
+            // SAFETY: Set disposed flag immediately to stop all callbacks
+            _disposed = true;
+            
             if (disposing)
             {
                 try
                 {
                     // Stop the stream - this handles GStreamer cleanup
-                    StopStream();
+                    StopStreamSafe();
+                    
+                    // Extra wait for GStreamer cleanup
+                    System.Threading.Thread.Sleep(200);
                     
                     // Dispose the last frame
-                    if (_lastFrame != null)
+                    lock (_streamLock)
                     {
-                        _lastFrame.Dispose();
-                        _lastFrame = null;
+                        if (_lastFrame != null)
+                        {
+                            _lastFrame.Dispose();
+                            _lastFrame = null;
+                        }
                     }
                     
                     // Close fullscreen form
@@ -943,7 +1065,10 @@ a=recvonly";
                         _fullscreenForm = null;
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"NOMAD Video: Dispose error - {ex.Message}");
+                }
             }
             
             base.Dispose(disposing);
@@ -993,18 +1118,34 @@ a=recvonly";
         private int _frameCount = 0;
         private DateTime _lastFrameTime = DateTime.MinValue;
         
+        /// <summary>
+        /// Handles new frames from GStreamer.
+        /// 
+        /// SAFETY CRITICAL: This callback can be invoked from GStreamer's thread
+        /// at any time. We must check for disposal and stream switching states
+        /// to prevent accessing released memory.
+        /// </summary>
         private void OnGstNewImage(object sender, MPBitmap frame)
         {
+            // SAFETY: Check if we're shutting down or switching streams
+            if (_disposed || _isStreamSwitching)
+            {
+                return;
+            }
+            
             if (frame == null)
             {
                 System.Diagnostics.Debug.WriteLine("NOMAD Video: Received null frame (stream may have ended)");
-                if (InvokeRequired)
+                if (!_disposed && !_isStreamSwitching)
                 {
-                    BeginInvoke(new Action(() => UpdateStatus("Stream ended", Color.Gray)));
-                }
-                else
-                {
-                    UpdateStatus("Stream ended", Color.Gray);
+                    if (InvokeRequired)
+                    {
+                        try { BeginInvoke(new Action(() => UpdateStatus("Stream ended", Color.Gray))); } catch { }
+                    }
+                    else
+                    {
+                        UpdateStatus("Stream ended", Color.Gray);
+                    }
                 }
                 return;
             }
@@ -1021,46 +1162,92 @@ a=recvonly";
                 System.Diagnostics.Debug.WriteLine($"NOMAD Video: Frame #{_frameCount} received, Size: {frame.Width}x{frame.Height}, Stream: {_selectedStream}");
             }
 
+            // SAFETY: Double-check before invoking on UI thread
+            if (_disposed || _isStreamSwitching)
+            {
+                return;
+            }
+
             if (InvokeRequired)
             {
-                BeginInvoke(new Action(() => OnGstNewImage(sender, frame)));
+                try
+                {
+                    BeginInvoke(new Action(() => OnGstNewImage(sender, frame)));
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Control was disposed - ignore
+                }
+                catch (InvalidOperationException)
+                {
+                    // Handle not created - ignore
+                }
                 return;
             }
 
             try
             {
-                // Create a System.Drawing.Bitmap from the SkiaSharp bitmap data
-                var displayBitmap = new Bitmap(
-                    frame.Width, 
-                    frame.Height, 
-                    4 * frame.Width,  // stride = 4 bytes per pixel (BGRA)
-                    System.Drawing.Imaging.PixelFormat.Format32bppPArgb,
-                    frame.LockBits(Rectangle.Empty, null, SkiaSharp.SKColorType.Bgra8888).Scan0
-                );
-
-                // Update video display
-                var old = _videoBox?.Image;
-                if (_videoBox != null)
+                // SAFETY: Final check before UI operations
+                if (_disposed || _isStreamSwitching || _videoBox == null)
                 {
-                    _videoBox.Image = displayBitmap;
+                    return;
                 }
-                old?.Dispose();
-
-                // Update fullscreen display
-                if (_fullscreenBox != null)
-                {
-                    var oldFull = _fullscreenBox.Image;
-                    // Clone for fullscreen (displayBitmap is used by main view)
-                    _fullscreenBox.Image = (Bitmap)displayBitmap.Clone();
-                    oldFull?.Dispose();
-                }
-
-                // Keep last frame for snapshot (clone it since frame may be disposed)
-                var oldLastFrame = _lastFrame;
-                _lastFrame = (MPBitmap)frame.Clone();
-                oldLastFrame?.Dispose();
                 
-                // Status update handled periodically above
+                // Create a System.Drawing.Bitmap from the SkiaSharp bitmap data
+                // SAFETY: Lock the bits with proper error handling
+                SkiaSharp.SKPixmap pixmap = null;
+                try
+                {
+                    pixmap = frame.PeekPixels();
+                    if (pixmap == null || pixmap.GetPixels() == IntPtr.Zero)
+                    {
+                        System.Diagnostics.Debug.WriteLine("NOMAD Video: Failed to get pixel data");
+                        return;
+                    }
+                    
+                    var displayBitmap = new Bitmap(
+                        frame.Width, 
+                        frame.Height, 
+                        4 * frame.Width,  // stride = 4 bytes per pixel (BGRA)
+                        System.Drawing.Imaging.PixelFormat.Format32bppPArgb,
+                        pixmap.GetPixels()
+                    );
+
+                    // Update video display
+                    var old = _videoBox?.Image;
+                    if (_videoBox != null && !_disposed)
+                    {
+                        _videoBox.Image = displayBitmap;
+                    }
+                    else
+                    {
+                        displayBitmap.Dispose();
+                    }
+                    old?.Dispose();
+
+                    // Update fullscreen display
+                    if (_fullscreenBox != null && !_disposed)
+                    {
+                        var oldFull = _fullscreenBox.Image;
+                        // Clone for fullscreen (displayBitmap is used by main view)
+                        _fullscreenBox.Image = (Bitmap)displayBitmap.Clone();
+                        oldFull?.Dispose();
+                    }
+
+                    // Keep last frame for snapshot (clone it since frame may be disposed)
+                    var oldLastFrame = _lastFrame;
+                    _lastFrame = (MPBitmap)frame.Clone();
+                    oldLastFrame?.Dispose();
+                }
+                finally
+                {
+                    // Pixmap doesn't need explicit disposal - it's a view into the bitmap
+                }
+            }
+            catch (AccessViolationException ex)
+            {
+                // SAFETY: Log but don't crash - this indicates a GStreamer timing issue
+                System.Diagnostics.Debug.WriteLine($"NOMAD Video: ACCESS VIOLATION - {ex.Message}");
             }
             catch (Exception ex)
             {

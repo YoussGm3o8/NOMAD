@@ -114,20 +114,37 @@ start_bridges() {
 # =============================================================================
 
 start_encoders() {
-    log_info "Starting FFmpeg encoders..."
+    log_info "Starting FFmpeg encoders with quality optimizations..."
+    
+    # VIDEO QUALITY SETTINGS (optimized to prevent gray frames and artifacts):
+    # - CRF 18: Higher quality (lower = better, 18 is visually lossless)
+    # - profile:v baseline: Better compatibility and faster decode
+    # - g=30: Keyframe every 1 second (30fps) - helps recover from stream switches
+    # - keyint_min=15: Minimum keyframe interval
+    # - bf=0: No B-frames for lower latency
+    # - tune zerolatency: Optimized for real-time streaming
+    # - maxrate/bufsize: Rate control to prevent bandwidth spikes
     
     # Stereo encoder (2560x720 side-by-side)
     nohup ffmpeg -f rawvideo -pix_fmt bgr24 -s 2560x720 -r 30 \
         -i tcp://127.0.0.1:9999 \
-        -c:v libx264 -preset ultrafast -tune zerolatency -crf 23 \
+        -c:v libx264 -preset superfast -tune zerolatency \
+        -profile:v baseline -level 4.0 \
+        -crf 18 -g 30 -keyint_min 15 -bf 0 \
+        -maxrate 8000k -bufsize 4000k \
+        -flags +cgop \
         -f rtsp -rtsp_transport tcp \
         rtsp://localhost:8554/zed_stereo \
         > "$LOG_DIR/ffmpeg_stereo.log" 2>&1 &
     
-    # Left camera encoder  
+    # Left camera encoder (optimized for primary navigation feed)
     nohup ffmpeg -f rawvideo -pix_fmt bgr24 -s 1280x720 -r 30 \
         -i tcp://127.0.0.1:10000 \
-        -c:v libx264 -preset ultrafast -tune zerolatency -crf 23 \
+        -c:v libx264 -preset superfast -tune zerolatency \
+        -profile:v baseline -level 4.0 \
+        -crf 18 -g 30 -keyint_min 15 -bf 0 \
+        -maxrate 4000k -bufsize 2000k \
+        -flags +cgop \
         -f rtsp -rtsp_transport tcp \
         rtsp://localhost:8554/zed_left \
         > "$LOG_DIR/ffmpeg_left.log" 2>&1 &
@@ -135,21 +152,29 @@ start_encoders() {
     # Right camera encoder
     nohup ffmpeg -f rawvideo -pix_fmt bgr24 -s 1280x720 -r 30 \
         -i tcp://127.0.0.1:10001 \
-        -c:v libx264 -preset ultrafast -tune zerolatency -crf 23 \
+        -c:v libx264 -preset superfast -tune zerolatency \
+        -profile:v baseline -level 4.0 \
+        -crf 18 -g 30 -keyint_min 15 -bf 0 \
+        -maxrate 4000k -bufsize 2000k \
+        -flags +cgop \
         -f rtsp -rtsp_transport tcp \
         rtsp://localhost:8554/zed_right \
         > "$LOG_DIR/ffmpeg_right.log" 2>&1 &
     
-    # Depth encoder
+    # Depth encoder (can use slightly lower quality as it's colormap visualization)
     nohup ffmpeg -f rawvideo -pix_fmt bgr24 -s 1280x720 -r 30 \
         -i tcp://127.0.0.1:10002 \
-        -c:v libx264 -preset ultrafast -tune zerolatency -crf 23 \
+        -c:v libx264 -preset superfast -tune zerolatency \
+        -profile:v baseline -level 4.0 \
+        -crf 20 -g 30 -keyint_min 15 -bf 0 \
+        -maxrate 3000k -bufsize 1500k \
+        -flags +cgop \
         -f rtsp -rtsp_transport tcp \
         rtsp://localhost:8554/zed_depth \
         > "$LOG_DIR/ffmpeg_depth.log" 2>&1 &
     
     sleep 5
-    log_ok "FFmpeg encoders started"
+    log_ok "FFmpeg encoders started with quality optimizations"
 }
 
 # =============================================================================
@@ -157,14 +182,42 @@ start_encoders() {
 # =============================================================================
 
 stop_all() {
-    log_info "Stopping video bridges and encoders..."
+    log_info "Stopping video bridges and encoders gracefully..."
     
-    # Stop FFmpeg encoders
-    pkill -f "ffmpeg.*tcp://127.0.0.1:999" 2>/dev/null || true
-    pkill -f "ffmpeg.*tcp://127.0.0.1:1000" 2>/dev/null || true
+    # SAFETY: Stop FFmpeg encoders first (consumers) with SIGTERM for graceful shutdown
+    # This prevents broken pipe errors and allows proper stream finalization
+    log_info "Sending SIGTERM to FFmpeg encoders..."
+    pkill -SIGTERM -f "ffmpeg.*tcp://127.0.0.1:999" 2>/dev/null || true
+    pkill -SIGTERM -f "ffmpeg.*tcp://127.0.0.1:1000" 2>/dev/null || true
     
-    # Stop video bridges (kill python ros_video_bridge processes)
-    docker exec nomad_isaac_ros bash -c "pkill -f 'ros_video_bridge.py'" 2>/dev/null || true
+    # Wait for graceful shutdown (max 5 seconds)
+    for i in {1..10}; do
+        if ! pgrep -f "ffmpeg.*tcp://127.0.0.1" > /dev/null 2>&1; then
+            log_ok "FFmpeg encoders stopped gracefully"
+            break
+        fi
+        sleep 0.5
+    done
+    
+    # Force kill any remaining FFmpeg processes
+    pkill -SIGKILL -f "ffmpeg.*tcp://127.0.0.1:999" 2>/dev/null || true
+    pkill -SIGKILL -f "ffmpeg.*tcp://127.0.0.1:1000" 2>/dev/null || true
+    
+    # Now stop video bridges (producers) with SIGTERM
+    log_info "Sending SIGTERM to video bridges..."
+    docker exec nomad_isaac_ros bash -c "pkill -SIGTERM -f 'ros_video_bridge.py'" 2>/dev/null || true
+    
+    # Wait for graceful shutdown (max 5 seconds)
+    for i in {1..10}; do
+        if ! docker exec nomad_isaac_ros pgrep -f "ros_video_bridge.py" > /dev/null 2>&1; then
+            log_ok "Video bridges stopped gracefully"
+            break
+        fi
+        sleep 0.5
+    done
+    
+    # Force kill any remaining bridge processes
+    docker exec nomad_isaac_ros bash -c "pkill -SIGKILL -f 'ros_video_bridge.py'" 2>/dev/null || true
     
     log_ok "All video streams stopped"
 }

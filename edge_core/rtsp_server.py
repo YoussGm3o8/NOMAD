@@ -52,13 +52,19 @@ logger = logging.getLogger("edge_core.rtsp_server")
 # ============================================================
 
 def build_software_pipeline_left(device: str, bitrate: int) -> str:
-    """Build software encoding pipeline for LEFT camera only (1280x720)."""
+    """Build software encoding pipeline for LEFT camera only (1280x720).
+    
+    Quality optimizations:
+    - key-int-max=30: Keyframe every 1 second for stream switch recovery
+    - tune=zerolatency: Low latency encoding
+    - Higher bitrate for cleaner image
+    """
     return (
         f"( v4l2src device={device} ! "
         f"video/x-raw,width=2560,height=720,framerate=30/1 ! "
         f"videocrop left=0 right=1280 ! "
         f"videoconvert ! "
-        f"x264enc tune=zerolatency bitrate={bitrate} speed-preset=ultrafast key-int-max=15 ! "
+        f"x264enc tune=zerolatency bitrate={bitrate} speed-preset=superfast key-int-max=30 ! "
         f"h264parse ! rtph264pay name=pay0 pt=96 config-interval=1 )"
     )
 
@@ -70,7 +76,7 @@ def build_software_pipeline_right(device: str, bitrate: int) -> str:
         f"video/x-raw,width=2560,height=720,framerate=30/1 ! "
         f"videocrop left=1280 right=0 ! "
         f"videoconvert ! "
-        f"x264enc tune=zerolatency bitrate={bitrate} speed-preset=ultrafast key-int-max=15 ! "
+        f"x264enc tune=zerolatency bitrate={bitrate} speed-preset=superfast key-int-max=30 ! "
         f"h264parse ! rtph264pay name=pay0 pt=96 config-interval=1 )"
     )
 
@@ -82,19 +88,25 @@ def build_software_pipeline_both(device: str, bitrate: int) -> str:
         f"( v4l2src device={device} ! "
         f"video/x-raw,width=2560,height=720,framerate=30/1 ! "
         f"videoconvert ! "
-        f"x264enc tune=zerolatency bitrate={bitrate * 2} speed-preset=ultrafast key-int-max=15 ! "
+        f"x264enc tune=zerolatency bitrate={bitrate * 2} speed-preset=superfast key-int-max=30 ! "
         f"h264parse ! rtph264pay name=pay0 pt=96 config-interval=1 )"
     )
 
 
 def build_nvidia_pipeline_left(device: str, bitrate: int) -> str:
-    """Build NVIDIA hardware encoding pipeline for LEFT camera only."""
+    """Build NVIDIA hardware encoding pipeline for LEFT camera only.
+    
+    Quality optimizations for NVIDIA encoder:
+    - iframeinterval=30: Keyframe every 1 second
+    - insert-sps-pps=true: Include codec parameters in stream
+    - preset-level=1: UltraFast preset for low latency
+    """
     return (
         f"( v4l2src device={device} ! "
         f"video/x-raw,width=2560,height=720,framerate=30/1 ! "
         f"videocrop left=0 right=1280 ! "
         f"nvvidconv ! video/x-raw(memory:NVMM) ! "
-        f"nvv4l2h264enc bitrate={bitrate * 1000} preset-level=1 iframeinterval=15 insert-sps-pps=true ! "
+        f"nvv4l2h264enc bitrate={bitrate * 1000} preset-level=1 iframeinterval=30 insert-sps-pps=true ! "
         f"h264parse ! rtph264pay name=pay0 pt=96 config-interval=1 )"
     )
 
@@ -106,7 +118,7 @@ def build_nvidia_pipeline_right(device: str, bitrate: int) -> str:
         f"video/x-raw,width=2560,height=720,framerate=30/1 ! "
         f"videocrop left=1280 right=0 ! "
         f"nvvidconv ! video/x-raw(memory:NVMM) ! "
-        f"nvv4l2h264enc bitrate={bitrate * 1000} preset-level=1 iframeinterval=15 insert-sps-pps=true ! "
+        f"nvv4l2h264enc bitrate={bitrate * 1000} preset-level=1 iframeinterval=30 insert-sps-pps=true ! "
         f"h264parse ! rtph264pay name=pay0 pt=96 config-interval=1 )"
     )
 
@@ -117,7 +129,7 @@ def build_nvidia_pipeline_both(device: str, bitrate: int) -> str:
         f"( v4l2src device={device} ! "
         f"video/x-raw,width=2560,height=720,framerate=30/1 ! "
         f"nvvidconv ! video/x-raw(memory:NVMM) ! "
-        f"nvv4l2h264enc bitrate={bitrate * 2000} preset-level=1 iframeinterval=15 insert-sps-pps=true ! "
+        f"nvv4l2h264enc bitrate={bitrate * 2000} preset-level=1 iframeinterval=30 insert-sps-pps=true ! "
         f"h264parse ! rtph264pay name=pay0 pt=96 config-interval=1 )"
     )
 
