@@ -85,6 +85,18 @@ paths:
   # Mission Planner crops to Left/Right/Both views client-side
   zed:
     source: publisher
+    # Allow anyone to publish
+    publishUser:
+    publishPass:
 
   # Alternative generic endpoint
   live:
+    source: publisher
+    publishUser:
+    publishPass:
+
+  # Test path for debugging
+  test:
+    source: publisher
+    publishUser:
+    publishPass:
