@@ -291,6 +291,47 @@ BRIDGE_SCRIPT
     log_info "ROS-HTTP bridge launched (logs at /tmp/ros_bridge.log inside container)"
 }
 
+launch_video_bridge() {
+    log_info "Launching ROS-to-RTSP video bridge..."
+    
+    # Copy the video bridge script into container
+    docker cp "$SCRIPT_DIR/../edge_core/ros_video_bridge.py" "$CONTAINER_NAME:/tmp/ros_video_bridge.py"
+    
+    # Install cv_bridge if not present
+    docker exec "$CONTAINER_NAME" bash -c "
+        pip3 install opencv-python-headless 2>/dev/null || true
+    "
+    
+    # Create a launch script for the video bridge
+    docker exec "$CONTAINER_NAME" bash -c "
+        cat > /tmp/launch_video_bridge.sh << 'VIDEO_SCRIPT'
+#!/bin/bash
+source /opt/ros/humble/setup.bash
+source /workspaces/isaac_ros-dev/install/setup.bash
+# Wait for ZED images to be publishing
+sleep 8
+# Start the video bridge
+python3 /tmp/ros_video_bridge.py \\
+    --topic /zed/zed_node/rgb/image_rect_color \\
+    --stream live \\
+    --host host.docker.internal \\
+    --port 8554 \\
+    --width 1280 \\
+    --height 720 \\
+    --fps 30
+VIDEO_SCRIPT
+        chmod +x /tmp/launch_video_bridge.sh
+    "
+    
+    # Launch video bridge in background
+    docker exec -d "$CONTAINER_NAME" bash -c "
+        nohup /tmp/launch_video_bridge.sh > /tmp/video_bridge.log 2>&1 &
+        echo \$! > /tmp/video_bridge.pid
+    "
+    
+    log_info "Video bridge launched (logs at /tmp/video_bridge.log inside container)"
+}
+
 stop_services() {
     log_info "Stopping Isaac ROS services..."
     
@@ -347,12 +388,18 @@ show_logs() {
         bridge)
             docker exec "$CONTAINER_NAME" tail -f /tmp/ros_bridge.log
             ;;
+        video)
+            docker exec "$CONTAINER_NAME" tail -f /tmp/video_bridge.log
+            ;;
         *)
             echo "=== ZED + Nvblox Logs ==="
             docker exec "$CONTAINER_NAME" tail -20 /tmp/zed_nvblox.log 2>/dev/null || echo "(No logs)"
             echo ""
             echo "=== ROS-HTTP Bridge Logs ==="
             docker exec "$CONTAINER_NAME" tail -20 /tmp/ros_bridge.log 2>/dev/null || echo "(No logs)"
+            echo ""
+            echo "=== Video Bridge Logs ==="
+            docker exec "$CONTAINER_NAME" tail -20 /tmp/video_bridge.log 2>/dev/null || echo "(No logs)"
             ;;
     esac
 }
@@ -366,10 +413,11 @@ case "${1:-start}" in
         # Don't exit on nvblox check failure - we fall back to ZED-only
         check_and_build_nvblox || true
         launch_zed_nvblox
-        # Wait for ZED to initialize before starting bridge
+        # Wait for ZED to initialize before starting bridges
         log_info "Waiting for ZED initialization (20s)..."
         sleep 20
         launch_ros_http_bridge
+        launch_video_bridge
         log_info "Isaac ROS startup complete!"
         show_status
         ;;
