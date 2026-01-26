@@ -72,7 +72,7 @@ class ROSHTTPBridge(Node):
         self,
         host: str = "172.17.0.1",
         port: int = 8000,
-        vio_topic: str = "/visual_slam/tracking/odometry",
+        vio_topic: str = "/zed/zed_node/odom",  # Default to ZED odom
         send_rate_hz: float = 30.0,
     ):
         super().__init__("nomad_ros_http_bridge")

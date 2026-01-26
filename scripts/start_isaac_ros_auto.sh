@@ -275,8 +275,9 @@ launch_ros_http_bridge() {
 source /opt/ros/humble/setup.bash
 source /workspaces/isaac_ros-dev/install/setup.bash
 # Wait for ROS nodes to be up
-sleep 10
-python3 /tmp/ros_http_bridge.py --host localhost --port 8000 --rate 30
+sleep 5
+# Use ZED odom topic by default
+python3 /tmp/ros_http_bridge.py --host localhost --port 8000 --rate 30 --vio-topic /zed/zed_node/odom
 BRIDGE_SCRIPT
         chmod +x /tmp/launch_bridge.sh
     "
