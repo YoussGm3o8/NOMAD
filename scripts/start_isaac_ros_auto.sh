@@ -306,11 +306,16 @@ launch_video_bridge() {
     
     # Create a launch script for the video bridge
     # Note: With --network host, MediaMTX is accessible on localhost
+    # IMPORTANT: Fix numpy version before importing cv_bridge to avoid ABI mismatch
     docker exec "$CONTAINER_NAME" bash -c "
         cat > /tmp/launch_video_bridge.sh << 'VIDEO_SCRIPT'
 #!/bin/bash
 source /opt/ros/humble/setup.bash
 source /workspaces/isaac_ros-dev/install/setup.bash
+
+# Fix numpy version - cv_bridge was compiled with numpy 1.x
+pip3 install 'numpy==1.26.4' --quiet 2>/dev/null
+
 # Wait for ZED images to be publishing
 sleep 8
 # Start the video bridge
