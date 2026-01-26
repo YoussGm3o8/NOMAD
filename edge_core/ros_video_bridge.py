@@ -24,7 +24,6 @@ try:
     import rclpy
     from rclpy.node import Node
     from sensor_msgs.msg import Image
-    from cv_bridge import CvBridge
     import cv2
     import numpy as np
 except ImportError as e:
@@ -59,7 +58,6 @@ class ROSVideoPublisher(Node):
         self.height = height
         self.fps = fps
         
-        self.bridge = CvBridge()
         self.ffmpeg_process: Optional[subprocess.Popen] = None
         self.frame_count = 0
         self.last_frame_time = time.time()
@@ -125,8 +123,30 @@ class ROSVideoPublisher(Node):
             return
         
         try:
-            # Convert ROS image to OpenCV format
-            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            # Convert ROS image to numpy array directly (avoid cv_bridge ABI issues)
+            # Determine encoding and convert to BGR
+            encoding = msg.encoding
+            height = msg.height
+            width = msg.width
+            
+            # Convert bytes to numpy array
+            if encoding in ('bgr8', 'rgb8', 'bgra8', 'rgba8'):
+                channels = 4 if 'a' in encoding else 3
+                dtype = np.uint8
+                img_array = np.frombuffer(msg.data, dtype=dtype).reshape(height, width, channels)
+                
+                # Convert to BGR if needed
+                if encoding == 'rgb8':
+                    cv_image = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+                elif encoding == 'rgba8':
+                    cv_image = cv2.cvtColor(img_array, cv2.COLOR_RGBA2BGR)
+                elif encoding == 'bgra8':
+                    cv_image = cv2.cvtColor(img_array, cv2.COLOR_BGRA2BGR)
+                else:  # bgr8
+                    cv_image = img_array
+            else:
+                logger.warning(f"Unsupported encoding: {encoding}, skipping frame")
+                return
             
             # Resize if needed
             if cv_image.shape[1] != self.width or cv_image.shape[0] != self.height:
