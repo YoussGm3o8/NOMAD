@@ -308,7 +308,8 @@ case "${1:-start}" in
         check_prerequisites
         start_container
         install_dependencies
-        check_and_build_nvblox
+        # Don't exit on nvblox check failure - we fall back to ZED-only
+        check_and_build_nvblox || true
         launch_zed_nvblox
         # Wait for ZED to initialize before starting bridge
         log_info "Waiting for ZED initialization (20s)..."
