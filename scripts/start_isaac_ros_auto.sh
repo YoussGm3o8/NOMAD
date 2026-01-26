@@ -143,19 +143,40 @@ start_container() {
 install_dependencies() {
     log_info "Installing ROS2 dependencies inside container..."
     
-    # Install apt packages
+    # Remove problematic yarn repo first, then install packages
     docker exec "$CONTAINER_NAME" bash -c "
-        apt-get update && apt-get install -y --no-install-recommends \
+        rm -f /etc/apt/sources.list.d/yarn.list 2>/dev/null
+        apt-get update -qq
+        apt-get install -y --no-install-recommends \
             ros-humble-zed-msgs \
+            ros-humble-nmea-msgs \
             ros-humble-robot-localization \
             ros-humble-point-cloud-transport \
+            ros-humble-point-cloud-transport-plugins \
             ros-humble-tf2-ros \
             ros-humble-tf2-tools \
-            python3-pip 2>/dev/null || true
-        pip3 install requests 2>/dev/null || true
+            ros-humble-cob-srvs \
+            python3-pip 2>/dev/null
+        pip3 install requests 2>/dev/null
+    " 2>&1 | tail -3
+    
+    # Run rosdep to install remaining dependencies
+    log_info "Running rosdep for ZED wrapper..."
+    docker exec "$CONTAINER_NAME" bash -c "
+        source /opt/ros/humble/setup.bash
+        cd /workspaces/isaac_ros-dev/src/zed-ros2-wrapper
+        rosdep install --from-paths . --ignore-src -r -y 2>/dev/null
     " 2>&1 | tail -5
     
-    log_info "Dependencies installed"
+    # Rebuild ZED packages to pick up the new dependencies
+    log_info "Rebuilding ZED packages..."
+    docker exec "$CONTAINER_NAME" bash -c "
+        source /opt/ros/humble/setup.bash
+        cd /workspaces/isaac_ros-dev
+        colcon build --packages-select zed_components zed_wrapper --symlink-install 2>/dev/null
+    " 2>&1 | tail -5
+    
+    log_info "Dependencies installed and ZED packages rebuilt"
 }
 
 check_and_build_nvblox() {
@@ -212,7 +233,7 @@ LAUNCH_SCRIPT
         "
         
         docker exec -d "$CONTAINER_NAME" bash -c "
-            nohup /tmp/launch_zed_only.sh > /tmp/zed_nvblox.log 2>&1 &
+            bash /tmp/launch_zed_only.sh > /tmp/zed_nvblox.log 2>&1 &
             echo \$! > /tmp/zed_nvblox.pid
         "
         
