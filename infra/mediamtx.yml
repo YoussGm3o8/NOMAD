@@ -80,18 +80,17 @@ record: no
 # ============================================================
 
 paths:
-  # ZED2i stream - accepts RTSP publish from FFmpeg/GStreamer
-  # FFmpeg should use: ffmpeg ... -f rtsp rtsp://localhost:8554/zed
+  # ZED2i stream from RTP/UDP
+  # Reads H264 RTP packets from UDP port 8000
   zed:
-    source: publisher
-    # Disable authentication for local publishing
+    source: rtp://localhost:8000
+    # Disable authentication
     publishUser:
     publishPass:
-    # Read authentication also disabled  
     readUser:
     readPass:
 
-  # Alternative endpoint
+  # Alternative endpoint for direct RTSP publish
   live:
     source: publisher
     publishUser:

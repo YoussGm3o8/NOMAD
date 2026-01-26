@@ -80,18 +80,18 @@ class ROSVideoPublisher(Node):
         logger.info(f"Subscribed to {topic}, publishing to {rtsp_url}")
 
     def _start_ffmpeg(self):
-        """Start GStreamer pipeline for RTSP streaming."""
-        # GStreamer pipeline for RTSP streaming via MediaMTX
-        # Uses pipe input for raw video frames and x264 encoder
+        """Start GStreamer pipeline for RTP streaming."""
+        # GStreamer pipeline outputs H264 RTP to UDP
+        # MediaMTX or another process can read this RTP stream
         cmd = [
             'gst-launch-1.0', '-q',
-            'fdsrc', 'fd=0',  # Read from stdin
+            'fdsrc', 'fd=0',
             '!', f'video/x-raw,format=BGR,width={self.width},height={self.height},framerate={self.fps}/1',
             '!', 'videoconvert',
             '!', 'video/x-raw,format=I420',
-            '!', 'x264enc', 'tune=zerolatency', 'bitrate=4000', 'speed-preset=ultrafast', 'key-int-max=60',
-            '!', 'h264parse',
-            '!', 'rtspclientsink', f'location={self.rtsp_url}', 'latency=0', 'protocols=tcp'
+            '!', 'x264enc', 'tune=zerolatency', 'bitrate=4000', 'speed-preset=ultrafast', 'key-int-max=30',
+            '!', 'rtph264pay', 'config-interval=1', 'pt=96',
+            '!', 'udpsink', 'host=127.0.0.1', 'port=8000', 'sync=false'
         ]
         
         logger.info(f"Starting GStreamer: {' '.join(cmd)}")
@@ -103,10 +103,15 @@ class ROSVideoPublisher(Node):
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE
             )
-            logger.info("GStreamer started successfully")
+            logger.info("GStreamer started successfully - streaming to UDP port 8000")
         except Exception as e:
             logger.error(f"Failed to start GStreamer: {e}")
             raise
+    
+    def _get_encoder_command(self) -> list:
+        """Get the best available encoder command."""
+        # Not used with GStreamer approach
+        return []
 
     def _image_callback(self, msg: Image):
         """Process incoming ROS image and send to FFmpeg."""
