@@ -431,9 +431,31 @@ case "${1:-start}" in
         # Don't exit on nvblox check failure - we fall back to ZED-only
         check_and_build_nvblox || true
         launch_zed_nvblox
-        # Wait for ZED to initialize before starting bridges
-        log_info "Waiting for ZED initialization (20s)..."
-        sleep 20
+        
+        # Wait for ZED to initialize - check for topics instead of fixed wait
+        log_info "Waiting for ZED to publish topics..."
+        WAIT_START=$(date +%s)
+        MAX_WAIT=30
+        ZED_READY=false
+        
+        while [ $(($(date +%s) - WAIT_START)) -lt $MAX_WAIT ]; do
+            # Check if ZED image topics are being published
+            if docker exec "$CONTAINER_NAME" bash -c "
+                source /opt/ros/humble/setup.bash && \
+                timeout 2 ros2 topic list 2>/dev/null | grep -q '/zed/zed_node/.*image'
+            " 2>/dev/null; then
+                ZED_READY=true
+                ELAPSED=$(($(date +%s) - WAIT_START))
+                log_info "ZED ready after ${ELAPSED}s"
+                break
+            fi
+            sleep 1
+        done
+        
+        if [ "$ZED_READY" = false ]; then
+            log_warn "ZED topics not detected after ${MAX_WAIT}s, continuing anyway..."
+        fi
+        
         launch_ros_http_bridge
         launch_video_bridge
         log_info "Isaac ROS startup complete!"
