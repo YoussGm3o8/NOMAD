@@ -61,36 +61,7 @@ check_prerequisites() {
         exit 1
     fi
     
-    # Check if ZED SDK is in the Docker image
-    if ! docker run --rm "$IMAGE_NAME" test -f /usr/local/zed/lib/libsl_zed.so 2>/dev/null; then
-        log_warn "ZED SDK not found in Docker image!"
-        log_warn ""
-        log_warn "To add ZED SDK to your Isaac ROS Docker image:"
-        log_warn "1. Create ~/.isaac_ros_common-config with:"
-        log_warn '   CONFIG_IMAGE_KEY="ros2_humble.user"'
-        log_warn '   CONFIG_DOCKER_SEARCH_DIRS=("\$HOME/ros2/isaac_ros_ws/src/zed-ros2-wrapper/docker")'
-        log_warn ""
-        log_warn "2. Create a Dockerfile at ~/ros2/isaac_ros_ws/src/zed-ros2-wrapper/docker/Dockerfile.user:"
-        log_warn '   ARG BASE_IMAGE'
-        log_warn '   FROM \${BASE_IMAGE}'
-        log_warn '   # Install ZED SDK'
-        log_warn '   RUN apt-get update && apt-get install -y --no-install-recommends curl && \\'
-        log_warn '       curl -L -o /tmp/zed_sdk.run https://download.stereolabs.com/zedsdk/4.2/l4t36.4/jetsons && \\'
-        log_warn '       chmod +x /tmp/zed_sdk.run && \\'
-        log_warn '       /tmp/zed_sdk.run -- silent skip_od_module skip_python skip_tools && \\'
-        log_warn '       rm /tmp/zed_sdk.run && \\'
-        log_warn '       ldconfig'
-        log_warn ""
-        log_warn "3. Rebuild: cd ~/ros2/isaac_ros_ws && ./src/isaac_ros_common/scripts/run_dev.sh"
-        log_warn ""
-        log_warn "Continuing without ZED SDK (VIO will not work)..."
-        ZED_SDK_AVAILABLE=false
-    else
-        ZED_SDK_AVAILABLE=true
-        log_info "ZED SDK found in Docker image"
-    fi
-    
-    # Check ZED camera
+    # Check ZED camera (informational only)
     if [ ! -e /dev/video0 ]; then
         log_warn "ZED camera not detected at /dev/video0"
     fi
@@ -101,15 +72,24 @@ check_prerequisites() {
 start_container() {
     log_info "Starting Isaac ROS container..."
     
-    # Stop existing container if running
-    if docker ps -q --filter "name=$CONTAINER_NAME" | grep -q .; then
-        log_warn "Container already running, stopping first..."
-        docker stop "$CONTAINER_NAME" 2>/dev/null || true
-        docker rm "$CONTAINER_NAME" 2>/dev/null || true
+    # Check if container exists
+    if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+        # Container exists - check if it's running
+        if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+            log_info "Container already running"
+            return 0
+        else
+            # Container exists but stopped - just start it
+            log_info "Container exists but stopped, starting it..."
+            docker start "$CONTAINER_NAME"
+            log_info "Container started: $CONTAINER_NAME"
+            sleep 2
+            return 0
+        fi
     fi
     
-    # Remove old container if exists
-    docker rm "$CONTAINER_NAME" 2>/dev/null || true
+    # Container doesn't exist - create it
+    log_info "Creating new container..."
     
     # Start container with all necessary mounts and devices
     # Note: We do NOT mount /usr/local/zed from host - the ZED SDK
@@ -134,13 +114,21 @@ start_container() {
         "$IMAGE_NAME" \
         sleep infinity
     
-    log_info "Container started: $CONTAINER_NAME"
+    log_info "Container created: $CONTAINER_NAME"
     
     # Wait for container to be ready
     sleep 2
 }
 
 install_dependencies() {
+    log_info "Checking dependencies inside container..."
+    
+    # Check if dependencies are already installed by testing for a key package
+    if docker exec "$CONTAINER_NAME" bash -c "dpkg -l | grep -q ros-humble-zed-msgs" 2>/dev/null; then
+        log_info "Dependencies already installed, skipping..."
+        return 0
+    fi
+    
     log_info "Installing ROS2 dependencies inside container..."
     
     # Remove problematic yarn repo first, then install packages
@@ -156,12 +144,17 @@ install_dependencies() {
             ros-humble-tf2-ros \
             ros-humble-tf2-tools \
             ros-humble-cob-srvs \
+            ros-humble-cv-bridge \
             liburdfdom-dev \
             python3-pip 2>/dev/null
         # Update library cache for newly installed packages
         echo /opt/ros/humble/lib >> /etc/ld.so.conf.d/ros.conf
         ldconfig
-        pip3 install requests opencv-python-headless 2>/dev/null
+        
+        # Check if packages need to be installed/updated
+        if ! python3 -c 'import requests' 2>/dev/null; then
+            pip3 install requests opencv-python-headless 2>/dev/null
+        fi
     " 2>&1 | tail -3
     
     # Run rosdep to install remaining dependencies
@@ -172,7 +165,7 @@ install_dependencies() {
         rosdep install --from-paths . --ignore-src -r -y 2>/dev/null
     " 2>&1 | tail -5
     
-    # Rebuild ZED packages to pick up the new dependencies
+    # Rebuild ZED packages to pick up the new dependencies  
     log_info "Rebuilding ZED packages..."
     docker exec "$CONTAINER_NAME" bash -c "
         source /opt/ros/humble/setup.bash
