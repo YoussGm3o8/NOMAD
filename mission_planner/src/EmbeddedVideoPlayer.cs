@@ -10,6 +10,7 @@ extern alias MPDrawing;
 using System;
 using System.Drawing;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using MissionPlanner.Utilities;
 using MPBitmap = MPDrawing::System.Drawing.Bitmap;
