@@ -66,6 +66,7 @@ class SystemState(BaseModel):
     timestamp: datetime
     flight_mode: str
     connected: bool
+    armed: bool = False  # Vehicle armed state
 
     # Battery
     battery_voltage: float

@@ -62,6 +62,13 @@ namespace NOMAD.MissionPlanner
         private bool _keyW, _keyS, _keyA, _keyD;
         private bool _keyUp, _keyDown, _keyLeft, _keyRight;
         
+        // Configuration
+        private NOMADConfig _config;
+        
+        // Connection manager for safety controls
+        private JetsonConnectionManager _jetsonConnectionManager;
+        private bool _jetsonConnected = false;
+        
         // UI Controls
         private Panel _keyboardPanel;
         private Panel _keyboardBorderPanel;  // Outer panel with border
@@ -86,12 +93,21 @@ namespace NOMAD.MissionPlanner
         
         /// <summary>
         /// Enable or disable WASD control.
+        /// SAFETY: Cannot enable when Jetson is disconnected.
         /// </summary>
         public bool ControlEnabled
         {
             get => _enabled;
             set
             {
+                // SAFETY: Block enabling when Jetson is disconnected
+                if (value && !_jetsonConnected)
+                {
+                    UpdateStatus("BLOCKED - Jetson offline (safety)", ERROR_COLOR);
+                    if (_chkEnable != null) _chkEnable.Checked = false;
+                    return;
+                }
+                
                 if (_enabled == value) return;
                 _enabled = value;
                 
@@ -117,17 +133,80 @@ namespace NOMAD.MissionPlanner
         // Constructor
         // ============================================================
         
-        public EnhancedWASDControl(float moveSpeed = 0.5f, float altSpeed = 0.3f, float yawRate = 15.0f)
+        public EnhancedWASDControl(NOMADConfig config = null, float moveSpeed = 0.5f, float altSpeed = 0.3f, float yawRate = 15.0f, JetsonConnectionManager jetsonConnectionManager = null)
         {
+            _config = config;
             _moveSpeed = moveSpeed;
             _altSpeed = altSpeed;
             _yawRate = yawRate;
+            _jetsonConnectionManager = jetsonConnectionManager;
+            
+            // Subscribe to connection state changes for safety
+            if (_jetsonConnectionManager != null)
+            {
+                _jetsonConnected = _jetsonConnectionManager.IsConnected;
+                _jetsonConnectionManager.ConnectionStateChanged += OnJetsonConnectionStateChanged;
+            }
             
             InitializeUI();
             
             // Set control properties for keyboard capture
             this.SetStyle(ControlStyles.Selectable, true);
             this.TabStop = true;
+            
+            // Update initial state based on connection
+            UpdateConnectionState();
+        }
+        
+        private void OnJetsonConnectionStateChanged(object sender, JetsonConnectionStateChangedEventArgs e)
+        {
+            _jetsonConnected = e.NewState == JetsonConnectionState.Connected;
+            
+            // SAFETY: Immediately disable controls when Jetson disconnects
+            if (!_jetsonConnected && _enabled)
+            {
+                if (InvokeRequired)
+                    BeginInvoke(new Action(() => DisableForSafety()));
+                else
+                    DisableForSafety();
+            }
+            else if (InvokeRequired)
+            {
+                BeginInvoke(new Action(UpdateConnectionState));
+            }
+            else
+            {
+                UpdateConnectionState();
+            }
+        }
+        
+        private void DisableForSafety()
+        {
+            ControlEnabled = false;
+            UpdateStatus("DISABLED - Jetson offline (safety)", ERROR_COLOR);
+        }
+        
+        private void UpdateConnectionState()
+        {
+            if (_chkEnable != null)
+            {
+                // Grey out enable checkbox when disconnected
+                _chkEnable.Enabled = _jetsonConnected;
+                if (!_jetsonConnected)
+                {
+                    _chkEnable.ForeColor = TEXT_SECONDARY;
+                }
+                else
+                {
+                    _chkEnable.ForeColor = TEXT_PRIMARY;
+                }
+            }
+            
+            // Update status message
+            if (!_jetsonConnected && !_enabled)
+            {
+                UpdateStatus("Jetson offline - controls disabled", WARNING_COLOR);
+            }
         }
         
         // ============================================================
@@ -559,11 +638,15 @@ namespace NOMAD.MissionPlanner
         // Payload Controls Panel
         // ============================================================
         
-        // TODO: Configure these GPIO pins once hardware is finalized
-        private const int GPIO_PAYLOAD1_PIN = 0;  // TODO: Cube GPIO pin for payload 1 linear actuator
-        private const int GPIO_PAYLOAD2_PIN = 0;  // TODO: Cube GPIO pin for payload 2 linear actuator
-        private const int JETSON_WATER_GPIO = 0;  // TODO: Jetson GPIO pin for water pump trigger
-        private const int JETSON_SERVO_PWM = 0;   // TODO: Jetson PWM channel for nozzle servo
+        // GPIO Pin Configuration - HARDWARE SPECIFIC
+        // These values must be updated when hardware wiring is finalized:
+        // - Cube Orange GPIO: Typically AUX1-AUX6 (pins 50-55)
+        // - Jetson GPIO: Use /sys/class/gpio or through Edge Core API
+        // Set to -1 to indicate "not configured" - functions will be disabled
+        private const int GPIO_PAYLOAD1_PIN = -1;  // Cube AUX pin for payload 1 linear actuator
+        private const int GPIO_PAYLOAD2_PIN = -1;  // Cube AUX pin for payload 2 linear actuator  
+        private const int JETSON_WATER_GPIO = -1;  // Jetson GPIO pin for water pump (via API)
+        private const int JETSON_SERVO_PWM = -1;   // Jetson PWM channel for nozzle servo (via API)
         
         private TrackBar _nozzleServoSlider;
         private Label _lblNozzleValue;
@@ -692,10 +775,17 @@ namespace NOMAD.MissionPlanner
         /// <param name="payloadNumber">1 or 2</param>
         private void DropPayload(int payloadNumber)
         {
-            // TODO: Implement actual GPIO control through MAVLink DO_SET_RELAY or DO_SET_SERVO
-            // The linear actuators are connected to Cube GPIO pins
             try
             {
+                int relayNumber = payloadNumber == 1 ? GPIO_PAYLOAD1_PIN : GPIO_PAYLOAD2_PIN;
+                
+                // Check if GPIO is configured
+                if (relayNumber < 0)
+                {
+                    UpdateStatus($"Payload {payloadNumber} GPIO not configured", WARNING_COLOR);
+                    return;
+                }
+                
                 if (MainV2.comPort == null || !MainV2.comPort.BaseStream.IsOpen)
                 {
                     UpdateStatus("Not connected", ERROR_COLOR);
@@ -703,9 +793,6 @@ namespace NOMAD.MissionPlanner
                 }
                 
                 // MAV_CMD_DO_SET_RELAY to toggle GPIO
-                // TODO: Map payload number to correct relay/pin number
-                int relayNumber = payloadNumber == 1 ? GPIO_PAYLOAD1_PIN : GPIO_PAYLOAD2_PIN;
-                
                 // Send MAV_CMD_DO_SET_RELAY (181)
                 MainV2.comPort.doCommand(
                     MainV2.comPort.MAV.sysid,
@@ -729,17 +816,29 @@ namespace NOMAD.MissionPlanner
         /// </summary>
         private async void ShootWater()
         {
-            // TODO: Implement API call to Jetson to trigger water pump GPIO
             try
             {
+                // Check if GPIO is configured
+                if (JETSON_WATER_GPIO < 0)
+                {
+                    UpdateStatus("Water pump GPIO not configured", WARNING_COLOR);
+                    return;
+                }
+                
                 using (var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(5) })
                 {
-                    // TODO: Update with correct Jetson IP from config
-                    // TODO: Create API endpoint on Jetson edge_core for water pump control
+                    // Use config IP if available, otherwise show error
+                    var jetsonIp = _config?.JetsonIP ?? _config?.EffectiveIP;
+                    if (string.IsNullOrEmpty(jetsonIp))
+                    {
+                        UpdateStatus("Jetson IP not configured", ERROR_COLOR);
+                        return;
+                    }
+                    
                     var response = await client.PostAsync(
-                        $"http://100.64.0.1:5000/api/gpio/water_pump/trigger",
+                        $"http://{jetsonIp}:8000/api/gpio/water_pump/trigger",
                         new System.Net.Http.StringContent(
-                            "{\"duration_ms\": 500}",
+                            $"{{\"gpio_pin\": {JETSON_WATER_GPIO}, \"duration_ms\": 500}}",
                             System.Text.Encoding.UTF8,
                             "application/json"
                         )
@@ -771,15 +870,22 @@ namespace NOMAD.MissionPlanner
             int angle = _nozzleServoSlider.Value;
             _lblNozzleValue.Text = $"{angle} deg";
             
-            // TODO: Implement API call to Jetson to set servo position
+            // Check if PWM is configured
+            if (JETSON_SERVO_PWM < 0)
+            {
+                // Silent skip - servo not configured
+                return;
+            }
+            
             try
             {
+                var jetsonIp = _config?.JetsonIP ?? _config?.EffectiveIP;
+                if (string.IsNullOrEmpty(jetsonIp)) return;
+                
                 using (var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(2) })
                 {
-                    // TODO: Update with correct Jetson IP from config
-                    // TODO: Create API endpoint on Jetson edge_core for servo control
                     await client.PostAsync(
-                        $"http://100.64.0.1:5000/api/gpio/nozzle_servo/set",
+                        $"http://{jetsonIp}:8000/api/gpio/servo/{JETSON_SERVO_PWM}/set",
                         new System.Net.Http.StringContent(
                             $"{{\"angle\": {angle}}}",
                             System.Text.Encoding.UTF8,
@@ -795,17 +901,19 @@ namespace NOMAD.MissionPlanner
         }
         
         // ============================================================
-        // Keyboard Event Handling - Event-based with platform-specific backup
+        // Keyboard Event Handling - Cross-platform with fallback
         // ============================================================
         
         // Windows API for checking key state directly (only works on Windows)
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        // On Linux/Mac, we rely entirely on event-based key tracking
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
         private static extern short GetAsyncKeyState(int vKey);
         
         // Platform detection
         private static readonly bool _isWindows = Environment.OSVersion.Platform == PlatformID.Win32NT;
+        private static bool _win32ApiAvailable = _isWindows;
         
-        // Virtual key codes
+        // Virtual key codes (Windows VK_ constants)
         private const int VK_W = 0x57;
         private const int VK_A = 0x41;
         private const int VK_S = 0x53;
@@ -815,29 +923,88 @@ namespace NOMAD.MissionPlanner
         private const int VK_LEFT = 0x25;
         private const int VK_RIGHT = 0x27;
         
+        // Event-based key state tracking (cross-platform)
+        // These are updated by KeyDown/KeyUp events and are the primary
+        // source of truth on non-Windows platforms
+        private bool _eventKeyW, _eventKeyA, _eventKeyS, _eventKeyD;
+        private bool _eventKeyUp, _eventKeyDown, _eventKeyLeft, _eventKeyRight;
+        
         /// <summary>
-        /// Check if a key is currently pressed using Windows API.
-        /// Returns false on Linux (rely on event-based key tracking instead).
+        /// Check if a key is currently pressed.
+        /// Uses Windows API on Windows, event-based tracking on Linux/Mac.
         /// </summary>
         private bool IsKeyPressed(int vKey)
         {
-            if (!_isWindows) return true;  // On Linux, trust the event-based state
+            if (!_win32ApiAvailable)
+            {
+                // On non-Windows platforms, use event-based state
+                return GetEventBasedKeyState(vKey);
+            }
             
             try
             {
                 return (GetAsyncKeyState(vKey) & 0x8000) != 0;
             }
+            catch (EntryPointNotFoundException)
+            {
+                // Win32 API not available (e.g., running under Mono on Linux)
+                _win32ApiAvailable = false;
+                return GetEventBasedKeyState(vKey);
+            }
+            catch (DllNotFoundException)
+            {
+                // user32.dll not available
+                _win32ApiAvailable = false;
+                return GetEventBasedKeyState(vKey);
+            }
             catch
             {
-                return true;  // If API fails, trust event-based state
+                // Any other API failure - fall back to event-based
+                return GetEventBasedKeyState(vKey);
             }
         }
         
         /// <summary>
-        /// Safety check using Windows API - ensures keys are actually released.
+        /// Get key state from event-based tracking (cross-platform).
+        /// </summary>
+        private bool GetEventBasedKeyState(int vKey)
+        {
+            return vKey switch
+            {
+                VK_W => _eventKeyW,
+                VK_A => _eventKeyA,
+                VK_S => _eventKeyS,
+                VK_D => _eventKeyD,
+                VK_UP => _eventKeyUp,
+                VK_DOWN => _eventKeyDown,
+                VK_LEFT => _eventKeyLeft,
+                VK_RIGHT => _eventKeyRight,
+                _ => false
+            };
+        }
+        
+        /// <summary>
+        /// Update event-based key state from a KeyDown event.
+        /// </summary>
+        private void UpdateEventKeyState(Keys key, bool pressed)
+        {
+            switch (key)
+            {
+                case Keys.W: _eventKeyW = pressed; break;
+                case Keys.A: _eventKeyA = pressed; break;
+                case Keys.S: _eventKeyS = pressed; break;
+                case Keys.D: _eventKeyD = pressed; break;
+                case Keys.Up: _eventKeyUp = pressed; break;
+                case Keys.Down: _eventKeyDown = pressed; break;
+                case Keys.Left: _eventKeyLeft = pressed; break;
+                case Keys.Right: _eventKeyRight = pressed; break;
+            }
+        }
+        
+        /// <summary>
+        /// Safety check - ensures keys are actually released.
         /// Called periodically to catch any missed key releases.
         /// Also checks if mouse has left the control area.
-        /// On Linux, this only handles mouse-leave checks since Win API is unavailable.
         /// </summary>
         private void CheckKeyReleases()
         {
@@ -856,7 +1023,7 @@ namespace NOMAD.MissionPlanner
             }
             
             // On non-Windows platforms, skip Win32 API checks (rely on event-based tracking)
-            if (!_isWindows) return;
+            if (!_win32ApiAvailable) return;
             
             // Check if keys that we think are pressed are actually still pressed (Windows only)
             bool stateChanged = false;
@@ -884,17 +1051,17 @@ namespace NOMAD.MissionPlanner
             
             bool handled = true;
             
-            // Set key state on key down
+            // Set key state on key down (both internal state and event-based for cross-platform)
             switch (keyData)
             {
-                case Keys.W: _keyW = true; break;
-                case Keys.S: _keyS = true; break;
-                case Keys.A: _keyA = true; break;
-                case Keys.D: _keyD = true; break;
-                case Keys.Up: _keyUp = true; break;
-                case Keys.Down: _keyDown = true; break;
-                case Keys.Left: _keyLeft = true; break;
-                case Keys.Right: _keyRight = true; break;
+                case Keys.W: _keyW = true; UpdateEventKeyState(Keys.W, true); break;
+                case Keys.S: _keyS = true; UpdateEventKeyState(Keys.S, true); break;
+                case Keys.A: _keyA = true; UpdateEventKeyState(Keys.A, true); break;
+                case Keys.D: _keyD = true; UpdateEventKeyState(Keys.D, true); break;
+                case Keys.Up: _keyUp = true; UpdateEventKeyState(Keys.Up, true); break;
+                case Keys.Down: _keyDown = true; UpdateEventKeyState(Keys.Down, true); break;
+                case Keys.Left: _keyLeft = true; UpdateEventKeyState(Keys.Left, true); break;
+                case Keys.Right: _keyRight = true; UpdateEventKeyState(Keys.Right, true); break;
                 default: handled = false; break;
             }
             
@@ -916,17 +1083,17 @@ namespace NOMAD.MissionPlanner
                 return;
             }
             
-            // Reset the specific key that was released
+            // Reset the specific key that was released (both internal and event-based state)
             switch (e.KeyCode)
             {
-                case Keys.W: _keyW = false; break;
-                case Keys.S: _keyS = false; break;
-                case Keys.A: _keyA = false; break;
-                case Keys.D: _keyD = false; break;
-                case Keys.Up: _keyUp = false; break;
-                case Keys.Down: _keyDown = false; break;
-                case Keys.Left: _keyLeft = false; break;
-                case Keys.Right: _keyRight = false; break;
+                case Keys.W: _keyW = false; UpdateEventKeyState(Keys.W, false); break;
+                case Keys.S: _keyS = false; UpdateEventKeyState(Keys.S, false); break;
+                case Keys.A: _keyA = false; UpdateEventKeyState(Keys.A, false); break;
+                case Keys.D: _keyD = false; UpdateEventKeyState(Keys.D, false); break;
+                case Keys.Up: _keyUp = false; UpdateEventKeyState(Keys.Up, false); break;
+                case Keys.Down: _keyDown = false; UpdateEventKeyState(Keys.Down, false); break;
+                case Keys.Left: _keyLeft = false; UpdateEventKeyState(Keys.Left, false); break;
+                case Keys.Right: _keyRight = false; UpdateEventKeyState(Keys.Right, false); break;
             }
             
             UpdateVelocitiesFromKeys();
@@ -1020,6 +1187,11 @@ namespace NOMAD.MissionPlanner
         {
             _keyW = _keyS = _keyA = _keyD = false;
             _keyUp = _keyDown = _keyLeft = _keyRight = false;
+            
+            // Also reset event-based tracking (cross-platform)
+            _eventKeyW = _eventKeyA = _eventKeyS = _eventKeyD = false;
+            _eventKeyUp = _eventKeyDown = _eventKeyLeft = _eventKeyRight = false;
+            
             _vx = _vy = _vz = 0;
             _yawRateCmd = 0;
             UpdateKeyVisuals();

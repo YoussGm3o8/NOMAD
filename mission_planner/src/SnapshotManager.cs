@@ -104,10 +104,10 @@ namespace NOMAD.MissionPlanner
                 BackColor = Color.FromArgb(45, 45, 48),
             };
 
-            _btnRefresh = CreateToolButton("🔄 Refresh", RefreshSnapshots);
-            _btnOpenFolder = CreateToolButton("📁 Open Folder", OpenSnapshotFolder);
-            _btnExportTargets = CreateToolButton("📤 Export Targets", ExportTargetLocalizations);
-            _btnDeleteSelected = CreateToolButton("🗑️ Delete", DeleteSelectedSnapshot);
+            _btnRefresh = CreateToolButton("Refresh", RefreshSnapshots);
+            _btnOpenFolder = CreateToolButton("Open Folder", OpenSnapshotFolder);
+            _btnExportTargets = CreateToolButton("Export Targets", ExportTargetLocalizations);
+            _btnDeleteSelected = CreateToolButton("Delete", DeleteSelectedSnapshot);
             _btnDeleteSelected.BackColor = Color.FromArgb(150, 50, 50);
 
             toolbar.Controls.AddRange(new Control[] { _btnRefresh, _btnOpenFolder, _btnExportTargets, _btnDeleteSelected });
@@ -274,7 +274,7 @@ namespace NOMAD.MissionPlanner
 
             _btnSaveDescription = new Button
             {
-                Text = "💾 Save Description",
+                Text = "Save Description",
                 Location = new Point(15, 140),
                 Size = new Size(150, 30),
                 FlatStyle = FlatStyle.Flat,

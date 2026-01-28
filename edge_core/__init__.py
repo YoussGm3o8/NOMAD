@@ -42,6 +42,13 @@ from .time_manager import (
     get_time_sync_service,
     init_time_sync_service,
 )
+from .nav_controller import (
+    NavController,
+    NavMode,
+    NavHealth,
+    NavStatus,
+    VelocityCommand,
+)
 
 # Optional imports (may not be available on all platforms)
 try:
@@ -88,6 +95,12 @@ __all__ = [
     "TimeSyncSource",
     "get_time_sync_service",
     "init_time_sync_service",
+    # Navigation Controller
+    "NavController",
+    "NavMode",
+    "NavHealth",
+    "NavStatus",
+    "VelocityCommand",
     # Isaac ROS (optional)
     "IsaacROSBridge",
     "VIOState",

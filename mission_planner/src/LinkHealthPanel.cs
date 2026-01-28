@@ -302,7 +302,7 @@ namespace NOMAD.MissionPlanner
 
             var title = new Label
             {
-                Text = "⚙️ Failover Settings",
+                Text = "Failover Settings",
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 ForeColor = _accentColor,
                 Location = new Point(15, 10),
@@ -393,7 +393,7 @@ namespace NOMAD.MissionPlanner
 
             var title = new Label
             {
-                Text = "📋 Failover Log",
+                Text = "Failover Log",
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 ForeColor = _accentColor,
                 Location = new Point(15, 10),

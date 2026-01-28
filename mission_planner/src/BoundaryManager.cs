@@ -14,6 +14,7 @@ using System.Linq;
 using System.Media;
 using System.Timers;
 using System.Windows.Forms;
+using MissionPlanner;
 using MissionPlanner.Utilities;
 using Newtonsoft.Json;
 
@@ -136,11 +137,24 @@ namespace NOMAD.MissionPlanner
         public void CheckBoundaries()
         {
             // Get current position from Mission Planner
-            var lat = MissionPlanner.MainV2.comPort?.MAV?.cs?.lat ?? 0;
-            var lon = MissionPlanner.MainV2.comPort?.MAV?.cs?.lng ?? 0;
-            var altAgl = MissionPlanner.MainV2.comPort?.MAV?.cs?.alt ?? 0; // Alt above home
+            var lat = MainV2.comPort?.MAV?.cs?.lat ?? 0;
+            var lon = MainV2.comPort?.MAV?.cs?.lng ?? 0;
+            var altAgl = MainV2.comPort?.MAV?.cs?.alt ?? 0; // Alt above home
 
-            if (lat == 0 && lon == 0) return; // No position
+            // If no valid position, update status to indicate waiting for GPS
+            if (lat == 0 && lon == 0)
+            {
+                if (CurrentStatus != "no_position")
+                {
+                    CurrentStatus = "no_position";
+                    BoundaryStatusChanged?.Invoke(this, new BoundaryStatusEventArgs
+                    {
+                        Status = "no_position",
+                        NearestBoundaryName = "",
+                    });
+                }
+                return;
+            }
 
             var position = new GpsPoint(lat, lon);
             var status = _missionConfig.CheckBoundaryStatus(position, altAgl);
@@ -352,12 +366,12 @@ namespace NOMAD.MissionPlanner
             {
                 Location = new Point(10, yOffset),
                 Size = new Size(550, 60),
-                BackColor = Color.FromArgb(40, 100, 40), // Green = inside
+                BackColor = Color.FromArgb(80, 80, 90), // Gray = waiting for GPS
             };
 
             _lblStatus = new Label
             {
-                Text = "[OK] Inside Boundaries",
+                Text = "[?] Waiting for GPS Position",
                 Font = new Font("Segoe UI", 14, FontStyle.Bold),
                 ForeColor = Color.White,
                 Location = new Point(15, 8),
@@ -732,8 +746,8 @@ namespace NOMAD.MissionPlanner
         private void AddBoundaryPoint(DataGridView dgv, FlightBoundary boundary)
         {
             // Get current position or use default
-            var lat = MissionPlanner.MainV2.comPort?.MAV?.cs?.lat ?? 45.0;
-            var lon = MissionPlanner.MainV2.comPort?.MAV?.cs?.lng ?? -73.0;
+            var lat = MainV2.comPort?.MAV?.cs?.lat ?? 45.0;
+            var lon = MainV2.comPort?.MAV?.cs?.lng ?? -73.0;
 
             var point = new GpsPoint(lat, lon);
             boundary.Vertices.Add(point);
@@ -791,6 +805,12 @@ namespace NOMAD.MissionPlanner
                     _statusPanel.BackColor = Color.FromArgb(180, 40, 40);
                     _lblStatus.Text = "[!!] HARD BOUNDARY VIOLATION!";
                     _lblCountdown.Visible = true;
+                    break;
+
+                case "no_position":
+                    _statusPanel.BackColor = Color.FromArgb(80, 80, 90);
+                    _lblStatus.Text = "[?] Waiting for GPS Position";
+                    _lblCountdown.Visible = false;
                     break;
             }
         }
@@ -891,10 +911,31 @@ namespace NOMAD.MissionPlanner
 
         private void BtnImportGoogleMaps_Click(object sender, EventArgs e)
         {
-            var input = Microsoft.VisualBasic.Interaction.InputBox(
-                "Paste Google Maps coordinates (one per line, format: lat,lon or lon,lat):",
-                "Import from Google Maps",
-                "");
+            // Simple input dialog to replace VB InputBox
+            string input = null;
+            using (var inputForm = new Form())
+            {
+                inputForm.Width = 500;
+                inputForm.Height = 200;
+                inputForm.Text = "Import from Google Maps";
+                inputForm.StartPosition = FormStartPosition.CenterParent;
+                inputForm.BackColor = Color.FromArgb(40, 40, 45);
+                inputForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+                inputForm.MaximizeBox = false;
+                inputForm.MinimizeBox = false;
+                
+                var label = new Label() { Left = 20, Top = 20, Width = 440, Text = "Paste coordinates (one per line, format: lat,lon):", ForeColor = Color.White };
+                var textBox = new TextBox() { Left = 20, Top = 50, Width = 440, Height = 60, Multiline = true };
+                var btnOk = new Button() { Text = "OK", Left = 280, Width = 80, Top = 120, DialogResult = DialogResult.OK, BackColor = Color.FromArgb(0, 122, 204), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+                var btnCancel = new Button() { Text = "Cancel", Left = 370, Width = 80, Top = 120, DialogResult = DialogResult.Cancel, FlatStyle = FlatStyle.Flat, ForeColor = Color.White };
+                
+                inputForm.Controls.AddRange(new Control[] { label, textBox, btnOk, btnCancel });
+                inputForm.AcceptButton = btnOk;
+                inputForm.CancelButton = btnCancel;
+                
+                if (inputForm.ShowDialog() == DialogResult.OK)
+                    input = textBox.Text;
+            }
 
             if (string.IsNullOrWhiteSpace(input)) return;
 
@@ -970,11 +1011,49 @@ namespace NOMAD.MissionPlanner
             try
             {
                 // Try to get fence from Mission Planner
-                var fence = MissionPlanner.MainV2.comPort?.MAV?.fencepoints;
-                if (fence != null && fence.Count > 0)
+                // Note: fencepoints type varies by MP version
+                var mav = MainV2.comPort?.MAV;
+                if (mav == null)
                 {
-                    var points = fence.Select(p => new GpsPoint(p.lat, p.lng)).ToList();
-
+                    CustomMessageBox.Show("Not connected to vehicle", "Warning");
+                    return;
+                }
+                
+                var points = new List<GpsPoint>();
+                
+                // Try to access fencepoints which may be a dictionary in newer versions
+                var fencepointsField = mav.GetType().GetProperty("fencepoints");
+                if (fencepointsField != null)
+                {
+                    var fenceData = fencepointsField.GetValue(mav);
+                    if (fenceData != null)
+                    {
+                        // Handle as IEnumerable via reflection
+                        var valuesProperty = fenceData.GetType().GetProperty("Values");
+                        if (valuesProperty != null)
+                        {
+                            var values = valuesProperty.GetValue(fenceData) as System.Collections.IEnumerable;
+                            if (values != null)
+                            {
+                                foreach (var item in values)
+                                {
+                                    var latProp = item.GetType().GetField("lat");
+                                    var lngProp = item.GetType().GetField("lng");
+                                    if (latProp != null && lngProp != null)
+                                    {
+                                        var lat = Convert.ToDouble(latProp.GetValue(item));
+                                        var lng = Convert.ToDouble(lngProp.GetValue(item));
+                                        if (lat != 0 || lng != 0)
+                                            points.Add(new GpsPoint(lat, lng));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                if (points.Count > 0)
+                {
                     var result = CustomMessageBox.Show(
                         $"Import {points.Count} fence points as Soft (Yes) or Hard (No) boundary?",
                         "Select Boundary Type",

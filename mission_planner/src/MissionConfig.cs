@@ -646,7 +646,7 @@ namespace NOMAD.MissionPlanner
                 new EquipmentItem 
                 { 
                     Type = "oxygen_tank", 
-                    Name = "Oxygen Tank (Simulated)", 
+                    Name = "Oxygen Tank", 
                     WeightKg = 1.0, 
                     Dimensions = "15x15x30 cm", 
                     PointValue = 5 

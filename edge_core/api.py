@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from .zed_camera import ZEDCameraService
     from .vio_pipeline import VIOPipeline
     from .isaac_ros_bridge import IsaacROSBridge
+    from .nav_controller import NavController
 
 logger = logging.getLogger("edge_core.api")
 
@@ -102,6 +103,25 @@ class VIOUpdateRequest(BaseModel):
     source: str = "external"
 
 
+class NavVelocityRequest(BaseModel):
+    """Request model for navigation velocity command from ROS nav2/nvblox."""
+    timestamp: float
+    vx: float       # Forward velocity (m/s)
+    vy: float       # Lateral velocity (m/s)
+    vz: float       # Vertical velocity (m/s)
+    yaw_rate: float # Yaw rate (rad/s)
+    source: str = "nav2"
+
+
+class NavPositionRequest(BaseModel):
+    """Request model for navigation position target."""
+    x: float        # North position (NED meters)
+    y: float        # East position (NED meters)
+    z: float        # Down position (NED meters)
+    yaw: float      # Heading (radians)
+    source: str = "nav2"
+
+
 # ==================== Global Service References ====================
 # These are set by main.py after initialization
 
@@ -109,6 +129,7 @@ _health_monitor: Optional["JetsonHealthMonitor"] = None
 _camera_service: Optional["ZEDCameraService"] = None
 _vio_pipeline: Optional["VIOPipeline"] = None
 _isaac_bridge: Optional["IsaacROSBridge"] = None
+_nav_controller: Optional["NavController"] = None
 _exclusion_map: list[dict] = []
 
 # VIO state from external sources (ROS bridge)
@@ -139,6 +160,12 @@ def set_isaac_bridge(bridge: "IsaacROSBridge") -> None:
     """Set the Isaac ROS bridge reference."""
     global _isaac_bridge
     _isaac_bridge = bridge
+
+
+def set_nav_controller(controller: "NavController") -> None:
+    """Set the navigation controller reference."""
+    global _nav_controller
+    _nav_controller = controller
 
 
 def create_app(state_manager: StateManager) -> FastAPI:
@@ -547,6 +574,128 @@ def create_app(state_manager: StateManager) -> FastAPI:
         from .vio_pipeline import VIOCalibration
         results = VIOCalibration.validate_tracking(_camera_service, duration_s=3.0)
         return results
+
+    # ==================== Navigation Endpoints ====================
+    # Jetson-centric navigation: Isaac ROS nav2/nvblox -> Edge Core -> ArduPilot GUIDED
+
+    @app.get("/api/nav/status", tags=["Navigation"])
+    async def nav_status():
+        """
+        Get navigation controller status.
+        
+        Returns the current navigation mode, health, and commanded velocities.
+        This is the Jetson-centric navigation controller that bridges
+        ROS2 nav2/nvblox to ArduPilot GUIDED mode.
+        """
+        if not _nav_controller:
+            return {
+                "available": False,
+                "mode": "disabled",
+                "message": "Navigation controller not initialized",
+            }
+        
+        status = _nav_controller.status
+        return {
+            "available": True,
+            **status.to_dict(),
+        }
+
+    @app.post("/api/nav/velocity", tags=["Navigation"])
+    async def nav_velocity(request: NavVelocityRequest):
+        """
+        Send velocity command for autonomous navigation.
+        
+        This is the primary endpoint for Jetson-centric navigation.
+        Isaac ROS nav2/nvblox generates /cmd_vel which ros_http_bridge
+        forwards here. Edge Core then sends SET_POSITION_TARGET_LOCAL_NED
+        to ArduPilot in GUIDED mode.
+        
+        Velocity convention (ROS REP 103):
+        - vx: Forward velocity (m/s, positive = forward)
+        - vy: Lateral velocity (m/s, positive = left)
+        - vz: Vertical velocity (m/s, positive = up)
+        - yaw_rate: Yaw rate (rad/s, positive = CCW)
+        """
+        if not _nav_controller:
+            raise HTTPException(status_code=503, detail="Navigation controller not initialized")
+        
+        success = _nav_controller.send_velocity(
+            vx=request.vx,
+            vy=request.vy,
+            vz=request.vz,
+            yaw_rate=request.yaw_rate,
+            source=request.source,
+        )
+        
+        return {
+            "success": success,
+            "timestamp": request.timestamp,
+            "commanded": {
+                "vx": request.vx,
+                "vy": request.vy,
+                "vz": request.vz,
+                "yaw_rate": request.yaw_rate,
+            },
+        }
+
+    @app.post("/api/nav/position", tags=["Navigation"])
+    async def nav_position(request: NavPositionRequest):
+        """
+        Send position target for navigation.
+        
+        Position is in local NED frame relative to VIO origin.
+        """
+        if not _nav_controller:
+            raise HTTPException(status_code=503, detail="Navigation controller not initialized")
+        
+        success = _nav_controller.send_position(
+            x=request.x,
+            y=request.y,
+            z=request.z,
+            yaw=request.yaw,
+            source=request.source,
+        )
+        
+        return {
+            "success": success,
+            "target": {
+                "x": request.x,
+                "y": request.y,
+                "z": request.z,
+                "yaw": request.yaw,
+            },
+        }
+
+    @app.post("/api/nav/stop", tags=["Navigation"])
+    async def nav_stop():
+        """
+        Emergency stop - send zero velocity command.
+        
+        Use this to immediately halt all movement. The vehicle will
+        attempt to hold position (requires VIO/GPS).
+        """
+        if not _nav_controller:
+            raise HTTPException(status_code=503, detail="Navigation controller not initialized")
+        
+        success = _nav_controller.stop_movement()
+        return {"success": success, "message": "Stop command sent"}
+
+    @app.post("/api/nav/enable_guided", tags=["Navigation"])
+    async def nav_enable_guided():
+        """
+        Request ArduPilot to enter GUIDED mode.
+        
+        GUIDED mode is required for Jetson navigation commands to work.
+        This sends a MAVLink mode change request to the flight controller.
+        """
+        if not _nav_controller:
+            raise HTTPException(status_code=503, detail="Navigation controller not initialized")
+        
+        success = _nav_controller.enable_guided_mode()
+        return {
+            "success": success,
+            "message": "GUIDED mode requested" if success else "Failed to request GUIDED mode",
+        }
 
     # ==================== Camera Endpoints ====================
 

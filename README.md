@@ -2,76 +2,104 @@
 
 **McGill Aerial Design - AEAC 2026 Competition System**
 
-🚁 Drone system for two distinct competition tasks:
+Drone system for two distinct competition tasks:
 
-| Task | Configuration | Computer | Navigation |
-|------|--------------|----------|------------|
-| **Task 1** (Outdoor Recon) | ZED 2i camera | Orin Nano (imaging only) | GPS/RTK (pilot-only) |
-| **Task 2** (Indoor Extinguish) | With Jetson | Orin Nano | ZED VIO |
+| Task | Environment | Flight Control | Positioning | Jetson Role |
+|------|-------------|----------------|-------------|-------------|
+| **Task 1** (Outdoor Recon) | Outdoor | RC Pilot (ELRS) | GPS/RTK | Video/Imaging only |
+| **Task 2** (Indoor Extinguish) | Indoor | Autonomous (Nav2) | ZED VIO | Full navigation |
 
 ---
 
-## 🎯 Task Overview
+## Task Overview
 
 ### Task 1: Outdoor Reconnaissance
-- **Pilot-only operation** - no autonomous navigation
-- Jetson Orin Nano + ZED 2i camera mounted for target imagery
-- Images used to generate text descriptions (out of scope for this repo)
-- GPS/RTK positioning via ELRS telemetry
-- RTCM corrections through Mission Planner
+- **Traditional RC pilot control** via ELRS directly to ArduPilot
+- Jetson provides video streaming and target imaging only
+- GPS/RTK positioning for outdoor operation
+- No autonomous navigation
 
 ### Task 2: Indoor Fire Extinguishing  
-- **Jetson-powered autonomous** operation
-- ZED 2i Visual-Inertial Odometry
+- **Jetson-centric autonomous navigation** (Nav2/Nvblox)
+- ArduPilot in GUIDED mode as flight controller only
+- ZED 2i Visual-Inertial Odometry for indoor positioning
 - YOLO target detection
-- 4G/LTE + Tailscale communication
+- **WASD controls** available for human intervention over LTE if needed
+- See [JETSON_NAV_ARCHITECTURE.md](docs/JETSON_NAV_ARCHITECTURE.md)
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
-### Task 1 (Jetson camera only)
+### Task 1: Outdoor (RC Pilot Control)
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    GROUND STATION                               │
-│  Mission Planner ←──ELRS Gemini──→ Cube Orange ←──GPS──→ RTK   │
-└─────────────────────────────────────────────────────────────────┘
++---------------------------------------------------------------+
+|                    GROUND STATION                              |
+|  Mission Planner (telemetry display)                          |
+|  ELRS TX (RC control)                                          |
++---------------------------------------------------------------+
+                     |
+              ELRS Radio Link
+                     |
++---------------------------------------------------------------+
+|                     DRONE                                      |
+|  +-- Cube Orange (ArduPilot) <-- ELRS RX                      |
+|  |   Standard flight modes (pilot control)                    |
+|  |                                                             |
+|  +-- Jetson Orin Nano (video only)                            |
+|      +-- ZED camera streaming                                 |
+|      +-- Tailscale (video/status to ground)                   |
++---------------------------------------------------------------+
 ```
-Jetson Orin Nano + ZED 2i camera are mounted for imaging only (no autonomous navigation).
 
-### Task 2 (With Jetson)
+### Task 2: Indoor (Jetson Autonomous)
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    GROUND STATION                               │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │         Mission Planner + NOMAD Plugin (C#)              │  │
-│  │  • Jetson Health     • WASD Nudge    • Task 2 Controls   │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                            ↕ MAVLink + HTTP                     │
-│                    ┌────────────────────┐                       │
-│                    │   Tailscale VPN    │                       │
-│                    │   (4G/LTE)         │                       │
-│                    └────────────────────┘                       │
-└─────────────────────────────────────────────────────────────────┘
-                              ↕
-┌─────────────────────────────────────────────────────────────────┐
-│                     DRONE                                       │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              EDGE CORE (Jetson Orin Nano)                │  │
-│  │  • FastAPI Server     • ZED VIO      • YOLO Detection    │  │
-│  │  • State Manager      • Gimbal PID   • Exclusion Map     │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                            ↕ MAVLink Router                     │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │         Cube Orange Flight Controller (ArduPilot)        │  │
-│  │  • EKF with VIO fusion   • ELRS backup receiver          │  │
-│  └──────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
++---------------------------------------------------------------+
+|                    GROUND STATION                              |
+|  Mission Planner + NOMAD Plugin                                |
+|  +-- Status Display (Health, VIO, Nav)                        |
+|  +-- WASD Controls (backup intervention over LTE)             |
+|                    |                                           |
+|            Tailscale VPN (4G/LTE)                             |
++---------------------------------------------------------------+
+                     |
++---------------------------------------------------------------+
+|                    JETSON ORIN NANO                            |
+|  +-- Edge Core (Python 3.13)                                  |
+|  |   +-- NavController (velocity commands to AP)              |
+|  |   +-- VIO Pipeline (position feedback to AP)               |
+|  |   +-- MavlinkService (GUIDED mode control)                 |
+|  |                                                             |
+|  +-- Isaac ROS (Docker)                                       |
+|      +-- Nav2 (autonomous path planning)                      |
+|      +-- Nvblox (3D obstacle mapping)                         |
+|      +-- ros_http_bridge (ROS -> Edge Core)                   |
++---------------------------------------------------------------+
+                     |
+            mavlink-router
+                     |
++---------------------------------------------------------------+
+|               CUBE ORANGE (ArduPilot)                          |
+|  GUIDED mode - flight controller only                          |
+|  +-- Attitude control                                          |
+|  +-- Motor mixing                                              |
+|  +-- Failsafe logic                                            |
++---------------------------------------------------------------+
 ```
+
+### Task 1 vs Task 2 Differences
+| Component | Task 1 (Outdoor) | Task 2 (Indoor) |
+|-----------|------------------|-----------------|
+| Flight Control | RC Pilot via ELRS | Jetson NavController |
+| ArduPilot Mode | Normal (pilot control) | GUIDED (velocity commands) |
+| Position Source | GPS/RTK | ZED VIO |
+| Isaac ROS | Not used | Active (Nvblox, Nav2) |
+| Jetson Role | Video streaming only | Full autonomous navigation |
+| WASD Controls | Not used | Backup human intervention |
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 NOMAD/

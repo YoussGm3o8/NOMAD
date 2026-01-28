@@ -6,9 +6,14 @@
 // ============================================================
 
 using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 using MissionPlanner;
+using MissionPlanner.Utilities;
+using Newtonsoft.Json;
 
 namespace NOMAD.MissionPlanner
 {
@@ -250,15 +255,17 @@ namespace NOMAD.MissionPlanner
     {
         private readonly DualLinkSender _sender;
         private readonly NOMADConfig _config;
+        private readonly JetsonConnectionManager _jetsonConnectionManager;
         private Label _lblVioStatus;
         private Label _lblTargetCount;
         private Button _btnResetMap;
         private Button _btnResetVio;
         
-        public NOMADTask2View(DualLinkSender sender, NOMADConfig config)
+        public NOMADTask2View(DualLinkSender sender, NOMADConfig config, JetsonConnectionManager jetsonConnectionManager = null)
         {
             _sender = sender;
             _config = config;
+            _jetsonConnectionManager = jetsonConnectionManager;
             InitializeUI();
         }
         
@@ -369,14 +376,16 @@ namespace NOMAD.MissionPlanner
     {
         private readonly DualLinkSender _sender;
         private readonly NOMADConfig _config;
+        private readonly JetsonConnectionManager _jetsonConnectionManager;
         private EmbeddedVideoPlayer _videoPlayer;
         private EnhancedWASDControl _wasdControl;
         private Label _lblStatus;
         
-        public NOMADVideoView(DualLinkSender sender, NOMADConfig config)
+        public NOMADVideoView(DualLinkSender sender, NOMADConfig config, JetsonConnectionManager jetsonConnectionManager = null)
         {
             _sender = sender;
             _config = config;
+            _jetsonConnectionManager = jetsonConnectionManager;
             InitializeUI();
         }
         
@@ -414,7 +423,7 @@ namespace NOMAD.MissionPlanner
             {
                 // RTSP URL for ZED stream - left camera will be cropped
                 string rtspUrl = $"rtsp://{_config.EffectiveIP}:8554/zed";
-                _videoPlayer = new EmbeddedVideoPlayer("ZED Left Camera", rtspUrl);
+                _videoPlayer = new EmbeddedVideoPlayer("ZED Left Camera", rtspUrl, true, _jetsonConnectionManager);
                 _videoPlayer.Dock = DockStyle.Fill;
                 videoPanel.Controls.Add(_videoPlayer);
             }
@@ -470,9 +479,11 @@ namespace NOMAD.MissionPlanner
             try
             {
                 _wasdControl = new EnhancedWASDControl(
+                    _config,
                     _config.WasdNudgeSpeed,
                     _config.WasdAltSpeed,
-                    15.0f  // Default yaw rate
+                    15.0f,  // Default yaw rate
+                    _jetsonConnectionManager
                 );
                 _wasdControl.Dock = DockStyle.Fill;
                 mainLayout.Controls.Add(_wasdControl, 1, 0);
@@ -814,6 +825,1077 @@ namespace NOMAD.MissionPlanner
                 BorderStyle = BorderStyle.FixedSingle,
             };
             parent.Controls.Add(textBox);
+        }
+    }
+    
+    // ============================================================
+    // Boundary View - Flight Boundary Configuration & Monitoring
+    // ============================================================
+    
+    /// <summary>
+    /// Boundary preset for save/load functionality
+    /// </summary>
+    public class BoundaryPreset
+    {
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public int TaskNumber { get; set; } // 0 = both, 1 = Task 1 only, 2 = Task 2 only
+        public DateTime CreatedAt { get; set; }
+        public List<GpsPoint> SoftBoundary { get; set; } = new List<GpsPoint>();
+        public List<GpsPoint> HardBoundary { get; set; } = new List<GpsPoint>();
+        public double MaxAltitudeMeters { get; set; } = 122.0; // 400ft
+        public GpsPoint BuildingLocation { get; set; }
+    }
+    
+    public class NOMADBoundaryView : NOMADViewBase, IUpdatableView
+    {
+        private readonly MissionConfig _missionConfig;
+        private readonly NOMADConfig _config;
+        private readonly BoundaryMonitor _monitor;
+        
+        // Status display
+        private Panel _statusPanel;
+        private Label _lblStatus;
+        private Label _lblCountdown;
+        private Label _lblAltitude;
+        private Label _lblPosition;
+        
+        // Boundary grids
+        private DataGridView _dgvSoftBoundary;
+        private DataGridView _dgvHardBoundary;
+        
+        // Task selection
+        private ComboBox _cmbTask;
+        private CheckBox _chkEnableMonitoring;
+        private NumericUpDown _nudMaxAlt;
+        
+        // Building location
+        private TextBox _txtBuildingLat;
+        private TextBox _txtBuildingLon;
+        
+        // Preset management
+        private ComboBox _cmbPresets;
+        private List<BoundaryPreset> _presets = new List<BoundaryPreset>();
+        private static readonly string PresetsDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Mission Planner", "plugins", "NOMAD", "boundary_presets");
+        
+        public NOMADBoundaryView(MissionConfig missionConfig, NOMADConfig config, BoundaryMonitor monitor)
+        {
+            _missionConfig = missionConfig;
+            _config = config;
+            _monitor = monitor;
+            
+            LoadPresets();
+            InitializeUI();
+            LoadBoundaries();
+            
+            // Subscribe to monitor events
+            if (_monitor != null)
+            {
+                _monitor.BoundaryStatusChanged += Monitor_BoundaryStatusChanged;
+                _monitor.BoundaryViolation += Monitor_BoundaryViolation;
+            }
+        }
+        
+        private void InitializeUI()
+        {
+            var mainLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 1,
+            };
+            
+            var scrollPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+            };
+            
+            var contentPanel = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                AutoSize = true,
+                Width = 620,
+            };
+            
+            // ============================================================
+            // Status Panel (Always visible at top)
+            // ============================================================
+            _statusPanel = new Panel
+            {
+                Size = new Size(600, 90),
+                BackColor = Color.FromArgb(80, 80, 90), // Gray = waiting for GPS
+                Margin = new Padding(5),
+            };
+            
+            _lblStatus = new Label
+            {
+                Text = "[?] Waiting for GPS Position",
+                Font = new Font("Segoe UI", 16, FontStyle.Bold),
+                ForeColor = Color.White,
+                Location = new Point(15, 10),
+                AutoSize = true,
+            };
+            _statusPanel.Controls.Add(_lblStatus);
+            
+            _lblCountdown = new Label
+            {
+                Text = "",
+                Font = new Font("Segoe UI", 14, FontStyle.Bold),
+                ForeColor = Color.Yellow,
+                Location = new Point(15, 40),
+                AutoSize = true,
+                Visible = false,
+            };
+            _statusPanel.Controls.Add(_lblCountdown);
+            
+            _lblPosition = new Label
+            {
+                Text = "Position: --",
+                Font = new Font("Consolas", 9),
+                ForeColor = Color.White,
+                Location = new Point(15, 65),
+                AutoSize = true,
+            };
+            _statusPanel.Controls.Add(_lblPosition);
+            
+            _lblAltitude = new Label
+            {
+                Text = "Alt: -- / 122m",
+                Font = new Font("Consolas", 9),
+                ForeColor = Color.White,
+                Location = new Point(300, 65),
+                AutoSize = true,
+            };
+            _statusPanel.Controls.Add(_lblAltitude);
+            
+            contentPanel.Controls.Add(_statusPanel);
+            
+            // ============================================================
+            // Task & Monitoring Settings
+            // ============================================================
+            var settingsCard = CreateCard("MONITORING SETTINGS");
+            settingsCard.Size = new Size(600, 120);
+            
+            var lblTask = new Label
+            {
+                Text = "Active Task:",
+                Font = new Font("Segoe UI", 9),
+                ForeColor = TEXT_PRIMARY,
+                Location = new Point(15, 50),
+                AutoSize = true,
+            };
+            settingsCard.Controls.Add(lblTask);
+            
+            _cmbTask = new ComboBox
+            {
+                Location = new Point(100, 47),
+                Size = new Size(200, 25),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                BackColor = Color.FromArgb(50, 50, 53),
+                ForeColor = Color.White,
+            };
+            _cmbTask.Items.AddRange(new object[] { "Task 1 - Outdoor Recon", "Task 2 - Indoor Extinguish" });
+            _cmbTask.SelectedIndex = _missionConfig.CurrentTask - 1;
+            _cmbTask.SelectedIndexChanged += (s, e) =>
+            {
+                _missionConfig.CurrentTask = _cmbTask.SelectedIndex + 1;
+                _missionConfig.Save();
+            };
+            settingsCard.Controls.Add(_cmbTask);
+            
+            _chkEnableMonitoring = new CheckBox
+            {
+                Text = "Enable Real-time Monitoring",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9),
+                Location = new Point(320, 50),
+                AutoSize = true,
+                Checked = _monitor?.IsMonitoring ?? false,
+            };
+            _chkEnableMonitoring.CheckedChanged += (s, e) =>
+            {
+                if (_chkEnableMonitoring.Checked)
+                    _monitor?.StartMonitoring();
+                else
+                    _monitor?.StopMonitoring();
+            };
+            settingsCard.Controls.Add(_chkEnableMonitoring);
+            
+            var lblMaxAlt = new Label
+            {
+                Text = "Max Alt AGL:",
+                Font = new Font("Segoe UI", 9),
+                ForeColor = TEXT_PRIMARY,
+                Location = new Point(15, 85),
+                AutoSize = true,
+            };
+            settingsCard.Controls.Add(lblMaxAlt);
+            
+            _nudMaxAlt = new NumericUpDown
+            {
+                Location = new Point(100, 82),
+                Size = new Size(80, 25),
+                Minimum = 10,
+                Maximum = 150,
+                Value = (decimal)_missionConfig.MaxAltitudeAglMeters,
+                BackColor = Color.FromArgb(50, 50, 53),
+                ForeColor = Color.White,
+            };
+            _nudMaxAlt.ValueChanged += (s, e) =>
+            {
+                _missionConfig.MaxAltitudeAglMeters = (double)_nudMaxAlt.Value;
+                _missionConfig.Save();
+            };
+            settingsCard.Controls.Add(_nudMaxAlt);
+            
+            var lblMeters = new Label
+            {
+                Text = "m (400ft = 122m)",
+                Font = new Font("Segoe UI", 8),
+                ForeColor = TEXT_SECONDARY,
+                Location = new Point(185, 87),
+                AutoSize = true,
+            };
+            settingsCard.Controls.Add(lblMeters);
+            
+            contentPanel.Controls.Add(settingsCard);
+            
+            // ============================================================
+            // Soft Boundary (Yellow - Warning)
+            // ============================================================
+            var softCard = CreateCard("SOFT BOUNDARY (Yellow - Warning)");
+            softCard.Size = new Size(600, 220);
+            softCard.ForeColor = Color.Yellow;
+            
+            _dgvSoftBoundary = CreateBoundaryGrid();
+            _dgvSoftBoundary.Location = new Point(15, 45);
+            _dgvSoftBoundary.Size = new Size(400, 120);
+            _dgvSoftBoundary.CellValueChanged += (s, e) => SaveBoundaryFromGrid(_dgvSoftBoundary, _missionConfig.SoftBoundary);
+            softCard.Controls.Add(_dgvSoftBoundary);
+            
+            var btnPasteSoft = CreateButton("Paste Coords", ACCENT_COLOR, 80, 30);
+            btnPasteSoft.Location = new Point(420, 45);
+            btnPasteSoft.Click += (s, e) => PasteCoordinates(_dgvSoftBoundary, _missionConfig.SoftBoundary, "soft");
+            softCard.Controls.Add(btnPasteSoft);
+            
+            var btnClearSoft = CreateButton("Clear", ERROR_COLOR, 80, 30);
+            btnClearSoft.Location = new Point(505, 45);
+            btnClearSoft.Click += (s, e) => ClearBoundary(_dgvSoftBoundary, _missionConfig.SoftBoundary);
+            softCard.Controls.Add(btnClearSoft);
+            
+            var btnAddSoft = CreateButton("+ Add Point", SUCCESS_COLOR, 80, 30);
+            btnAddSoft.Location = new Point(420, 80);
+            btnAddSoft.Click += (s, e) => AddManualPoint(_dgvSoftBoundary, _missionConfig.SoftBoundary);
+            softCard.Controls.Add(btnAddSoft);
+            
+            var lblSoftCount = new Label
+            {
+                Name = "lblSoftCount",
+                Text = $"Points: {_missionConfig.SoftBoundary.Vertices.Count}",
+                Font = new Font("Segoe UI", 9),
+                ForeColor = TEXT_SECONDARY,
+                Location = new Point(15, 175),
+                AutoSize = true,
+            };
+            softCard.Controls.Add(lblSoftCount);
+            
+            contentPanel.Controls.Add(softCard);
+            
+            // ============================================================
+            // Hard Boundary (Red - Kill Required)
+            // ============================================================
+            var hardCard = CreateCard("HARD BOUNDARY (Red - Kill Required)");
+            hardCard.Size = new Size(600, 220);
+            hardCard.ForeColor = Color.Red;
+            
+            _dgvHardBoundary = CreateBoundaryGrid();
+            _dgvHardBoundary.Location = new Point(15, 45);
+            _dgvHardBoundary.Size = new Size(400, 120);
+            _dgvHardBoundary.CellValueChanged += (s, e) => SaveBoundaryFromGrid(_dgvHardBoundary, _missionConfig.HardBoundary);
+            hardCard.Controls.Add(_dgvHardBoundary);
+            
+            var btnPasteHard = CreateButton("Paste Coords", ACCENT_COLOR, 80, 30);
+            btnPasteHard.Location = new Point(420, 45);
+            btnPasteHard.Click += (s, e) => PasteCoordinates(_dgvHardBoundary, _missionConfig.HardBoundary, "hard");
+            hardCard.Controls.Add(btnPasteHard);
+            
+            var btnClearHard = CreateButton("Clear", ERROR_COLOR, 80, 30);
+            btnClearHard.Location = new Point(505, 45);
+            btnClearHard.Click += (s, e) => ClearBoundary(_dgvHardBoundary, _missionConfig.HardBoundary);
+            hardCard.Controls.Add(btnClearHard);
+            
+            var btnAddHard = CreateButton("+ Add Point", SUCCESS_COLOR, 80, 30);
+            btnAddHard.Location = new Point(420, 80);
+            btnAddHard.Click += (s, e) => AddManualPoint(_dgvHardBoundary, _missionConfig.HardBoundary);
+            hardCard.Controls.Add(btnAddHard);
+            
+            var lblHardCount = new Label
+            {
+                Name = "lblHardCount",
+                Text = $"Points: {_missionConfig.HardBoundary.Vertices.Count}",
+                Font = new Font("Segoe UI", 9),
+                ForeColor = TEXT_SECONDARY,
+                Location = new Point(15, 175),
+                AutoSize = true,
+            };
+            hardCard.Controls.Add(lblHardCount);
+            
+            contentPanel.Controls.Add(hardCard);
+            
+            // ============================================================
+            // Building Location
+            // ============================================================
+            var buildingCard = CreateCard("BUILDING LOCATION");
+            buildingCard.Size = new Size(600, 100);
+            
+            var lblBuildingLat = new Label
+            {
+                Text = "Latitude:",
+                Font = new Font("Segoe UI", 9),
+                ForeColor = TEXT_PRIMARY,
+                Location = new Point(15, 50),
+                AutoSize = true,
+            };
+            buildingCard.Controls.Add(lblBuildingLat);
+            
+            _txtBuildingLat = new TextBox
+            {
+                Location = new Point(80, 47),
+                Size = new Size(130, 25),
+                BackColor = Color.FromArgb(50, 50, 53),
+                ForeColor = Color.White,
+            };
+            buildingCard.Controls.Add(_txtBuildingLat);
+            
+            var lblBuildingLon = new Label
+            {
+                Text = "Longitude:",
+                Font = new Font("Segoe UI", 9),
+                ForeColor = TEXT_PRIMARY,
+                Location = new Point(220, 50),
+                AutoSize = true,
+            };
+            buildingCard.Controls.Add(lblBuildingLon);
+            
+            _txtBuildingLon = new TextBox
+            {
+                Location = new Point(295, 47),
+                Size = new Size(130, 25),
+                BackColor = Color.FromArgb(50, 50, 53),
+                ForeColor = Color.White,
+            };
+            buildingCard.Controls.Add(_txtBuildingLon);
+            
+            var btnSaveBuilding = CreateButton("Save", SUCCESS_COLOR, 60, 30);
+            btnSaveBuilding.Location = new Point(440, 45);
+            btnSaveBuilding.Click += SaveBuildingLocation;
+            buildingCard.Controls.Add(btnSaveBuilding);
+            
+            var btnShowBuilding = CreateButton("Show", ACCENT_COLOR, 60, 30);
+            btnShowBuilding.Location = new Point(505, 45);
+            btnShowBuilding.Click += ShowBuildingOnMap;
+            buildingCard.Controls.Add(btnShowBuilding);
+            
+            contentPanel.Controls.Add(buildingCard);
+            
+            // ============================================================
+            // Preset Management
+            // ============================================================
+            var presetCard = CreateCard("BOUNDARY PRESETS");
+            presetCard.Size = new Size(600, 100);
+            
+            _cmbPresets = new ComboBox
+            {
+                Location = new Point(15, 50),
+                Size = new Size(250, 25),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                BackColor = Color.FromArgb(50, 50, 53),
+                ForeColor = Color.White,
+            };
+            RefreshPresetCombo();
+            presetCard.Controls.Add(_cmbPresets);
+            
+            var btnLoadPreset = CreateButton("Load", SUCCESS_COLOR, 70, 30);
+            btnLoadPreset.Location = new Point(275, 47);
+            btnLoadPreset.Click += LoadSelectedPreset;
+            presetCard.Controls.Add(btnLoadPreset);
+            
+            var btnSavePreset = CreateButton("Save As...", ACCENT_COLOR, 90, 30);
+            btnSavePreset.Location = new Point(350, 47);
+            btnSavePreset.Click += SaveCurrentAsPreset;
+            presetCard.Controls.Add(btnSavePreset);
+            
+            var btnDeletePreset = CreateButton("Delete", ERROR_COLOR, 70, 30);
+            btnDeletePreset.Location = new Point(445, 47);
+            btnDeletePreset.Click += DeleteSelectedPreset;
+            presetCard.Controls.Add(btnDeletePreset);
+            
+            contentPanel.Controls.Add(presetCard);
+            
+            scrollPanel.Controls.Add(contentPanel);
+            mainLayout.Controls.Add(scrollPanel, 0, 0);
+            this.Controls.Add(mainLayout);
+        }
+        
+        private DataGridView CreateBoundaryGrid()
+        {
+            var dgv = new DataGridView
+            {
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = true,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                BackgroundColor = Color.FromArgb(30, 30, 30),
+                BorderStyle = BorderStyle.None,
+                CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
+                ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
+                DefaultCellStyle = new DataGridViewCellStyle
+                {
+                    BackColor = Color.FromArgb(40, 40, 43),
+                    ForeColor = Color.White,
+                    SelectionBackColor = Color.FromArgb(0, 122, 204),
+                    SelectionForeColor = Color.White,
+                },
+                EnableHeadersVisualStyles = false,
+                GridColor = Color.FromArgb(60, 60, 63),
+                RowHeadersVisible = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+            };
+            
+            dgv.Columns.Add(new DataGridViewTextBoxColumn { Name = "Lat", HeaderText = "Latitude", FillWeight = 50 });
+            dgv.Columns.Add(new DataGridViewTextBoxColumn { Name = "Lon", HeaderText = "Longitude", FillWeight = 50 });
+            
+            dgv.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Color.FromArgb(50, 50, 53),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+            };
+            
+            return dgv;
+        }
+        
+        private void LoadBoundaries()
+        {
+            // Load soft boundary
+            _dgvSoftBoundary.Rows.Clear();
+            foreach (var point in _missionConfig.SoftBoundary.Vertices)
+            {
+                _dgvSoftBoundary.Rows.Add(point.Lat.ToString("F8"), point.Lon.ToString("F8"));
+            }
+            
+            // Load hard boundary
+            _dgvHardBoundary.Rows.Clear();
+            foreach (var point in _missionConfig.HardBoundary.Vertices)
+            {
+                _dgvHardBoundary.Rows.Add(point.Lat.ToString("F8"), point.Lon.ToString("F8"));
+            }
+            
+            // Load building location based on current task
+            var building = _missionConfig.CurrentTask == 1 
+                ? _missionConfig.Task1Building 
+                : _missionConfig.Task2Building;
+            if (building?.Coordinates != null)
+            {
+                _txtBuildingLat.Text = building.Coordinates.Lat.ToString("F8");
+                _txtBuildingLon.Text = building.Coordinates.Lon.ToString("F8");
+            }
+            
+            UpdatePointCounts();
+        }
+        
+        private void UpdatePointCounts()
+        {
+            var softLabel = this.Controls.Find("lblSoftCount", true).FirstOrDefault() as Label;
+            var hardLabel = this.Controls.Find("lblHardCount", true).FirstOrDefault() as Label;
+            
+            if (softLabel != null)
+                softLabel.Text = $"Points: {_missionConfig.SoftBoundary.Vertices.Count}";
+            if (hardLabel != null)
+                hardLabel.Text = $"Points: {_missionConfig.HardBoundary.Vertices.Count}";
+        }
+        
+        private void PasteCoordinates(DataGridView dgv, FlightBoundary boundary, string boundaryType)
+        {
+            using (var inputForm = new Form())
+            {
+                inputForm.Width = 550;
+                inputForm.Height = 400;
+                inputForm.Text = $"Paste {boundaryType.ToUpper()} Boundary Coordinates";
+                inputForm.StartPosition = FormStartPosition.CenterParent;
+                inputForm.BackColor = Color.FromArgb(40, 40, 45);
+                inputForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+                inputForm.MaximizeBox = false;
+                
+                var instructions = new Label
+                {
+                    Text = "Paste coordinates (one per line). Supported formats:\n" +
+                           "- lon, lat (e.g., -75.7554276757985, 45.32367641417768)\n" +
+                           "- lat, lon (e.g., 45.32367641417768, -75.7554276757985)\n" +
+                           "Auto-detects format based on value ranges.",
+                    Location = new Point(20, 20),
+                    Size = new Size(500, 60),
+                    ForeColor = Color.White,
+                };
+                inputForm.Controls.Add(instructions);
+                
+                var textBox = new TextBox
+                {
+                    Location = new Point(20, 90),
+                    Size = new Size(500, 200),
+                    Multiline = true,
+                    ScrollBars = ScrollBars.Vertical,
+                    BackColor = Color.FromArgb(30, 30, 33),
+                    ForeColor = Color.White,
+                    Font = new Font("Consolas", 10),
+                };
+                inputForm.Controls.Add(textBox);
+                
+                var chkReplace = new CheckBox
+                {
+                    Text = "Replace existing points (unchecked = append)",
+                    Location = new Point(20, 300),
+                    ForeColor = Color.White,
+                    AutoSize = true,
+                    Checked = true,
+                };
+                inputForm.Controls.Add(chkReplace);
+                
+                var btnOk = new Button
+                {
+                    Text = "Import",
+                    Location = new Point(330, 330),
+                    Size = new Size(90, 30),
+                    DialogResult = DialogResult.OK,
+                    BackColor = Color.FromArgb(0, 122, 204),
+                    ForeColor = Color.White,
+                    FlatStyle = FlatStyle.Flat,
+                };
+                inputForm.Controls.Add(btnOk);
+                
+                var btnCancel = new Button
+                {
+                    Text = "Cancel",
+                    Location = new Point(430, 330),
+                    Size = new Size(90, 30),
+                    DialogResult = DialogResult.Cancel,
+                    FlatStyle = FlatStyle.Flat,
+                    ForeColor = Color.White,
+                };
+                inputForm.Controls.Add(btnCancel);
+                
+                inputForm.AcceptButton = btnOk;
+                inputForm.CancelButton = btnCancel;
+                
+                if (inputForm.ShowDialog() == DialogResult.OK)
+                {
+                    var points = ParseCoordinates(textBox.Text);
+                    if (points.Count > 0)
+                    {
+                        if (chkReplace.Checked)
+                        {
+                            boundary.Vertices.Clear();
+                            dgv.Rows.Clear();
+                        }
+                        
+                        foreach (var point in points)
+                        {
+                            boundary.Vertices.Add(point);
+                            dgv.Rows.Add(point.Lat.ToString("F8"), point.Lon.ToString("F8"));
+                        }
+                        
+                        _missionConfig.Save();
+                        UpdatePointCounts();
+                        AutoDrawBoundariesIfEnabled();
+                        CustomMessageBox.Show($"Imported {points.Count} points to {boundaryType} boundary.", "Success");
+                    }
+                    else
+                    {
+                        CustomMessageBox.Show("No valid coordinates found.", "Warning");
+                    }
+                }
+            }
+        }
+        
+        private List<GpsPoint> ParseCoordinates(string input)
+        {
+            var points = new List<GpsPoint>();
+            var lines = input.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            
+            foreach (var line in lines)
+            {
+                var cleanLine = line.Trim();
+                if (string.IsNullOrEmpty(cleanLine)) continue;
+                
+                // Try to parse various formats
+                var parts = cleanLine.Split(new[] { ',', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2)
+                {
+                    if (double.TryParse(parts[0].Trim(), out double val1) &&
+                        double.TryParse(parts[1].Trim(), out double val2))
+                    {
+                        double lat, lon;
+                        
+                        // Auto-detect format:
+                        // Longitude typically ranges -180 to 180 (but for Ottawa area ~-75)
+                        // Latitude for North America is typically 24 to 70
+                        // If abs(val1) > 90, it's likely longitude
+                        if (Math.Abs(val1) > 90)
+                        {
+                            // lon, lat format
+                            lon = val1;
+                            lat = val2;
+                        }
+                        else if (Math.Abs(val2) > 90)
+                        {
+                            // lat, lon format
+                            lat = val1;
+                            lon = val2;
+                        }
+                        else
+                        {
+                            // Both could be valid lat or lon
+                            // For Ottawa area (lat ~45, lon ~-75), check for negative values
+                            if (val1 < 0)
+                            {
+                                lon = val1;
+                                lat = val2;
+                            }
+                            else if (val2 < 0)
+                            {
+                                lat = val1;
+                                lon = val2;
+                            }
+                            else
+                            {
+                                // Default to lat, lon
+                                lat = val1;
+                                lon = val2;
+                            }
+                        }
+                        
+                        points.Add(new GpsPoint(lat, lon));
+                    }
+                }
+            }
+            
+            return points;
+        }
+        
+        private void ClearBoundary(DataGridView dgv, FlightBoundary boundary)
+        {
+            if (CustomMessageBox.Show("Clear all boundary points?", "Confirm",
+                CustomMessageBox.MessageBoxButtons.YesNo) == CustomMessageBox.DialogResult.Yes)
+            {
+                boundary.Vertices.Clear();
+                dgv.Rows.Clear();
+                _missionConfig.Save();
+                UpdatePointCounts();
+            }
+        }
+        
+        private void AddManualPoint(DataGridView dgv, FlightBoundary boundary)
+        {
+            // Use current position or last point
+            double lat = MainV2.comPort?.MAV?.cs?.lat ?? 45.0;
+            double lon = MainV2.comPort?.MAV?.cs?.lng ?? -75.0;
+            
+            var point = new GpsPoint(lat, lon);
+            boundary.Vertices.Add(point);
+            dgv.Rows.Add(lat.ToString("F8"), lon.ToString("F8"));
+            _missionConfig.Save();
+            UpdatePointCounts();
+            AutoDrawBoundariesIfEnabled();
+        }
+        
+        private void AutoDrawBoundariesIfEnabled()
+        {
+            try
+            {
+                var chkAutoDraw = this.Controls.Find("chkAutoDraw", true);
+                if (chkAutoDraw.Length > 0 && chkAutoDraw[0] is CheckBox chk && chk.Checked)
+                {
+                    MapOverlayManager.DrawBoundaries(_missionConfig);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"NOMAD: Auto-draw error - {ex.Message}");
+            }
+        }
+        
+        private void SaveBoundaryFromGrid(DataGridView dgv, FlightBoundary boundary)
+        {
+            try
+            {
+                boundary.Vertices.Clear();
+                foreach (DataGridViewRow row in dgv.Rows)
+                {
+                    if (row.Cells["Lat"].Value != null && row.Cells["Lon"].Value != null)
+                    {
+                        if (double.TryParse(row.Cells["Lat"].Value.ToString(), out double lat) &&
+                            double.TryParse(row.Cells["Lon"].Value.ToString(), out double lon))
+                        {
+                            boundary.Vertices.Add(new GpsPoint(lat, lon));
+                        }
+                    }
+                }
+                _missionConfig.Save();
+                UpdatePointCounts();
+            }
+            catch { }
+        }
+        
+        private void SaveBuildingLocation(object sender, EventArgs e)
+        {
+            try
+            {
+                if (double.TryParse(_txtBuildingLat.Text, out double lat) &&
+                    double.TryParse(_txtBuildingLon.Text, out double lon))
+                {
+                    var building = _missionConfig.CurrentTask == 1 
+                        ? _missionConfig.Task1Building 
+                        : _missionConfig.Task2Building;
+                    
+                    if (building == null)
+                    {
+                        building = new BuildingInfo();
+                        if (_missionConfig.CurrentTask == 1)
+                            _missionConfig.Task1Building = building;
+                        else
+                            _missionConfig.Task2Building = building;
+                    }
+                    
+                    building.Coordinates = new GpsPoint(lat, lon);
+                    _missionConfig.Save();
+                    CustomMessageBox.Show("Building location saved.", "Success");
+                }
+                else
+                {
+                    CustomMessageBox.Show("Invalid coordinates.", "Error");
+                }
+            }
+            catch (Exception ex)
+            {
+                CustomMessageBox.Show($"Error saving building: {ex.Message}", "Error");
+            }
+        }
+        
+        private void ShowBuildingOnMap(object sender, EventArgs e)
+        {
+            try
+            {
+                if (double.TryParse(_txtBuildingLat.Text, out double lat) &&
+                    double.TryParse(_txtBuildingLon.Text, out double lon))
+                {
+                    CustomMessageBox.Show($"Building Location (Task {_missionConfig.CurrentTask}):\n" +
+                        $"Latitude: {lat:F8}\n" +
+                        $"Longitude: {lon:F8}\n\n" +
+                        "Use Mission Planner's map to add a marker at this location.", "Building Location");
+                }
+                else
+                {
+                    CustomMessageBox.Show("Invalid coordinates.", "Error");
+                }
+            }
+            catch (Exception ex)
+            {
+                CustomMessageBox.Show($"Error: {ex.Message}", "Error");
+            }
+        }
+        
+        // ============================================================
+        // Preset Management
+        // ============================================================
+        
+        private void LoadPresets()
+        {
+            _presets.Clear();
+            try
+            {
+                if (Directory.Exists(PresetsDir))
+                {
+                    foreach (var file in Directory.GetFiles(PresetsDir, "*.json"))
+                    {
+                        var json = File.ReadAllText(file);
+                        var preset = JsonConvert.DeserializeObject<BoundaryPreset>(json);
+                        if (preset != null)
+                            _presets.Add(preset);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"NOMAD: Error loading presets - {ex.Message}");
+            }
+        }
+        
+        private void RefreshPresetCombo()
+        {
+            _cmbPresets?.Items.Clear();
+            _cmbPresets?.Items.Add("-- Select Preset --");
+            foreach (var preset in _presets.OrderByDescending(p => p.CreatedAt))
+            {
+                _cmbPresets?.Items.Add($"{preset.Name} (Task {preset.TaskNumber})");
+            }
+            if (_cmbPresets != null)
+                _cmbPresets.SelectedIndex = 0;
+        }
+        
+        private void LoadSelectedPreset(object sender, EventArgs e)
+        {
+            if (_cmbPresets.SelectedIndex <= 0) return;
+            
+            var preset = _presets[_cmbPresets.SelectedIndex - 1];
+            
+            if (CustomMessageBox.Show($"Load preset '{preset.Name}'?\nThis will replace current boundaries.",
+                "Confirm", CustomMessageBox.MessageBoxButtons.YesNo) == CustomMessageBox.DialogResult.Yes)
+            {
+                _missionConfig.SoftBoundary.Vertices = preset.SoftBoundary.ToList();
+                _missionConfig.HardBoundary.Vertices = preset.HardBoundary.ToList();
+                _missionConfig.MaxAltitudeAglMeters = preset.MaxAltitudeMeters;
+                
+                if (preset.BuildingLocation != null)
+                {
+                    var building = _missionConfig.CurrentTask == 1 
+                        ? _missionConfig.Task1Building 
+                        : _missionConfig.Task2Building;
+                    if (building == null)
+                    {
+                        building = new BuildingInfo();
+                        if (_missionConfig.CurrentTask == 1)
+                            _missionConfig.Task1Building = building;
+                        else
+                            _missionConfig.Task2Building = building;
+                    }
+                    building.Coordinates = preset.BuildingLocation;
+                }
+                
+                _missionConfig.Save();
+                LoadBoundaries();
+                _nudMaxAlt.Value = (decimal)preset.MaxAltitudeMeters;
+                
+                CustomMessageBox.Show($"Preset '{preset.Name}' loaded.", "Success");
+            }
+        }
+        
+        private void SaveCurrentAsPreset(object sender, EventArgs e)
+        {
+            using (var inputForm = new Form())
+            {
+                inputForm.Width = 400;
+                inputForm.Height = 200;
+                inputForm.Text = "Save Boundary Preset";
+                inputForm.StartPosition = FormStartPosition.CenterParent;
+                inputForm.BackColor = Color.FromArgb(40, 40, 45);
+                inputForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+                
+                var lblName = new Label { Text = "Preset Name:", Location = new Point(20, 20), ForeColor = Color.White, AutoSize = true };
+                inputForm.Controls.Add(lblName);
+                
+                var txtName = new TextBox
+                {
+                    Location = new Point(20, 45),
+                    Size = new Size(340, 25),
+                    BackColor = Color.FromArgb(50, 50, 53),
+                    ForeColor = Color.White,
+                };
+                inputForm.Controls.Add(txtName);
+                
+                var lblDesc = new Label { Text = "Description:", Location = new Point(20, 75), ForeColor = Color.White, AutoSize = true };
+                inputForm.Controls.Add(lblDesc);
+                
+                var txtDesc = new TextBox
+                {
+                    Location = new Point(20, 100),
+                    Size = new Size(340, 25),
+                    BackColor = Color.FromArgb(50, 50, 53),
+                    ForeColor = Color.White,
+                };
+                inputForm.Controls.Add(txtDesc);
+                
+                var btnOk = new Button
+                {
+                    Text = "Save",
+                    Location = new Point(180, 135),
+                    Size = new Size(80, 30),
+                    DialogResult = DialogResult.OK,
+                    BackColor = Color.FromArgb(0, 122, 204),
+                    ForeColor = Color.White,
+                    FlatStyle = FlatStyle.Flat,
+                };
+                inputForm.Controls.Add(btnOk);
+                
+                var btnCancel = new Button
+                {
+                    Text = "Cancel",
+                    Location = new Point(270, 135),
+                    Size = new Size(80, 30),
+                    DialogResult = DialogResult.Cancel,
+                    FlatStyle = FlatStyle.Flat,
+                    ForeColor = Color.White,
+                };
+                inputForm.Controls.Add(btnCancel);
+                
+                if (inputForm.ShowDialog() == DialogResult.OK && !string.IsNullOrWhiteSpace(txtName.Text))
+                {
+                    var building = _missionConfig.CurrentTask == 1 
+                        ? _missionConfig.Task1Building 
+                        : _missionConfig.Task2Building;
+                    
+                    var preset = new BoundaryPreset
+                    {
+                        Name = txtName.Text,
+                        Description = txtDesc.Text,
+                        TaskNumber = _missionConfig.CurrentTask,
+                        CreatedAt = DateTime.Now,
+                        SoftBoundary = _missionConfig.SoftBoundary.Vertices.ToList(),
+                        HardBoundary = _missionConfig.HardBoundary.Vertices.ToList(),
+                        MaxAltitudeMeters = _missionConfig.MaxAltitudeAglMeters,
+                        BuildingLocation = building?.Coordinates,
+                    };
+                    
+                    try
+                    {
+                        if (!Directory.Exists(PresetsDir))
+                            Directory.CreateDirectory(PresetsDir);
+                        
+                        var fileName = $"{txtName.Text.Replace(" ", "_")}_{DateTime.Now:yyyyMMdd_HHmmss}.json";
+                        var filePath = Path.Combine(PresetsDir, fileName);
+                        var json = JsonConvert.SerializeObject(preset, Formatting.Indented);
+                        File.WriteAllText(filePath, json);
+                        
+                        _presets.Add(preset);
+                        RefreshPresetCombo();
+                        
+                        CustomMessageBox.Show($"Preset '{preset.Name}' saved.", "Success");
+                    }
+                    catch (Exception ex)
+                    {
+                        CustomMessageBox.Show($"Error saving preset: {ex.Message}", "Error");
+                    }
+                }
+            }
+        }
+        
+        private void DeleteSelectedPreset(object sender, EventArgs e)
+        {
+            if (_cmbPresets.SelectedIndex <= 0) return;
+            
+            var preset = _presets[_cmbPresets.SelectedIndex - 1];
+            
+            if (CustomMessageBox.Show($"Delete preset '{preset.Name}'?", "Confirm",
+                CustomMessageBox.MessageBoxButtons.YesNo) == CustomMessageBox.DialogResult.Yes)
+            {
+                try
+                {
+                    // Find and delete file
+                    var files = Directory.GetFiles(PresetsDir, "*.json");
+                    foreach (var file in files)
+                    {
+                        var json = File.ReadAllText(file);
+                        var p = JsonConvert.DeserializeObject<BoundaryPreset>(json);
+                        if (p?.Name == preset.Name && p?.CreatedAt == preset.CreatedAt)
+                        {
+                            File.Delete(file);
+                            break;
+                        }
+                    }
+                    
+                    _presets.Remove(preset);
+                    RefreshPresetCombo();
+                    CustomMessageBox.Show("Preset deleted.", "Success");
+                }
+                catch (Exception ex)
+                {
+                    CustomMessageBox.Show($"Error deleting preset: {ex.Message}", "Error");
+                }
+            }
+        }
+        
+        // ============================================================
+        // Monitor Events
+        // ============================================================
+        
+        private void Monitor_BoundaryStatusChanged(object sender, BoundaryStatusEventArgs e)
+        {
+            if (InvokeRequired)
+            {
+                Invoke(new Action(() => Monitor_BoundaryStatusChanged(sender, e)));
+                return;
+            }
+            
+            switch (e.Status)
+            {
+                case "inside":
+                    _statusPanel.BackColor = Color.FromArgb(40, 100, 40);
+                    _lblStatus.Text = "[OK] Inside Boundaries";
+                    _lblCountdown.Visible = false;
+                    break;
+                    
+                case "soft_violation":
+                    _statusPanel.BackColor = Color.FromArgb(180, 150, 0);
+                    _lblStatus.Text = "[!] SOFT BOUNDARY - Turn Around!";
+                    _lblCountdown.Visible = false;
+                    break;
+                    
+                case "hard_violation":
+                    _statusPanel.BackColor = Color.FromArgb(180, 40, 40);
+                    _lblStatus.Text = "[!!] HARD BOUNDARY VIOLATION!";
+                    _lblCountdown.Visible = true;
+                    break;
+
+                case "no_position":
+                    _statusPanel.BackColor = Color.FromArgb(80, 80, 90);
+                    _lblStatus.Text = "[?] Waiting for GPS Position";
+                    _lblCountdown.Visible = false;
+                    break;
+            }
+        }
+        
+        private void Monitor_BoundaryViolation(object sender, BoundaryViolationEventArgs e)
+        {
+            if (InvokeRequired)
+            {
+                Invoke(new Action(() => Monitor_BoundaryViolation(sender, e)));
+                return;
+            }
+            
+            if (e.BoundaryType == "hard" && _monitor?.KillCountdown != null)
+            {
+                _lblCountdown.Text = $"KILL IN {_monitor.KillCountdown} SECONDS!";
+            }
+        }
+        
+        public void UpdateData()
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke((MethodInvoker)UpdateData);
+                return;
+            }
+            
+            try
+            {
+                var cs = MainV2.comPort?.MAV?.cs;
+                if (cs != null)
+                {
+                    _lblPosition.Text = $"Position: {cs.lat:F6}, {cs.lng:F6}";
+                    _lblAltitude.Text = $"Alt: {cs.alt:F1}m / {_missionConfig.MaxAltitudeAglMeters:F0}m";
+                    
+                    // Color altitude warning
+                    if (cs.alt > _missionConfig.MaxAltitudeAglMeters * 0.9)
+                        _lblAltitude.ForeColor = Color.Red;
+                    else if (cs.alt > _missionConfig.MaxAltitudeAglMeters * 0.8)
+                        _lblAltitude.ForeColor = Color.Yellow;
+                    else
+                        _lblAltitude.ForeColor = Color.White;
+                }
+            }
+            catch { }
         }
     }
 }

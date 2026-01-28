@@ -38,8 +38,11 @@ namespace NOMAD.MissionPlanner
 
         // Plugin state
         private NOMADConfig _config;
+        private MissionConfig _missionConfig;
+        private BoundaryMonitor _boundaryMonitor;
         private DualLinkSender _sender;
         private MAVLinkConnectionManager _connectionManager;  // Dual link manager
+        private JetsonConnectionManager _jetsonConnectionManager;  // Jetson HTTP connectivity
         private Form _popOutForm;                             // Pop-out window for NOMAD screen
         private bool _hudVideoStarted = false;
         private bool _screenRegistered = false;               // Track if NOMAD screen is registered with MainSwitcher
@@ -57,9 +60,17 @@ namespace NOMAD.MissionPlanner
             {
                 // Load configuration
                 _config = NOMADConfig.Load();
+                _missionConfig = MissionConfig.Load();
                 
                 // Initialize dual-link sender
                 _sender = new DualLinkSender(_config);
+                
+                // Initialize boundary monitor for competition
+                _boundaryMonitor = new BoundaryMonitor(_missionConfig, _config);
+
+                // Initialize Jetson connection manager for non-blocking UI
+                _jetsonConnectionManager = new JetsonConnectionManager(_config);
+                _jetsonConnectionManager.StartPolling();
 
                 // Initialize MAVLink dual link connection manager
                 if (_config.DualLinkEnabled)
@@ -304,6 +315,16 @@ namespace NOMAD.MissionPlanner
         {
             try
             {
+                // Stop boundary monitor
+                _boundaryMonitor?.StopMonitoring();
+                _boundaryMonitor?.Dispose();
+                _boundaryMonitor = null;
+                
+                // Stop Jetson connection manager
+                _jetsonConnectionManager?.StopPolling();
+                _jetsonConnectionManager?.Dispose();
+                _jetsonConnectionManager = null;
+                
                 // Stop connection manager monitoring
                 _connectionManager?.StopMonitoring();
                 _connectionManager?.Dispose();
@@ -345,7 +366,7 @@ namespace NOMAD.MissionPlanner
                 Console.WriteLine("NOMAD: Registering screen...");
                 
                 // Set static configuration for the MainSwitcher-created instance
-                NOMADMainScreen.SetStaticConfig(_sender, _config, _connectionManager);
+                NOMADMainScreen.SetStaticConfig(_sender, _config, _connectionManager, _jetsonConnectionManager, _missionConfig, _boundaryMonitor);
                 
                 object mainSwitcher = null;
                 
@@ -487,9 +508,9 @@ namespace NOMAD.MissionPlanner
                 if (_popOutForm == null || _popOutForm.IsDisposed)
                 {
                     // Set static configuration for the screen
-                    NOMADMainScreen.SetStaticConfig(_sender, _config, _connectionManager);
+                    NOMADMainScreen.SetStaticConfig(_sender, _config, _connectionManager, _jetsonConnectionManager, _missionConfig, _boundaryMonitor);
                     
-                    var nomadScreen = new NOMADMainScreen(_sender, _config, _connectionManager);
+                    var nomadScreen = new NOMADMainScreen(_sender, _config, _connectionManager, _jetsonConnectionManager, _missionConfig, _boundaryMonitor);
                     
                     _popOutForm = new Form
                     {

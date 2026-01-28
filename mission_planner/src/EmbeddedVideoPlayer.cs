@@ -58,6 +58,10 @@ namespace NOMAD.MissionPlanner
         private volatile bool _isStreamSwitching = false;
         private volatile bool _disposed = false;
         
+        // Connection safety
+        private JetsonConnectionManager _jetsonConnectionManager;
+        private bool _jetsonConnected = true;  // Default true if no manager provided
+        
         // Playback settings - ultra-low latency defaults
         private int _networkCaching = 50; // ms - minimum for stable playback
         private string _quality = "auto";
@@ -80,13 +84,22 @@ namespace NOMAD.MissionPlanner
         /// <param name="title">Title to display</param>
         /// <param name="rtspUrl">RTSP stream URL (e.g., rtsp://ip:8554/zed)</param>
         /// <param name="showControls">Whether to show control bar and title (false for minimal view)</param>
-        public EmbeddedVideoPlayer(string title, string rtspUrl, bool showControls = true)
+        /// <param name="jetsonConnectionManager">Connection manager for safety-aware behavior</param>
+        public EmbeddedVideoPlayer(string title, string rtspUrl, bool showControls = true, JetsonConnectionManager jetsonConnectionManager = null)
         {
             _streamTitle = title;
             _streamUrl = rtspUrl;  // Full stream URL (e.g., rtsp://ip:8554/zed)
             _isPlaying = false;
             _showControls = showControls;
             _useGStreamer = CheckGStreamerAvailable();
+            _jetsonConnectionManager = jetsonConnectionManager;
+            
+            // Subscribe to connection state if manager provided
+            if (_jetsonConnectionManager != null)
+            {
+                _jetsonConnected = _jetsonConnectionManager.IsConnected;
+                _jetsonConnectionManager.ConnectionStateChanged += OnJetsonConnectionStateChanged;
+            }
             
             // Parse base URL and stream name from rtspUrl
             ParseStreamUrl(rtspUrl);
@@ -126,6 +139,37 @@ namespace NOMAD.MissionPlanner
             {
                 _baseRtspUrl = "rtsp://100.75.218.89:8554";
                 _selectedStream = "zed";
+            }
+        }
+        
+        /// <summary>
+        /// Handles Jetson connection state changes.
+        /// </summary>
+        private void OnJetsonConnectionStateChanged(object sender, JetsonConnectionStateChangedEventArgs e)
+        {
+            _jetsonConnected = e.NewState == JetsonConnectionState.Connected;
+            
+            if (!_jetsonConnected)
+            {
+                // Stop stream when Jetson disconnects
+                if (InvokeRequired)
+                    BeginInvoke(new Action(() => {
+                        StopStream();
+                        UpdateStatus("Stream stopped - Jetson offline", Color.Orange);
+                    }));
+                else
+                {
+                    StopStream();
+                    UpdateStatus("Stream stopped - Jetson offline", Color.Orange);
+                }
+            }
+            else
+            {
+                // Update status when connected
+                if (InvokeRequired)
+                    BeginInvoke(new Action(() => UpdateStatus("Jetson connected - ready", Color.Gray)));
+                else
+                    UpdateStatus("Jetson connected - ready", Color.Gray);
             }
         }
         
@@ -632,6 +676,14 @@ namespace NOMAD.MissionPlanner
             if (_disposed)
             {
                 System.Diagnostics.Debug.WriteLine("NOMAD Video: Cannot start - control is disposed");
+                return;
+            }
+            
+            // SAFETY: Don't start stream if Jetson is offline
+            if (!_jetsonConnected)
+            {
+                UpdateStatus("Stream unavailable - Jetson offline", Color.Orange);
+                System.Diagnostics.Debug.WriteLine("NOMAD Video: Cannot start - Jetson offline");
                 return;
             }
             
@@ -1193,25 +1245,72 @@ a=recvonly";
                     return;
                 }
                 
-                // Create a System.Drawing.Bitmap from the SkiaSharp bitmap data
-                // SAFETY: Lock the bits with proper error handling
-                SkiaSharp.SKPixmap pixmap = null;
+                // Create a System.Drawing.Bitmap from the MissionPlanner.Drawing.Bitmap
+                // MPBitmap internally wraps SKBitmap - access via reflection or direct property
                 try
                 {
-                    pixmap = frame.PeekPixels();
-                    if (pixmap == null || pixmap.GetPixels() == IntPtr.Zero)
+                    Bitmap displayBitmap = null;
+                    
+                    // Try to get the internal SkiaSharp bitmap via reflection
+                    var frameType = frame.GetType();
+                    SkiaSharp.SKBitmap skBitmap = null;
+                    
+                    // Try property first
+                    var skBitmapProp = frameType.GetProperty("nativeSkBitmap");
+                    if (skBitmapProp != null)
                     {
-                        System.Diagnostics.Debug.WriteLine("NOMAD Video: Failed to get pixel data");
-                        return;
+                        skBitmap = skBitmapProp.GetValue(frame) as SkiaSharp.SKBitmap;
                     }
                     
-                    var displayBitmap = new Bitmap(
-                        frame.Width, 
-                        frame.Height, 
-                        4 * frame.Width,  // stride = 4 bytes per pixel (BGRA)
-                        System.Drawing.Imaging.PixelFormat.Format32bppPArgb,
-                        pixmap.GetPixels()
-                    );
+                    // Try field if property not found
+                    if (skBitmap == null)
+                    {
+                        var skBitmapField = frameType.GetField("nativeSkBitmap", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        if (skBitmapField != null)
+                        {
+                            skBitmap = skBitmapField.GetValue(frame) as SkiaSharp.SKBitmap;
+                        }
+                    }
+                    
+                    if (skBitmap != null)
+                    {
+                        // Direct pixel access from internal SKBitmap
+                        var pixmap = skBitmap.PeekPixels();
+                        if (pixmap != null && pixmap.GetPixels() != IntPtr.Zero)
+                        {
+                            displayBitmap = new Bitmap(
+                                skBitmap.Width,
+                                skBitmap.Height,
+                                skBitmap.RowBytes,
+                                System.Drawing.Imaging.PixelFormat.Format32bppPArgb,
+                                pixmap.GetPixels()
+                            );
+                        }
+                    }
+                    else
+                    {
+                        // Fallback: Use Clone which returns MPBitmap, then try ToSKImage
+                        // This is slower but more compatible
+                        using (var ms = new MemoryStream())
+                        {
+                            // Try saving via reflection on the clone
+                            var cloned = frame.Clone();
+                            var saveMethod = cloned.GetType().GetMethod("Save", new[] { typeof(Stream), typeof(SkiaSharp.SKEncodedImageFormat), typeof(int) });
+                            if (saveMethod != null)
+                            {
+                                saveMethod.Invoke(cloned, new object[] { ms, SkiaSharp.SKEncodedImageFormat.Png, 80 });
+                                ms.Position = 0;
+                                displayBitmap = new Bitmap(ms);
+                            }
+                            (cloned as IDisposable)?.Dispose();
+                        }
+                    }
+                    
+                    if (displayBitmap == null)
+                    {
+                        System.Diagnostics.Debug.WriteLine("NOMAD Video: Failed to convert frame - no compatible method found");
+                        return;
+                    }
 
                     // Update video display
                     var old = _videoBox?.Image;
@@ -1241,7 +1340,7 @@ a=recvonly";
                 }
                 finally
                 {
-                    // Pixmap doesn't need explicit disposal - it's a view into the bitmap
+                    // Stream-based conversion handles cleanup automatically
                 }
             }
             catch (AccessViolationException ex)

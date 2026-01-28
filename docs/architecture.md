@@ -16,3 +16,28 @@
 - Mission Planner plugin provides centralized control, receives RTSP video streams, and sends task triggers via HTTP API.
 
 Keep each module small: one responsibility per package, tests in `tests/` mirroring package paths.
+
+## Performance Considerations
+
+### Video Latency Chain
+
+Current video pipeline:
+```
+ZED -> Isaac ROS -> ROS Topic -> Python Bridge -> TCP Socket -> FFmpeg Encode -> MediaMTX RTSP -> Network -> Mission Planner (LibVLC)
+```
+
+**Risk**: Each hop adds latency. Achieving glass-to-glass latency under 200ms is challenging with this many serialization/deserialization steps.
+
+**Mitigation**: If latency becomes critical, consider a direct GStreamer pipeline from the ZED wrapper to RTSP, bypassing the Python Bridge/TCP hop. This trades custom overlay capability for lower latency.
+
+### Resource Contention on Jetson
+
+The Jetson Orin Nano runs multiple concurrent workloads:
+- Docker (Isaac ROS VSLAM + Nvblox + YOLO)
+- Python Edge Core (FastAPI + MAVLink handling)
+- FFmpeg (Software or NVENC encoding)
+- MAVLink Router
+
+**Risk**: Thermal throttling. If the GPU is maxed out by Isaac ROS, hardware-accelerated video encoding may lag, or the CPU may throttle, affecting the Python orchestrator.
+
+**Mitigation**: The `health_monitor.py` monitors thermals and can trigger alerts. Consider GPU workload scheduling or reducing Isaac ROS update rates under thermal pressure.

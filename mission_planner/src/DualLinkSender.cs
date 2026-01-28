@@ -16,6 +16,21 @@ using Newtonsoft.Json;
 namespace NOMAD.MissionPlanner
 {
     /// <summary>
+    /// Holds Jetson health status data from the Edge Core API.
+    /// </summary>
+    public class JetsonHealthStatus
+    {
+        public float CpuUsage { get; set; }
+        public float GpuUsage { get; set; }
+        public float CpuTemp { get; set; }
+        public float GpuTemp { get; set; }
+        public float MemoryUsed { get; set; }
+        public float MemoryTotal { get; set; }
+        public float DiskUsed { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+    
+    /// <summary>
     /// Handles dual-path communication to NOMAD Edge Core.
     /// Supports both HTTP (via Tailscale) and MAVLink (via ELRS).
     /// </summary>
@@ -77,6 +92,12 @@ namespace NOMAD.MissionPlanner
         /// This is set by the last health check result.
         /// </summary>
         public bool IsJetsonConnected { get; private set; }
+        
+        /// <summary>
+        /// Gets the last known Jetson health status.
+        /// Updated by GetHealthAsync() calls.
+        /// </summary>
+        public JetsonHealthStatus LastHealthStatus { get; private set; }
 
         // ============================================================
         // Public Methods
@@ -180,7 +201,7 @@ namespace NOMAD.MissionPlanner
 
         /// <summary>
         /// Get health status from Jetson.
-        /// Also updates IsJetsonConnected property.
+        /// Also updates IsJetsonConnected and LastHealthStatus properties.
         /// </summary>
         public async Task<CommandResult> GetHealthAsync()
         {
@@ -192,6 +213,30 @@ namespace NOMAD.MissionPlanner
 
                 // Update connection status
                 IsJetsonConnected = response.IsSuccessStatusCode;
+                
+                // Parse and store health data
+                if (response.IsSuccessStatusCode && !string.IsNullOrEmpty(responseBody))
+                {
+                    try
+                    {
+                        var data = JsonConvert.DeserializeObject<dynamic>(responseBody);
+                        LastHealthStatus = new JetsonHealthStatus
+                        {
+                            CpuUsage = data.cpu_usage_pct ?? data.cpu_load ?? 0,
+                            GpuUsage = data.gpu_usage_pct ?? data.gpu_load ?? 0,
+                            CpuTemp = data.cpu_temp ?? data.cpu_temp_c ?? 0,
+                            GpuTemp = data.gpu_temp ?? data.gpu_temp_c ?? 0,
+                            MemoryUsed = data.memory_used_mb ?? data.mem_used_mb ?? 0,
+                            MemoryTotal = data.memory_total_mb ?? data.mem_total_mb ?? 8192,
+                            DiskUsed = data.disk_used_pct ?? 0,
+                            Timestamp = DateTime.Now
+                        };
+                    }
+                    catch (Exception parseEx)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Health parse error: {parseEx.Message}");
+                    }
+                }
                 
                 return new CommandResult
                 {
@@ -205,6 +250,7 @@ namespace NOMAD.MissionPlanner
             {
                 // Update connection status - failed to reach Jetson
                 IsJetsonConnected = false;
+                LastHealthStatus = null;
                 
                 return new CommandResult
                 {

@@ -49,7 +49,10 @@ namespace NOMAD.MissionPlanner
         
         private DualLinkSender _sender;
         private MAVLinkConnectionManager _connectionManager;
+        private JetsonConnectionManager _jetsonConnectionManager;
         private NOMADConfig _config;
+        private MissionConfig _missionConfig;
+        private BoundaryMonitor _boundaryMonitor;
         
         // Layout panels
         private Panel _sidebarPanel;
@@ -61,6 +64,7 @@ namespace NOMAD.MissionPlanner
         private Button _btnDashboard;
         private Button _btnTask1;
         private Button _btnTask2;
+        private Button _btnBoundaries;
         private Button _btnVideo;
         private Button _btnTerminal;
         private Button _btnHealth;
@@ -73,6 +77,7 @@ namespace NOMAD.MissionPlanner
         private NOMADDashboardView _dashboardView;
         private NOMADTask1View _task1View;
         private NOMADTask2View _task2View;
+        private NOMADBoundaryView _boundaryView;
         private NOMADVideoView _videoView;
         private NOMADTerminalView _terminalView;
         private NOMADHealthView _healthView;
@@ -86,16 +91,22 @@ namespace NOMAD.MissionPlanner
         private static DualLinkSender _staticSender;
         private static NOMADConfig _staticConfig;
         private static MAVLinkConnectionManager _staticConnectionManager;
+        private static JetsonConnectionManager _staticJetsonConnectionManager;
+        private static MissionConfig _staticMissionConfig;
+        private static BoundaryMonitor _staticBoundaryMonitor;
         
         /// <summary>
         /// Sets the static configuration used by the MainSwitcher-created instance.
         /// Call this from the plugin before showing the NOMAD screen.
         /// </summary>
-        public static void SetStaticConfig(DualLinkSender sender, NOMADConfig config, MAVLinkConnectionManager connectionManager = null)
+        public static void SetStaticConfig(DualLinkSender sender, NOMADConfig config, MAVLinkConnectionManager connectionManager = null, JetsonConnectionManager jetsonConnectionManager = null, MissionConfig missionConfig = null, BoundaryMonitor boundaryMonitor = null)
         {
             _staticSender = sender;
             _staticConfig = config;
             _staticConnectionManager = connectionManager;
+            _staticJetsonConnectionManager = jetsonConnectionManager;
+            _staticMissionConfig = missionConfig;
+            _staticBoundaryMonitor = boundaryMonitor;
         }
         
         // ============================================================
@@ -106,18 +117,27 @@ namespace NOMAD.MissionPlanner
         /// Parameterless constructor required for MainSwitcher.
         /// Uses static configuration set via SetStaticConfig().
         /// </summary>
-        public NOMADMainScreen() : this(_staticSender, _staticConfig, _staticConnectionManager)
+        public NOMADMainScreen() : this(_staticSender, _staticConfig, _staticConnectionManager, _staticJetsonConnectionManager, _staticMissionConfig, _staticBoundaryMonitor)
         {
         }
         
         /// <summary>
         /// Full constructor with explicit dependencies.
         /// </summary>
-        public NOMADMainScreen(DualLinkSender sender, NOMADConfig config, MAVLinkConnectionManager connectionManager = null)
+        public NOMADMainScreen(DualLinkSender sender, NOMADConfig config, MAVLinkConnectionManager connectionManager = null, JetsonConnectionManager jetsonConnectionManager = null, MissionConfig missionConfig = null, BoundaryMonitor boundaryMonitor = null)
         {
             _sender = sender;
             _config = config ?? NOMADConfig.Load(); // Fallback to loading config if null
             _connectionManager = connectionManager;
+            _jetsonConnectionManager = jetsonConnectionManager;
+            _missionConfig = missionConfig ?? MissionConfig.Load(); // Load mission config
+            _boundaryMonitor = boundaryMonitor;
+            
+            // Create boundary monitor if not provided
+            if (_boundaryMonitor == null && _missionConfig != null && _config != null)
+            {
+                _boundaryMonitor = new BoundaryMonitor(_missionConfig, _config);
+            }
             
             // Create dummy sender if none provided
             if (_sender == null && _config != null)
@@ -235,6 +255,14 @@ namespace NOMAD.MissionPlanner
             _btnTask2 = CreateSidebarButton("Task 2: Extinguish");
             _btnTask2.Click += (s, e) => ShowView("Task2");
             navPanel.Controls.Add(_btnTask2);
+            
+            // Separator
+            navPanel.Controls.Add(CreateSeparatorLabel("SAFETY"));
+            
+            // Boundaries button (important for competition)
+            _btnBoundaries = CreateSidebarButton("Flight Boundaries");
+            _btnBoundaries.Click += (s, e) => ShowView("Boundaries");
+            navPanel.Controls.Add(_btnBoundaries);
             
             // Separator
             navPanel.Controls.Add(CreateSeparatorLabel("TOOLS"));
@@ -391,6 +419,7 @@ namespace NOMAD.MissionPlanner
                     case "Dashboard": headerText = "Dashboard"; break;
                     case "Task1": headerText = "Task 1: Outdoor Reconnaissance"; break;
                     case "Task2": headerText = "Task 2: Indoor Fire Extinguishing"; break;
+                    case "Boundaries": headerText = "Flight Boundaries"; break;
                     case "Video": headerText = "Video Feed"; break;
                     case "Terminal": headerText = "Jetson Terminal"; break;
                     case "Health": headerText = "System Health"; break;
@@ -412,7 +441,15 @@ namespace NOMAD.MissionPlanner
             switch (viewName)
             {
                 case "Dashboard":
-                    if (_dashboardView == null) _dashboardView = new NOMADDashboardView(_sender, _config, _connectionManager);
+                    if (_dashboardView == null)
+                    {
+                        _dashboardView = new NOMADDashboardView(_sender, _config, _connectionManager, _jetsonConnectionManager);
+                        // Connect boundary monitor to notification service
+                        if (_boundaryMonitor != null)
+                        {
+                            _dashboardView.SetBoundaryMonitor(_boundaryMonitor);
+                        }
+                    }
                     newView = _dashboardView;
                     break;
                 case "Task1":
@@ -420,11 +457,15 @@ namespace NOMAD.MissionPlanner
                     newView = _task1View;
                     break;
                 case "Task2":
-                    if (_task2View == null) _task2View = new NOMADTask2View(_sender, _config);
+                    if (_task2View == null) _task2View = new NOMADTask2View(_sender, _config, _jetsonConnectionManager);
                     newView = _task2View;
                     break;
+                case "Boundaries":
+                    if (_boundaryView == null) _boundaryView = new NOMADBoundaryView(_missionConfig, _config, _boundaryMonitor);
+                    newView = _boundaryView;
+                    break;
                 case "Video":
-                    if (_videoView == null) _videoView = new NOMADVideoView(_sender, _config);
+                    if (_videoView == null) _videoView = new NOMADVideoView(_sender, _config, _jetsonConnectionManager);
                     newView = _videoView;
                     break;
                 case "Terminal":
@@ -456,7 +497,7 @@ namespace NOMAD.MissionPlanner
         private void UpdateSidebarButtonState(string viewName)
         {
             // Reset all buttons to default state
-            var buttons = new[] { _btnDashboard, _btnTask1, _btnTask2, _btnVideo, _btnTerminal, _btnHealth, _btnLinks, _btnSettings };
+            var buttons = new[] { _btnDashboard, _btnTask1, _btnTask2, _btnBoundaries, _btnVideo, _btnTerminal, _btnHealth, _btnLinks, _btnSettings };
             foreach (var btn in buttons)
             {
                 if (btn != null)
@@ -473,6 +514,7 @@ namespace NOMAD.MissionPlanner
                 case "Dashboard": activeBtn = _btnDashboard; break;
                 case "Task1": activeBtn = _btnTask1; break;
                 case "Task2": activeBtn = _btnTask2; break;
+                case "Boundaries": activeBtn = _btnBoundaries; break;
                 case "Video": activeBtn = _btnVideo; break;
                 case "Terminal": activeBtn = _btnTerminal; break;
                 case "Health": activeBtn = _btnHealth; break;
@@ -531,6 +573,7 @@ namespace NOMAD.MissionPlanner
                 _dashboardView?.Dispose();
                 _task1View?.Dispose();
                 _task2View?.Dispose();
+                _boundaryView?.Dispose();
                 _videoView?.Dispose();
                 _terminalView?.Dispose();
                 _healthView?.Dispose();

@@ -9,6 +9,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using MissionPlanner;
 using MissionPlanner.Utilities;
 
 namespace NOMAD.MissionPlanner
@@ -91,7 +92,7 @@ namespace NOMAD.MissionPlanner
             var lblCallsign = CreateLabel("Callsign:", 15, 55);
             teamGroup.Controls.Add(lblCallsign);
             _txtCallsign = CreateTextBox(120, 52, 200);
-            _txtCallsign.PlaceholderText = "e.g., Nomad 101A";
+            // _txtCallsign.PlaceholderText = "e.g., Nomad 101A"; // PlaceholderText not available in .NET 4.8
             teamGroup.Controls.Add(_txtCallsign);
 
             var lblTask = CreateLabel("Current Task:", 15, 85);
@@ -128,13 +129,13 @@ namespace NOMAD.MissionPlanner
             var lblT1Lat = CreateLabel("Latitude:", 15, 55);
             task1BuildingGroup.Controls.Add(lblT1Lat);
             _txtTask1BuildingLat = CreateTextBox(120, 52, 150);
-            _txtTask1BuildingLat.PlaceholderText = "e.g., 45.123456";
+            // _txtTask1BuildingLat.PlaceholderText = "e.g., 45.123456"; // PlaceholderText not available in .NET 4.8
             task1BuildingGroup.Controls.Add(_txtTask1BuildingLat);
 
             var lblT1Lon = CreateLabel("Longitude:", 280, 55);
             task1BuildingGroup.Controls.Add(lblT1Lon);
             _txtTask1BuildingLon = CreateTextBox(360, 52, 150);
-            _txtTask1BuildingLon.PlaceholderText = "e.g., -73.123456";
+            // _txtTask1BuildingLon.PlaceholderText = "e.g., -73.123456"; // PlaceholderText not available in .NET 4.8
             task1BuildingGroup.Controls.Add(_txtTask1BuildingLon);
 
             var lblT1Door = CreateLabel("Door Faces:", 15, 85);
@@ -167,8 +168,8 @@ namespace NOMAD.MissionPlanner
             };
             btnT1GetPos.Click += (s, e) =>
             {
-                var lat = MissionPlanner.MainV2.comPort?.MAV?.cs?.lat ?? 0;
-                var lon = MissionPlanner.MainV2.comPort?.MAV?.cs?.lng ?? 0;
+                var lat = MainV2.comPort?.MAV?.cs?.lat ?? 0;
+                var lon = MainV2.comPort?.MAV?.cs?.lng ?? 0;
                 if (lat != 0 && lon != 0)
                 {
                     _txtTask1BuildingLat.Text = lat.ToString("F6");
@@ -230,8 +231,8 @@ namespace NOMAD.MissionPlanner
             };
             btnT2GetPos.Click += (s, e) =>
             {
-                var lat = MissionPlanner.MainV2.comPort?.MAV?.cs?.lat ?? 0;
-                var lon = MissionPlanner.MainV2.comPort?.MAV?.cs?.lng ?? 0;
+                var lat = MainV2.comPort?.MAV?.cs?.lat ?? 0;
+                var lon = MainV2.comPort?.MAV?.cs?.lng ?? 0;
                 if (lat != 0 && lon != 0)
                 {
                     _txtTask2BuildingLat.Text = lat.ToString("F6");

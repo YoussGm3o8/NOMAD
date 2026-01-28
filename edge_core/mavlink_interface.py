@@ -96,7 +96,10 @@ class MavlinkService:
             if msg_type == "HEARTBEAT":
                 self._last_heartbeat = now
                 mode = self._resolve_mode(msg)
-                self.state_manager.update_state(flight_mode=mode, connected=True)
+                # Check armed status from base_mode (bit 7 = MAV_MODE_FLAG_SAFETY_ARMED)
+                base_mode = getattr(msg, "base_mode", 0)
+                is_armed = bool(base_mode & 128)  # MAV_MODE_FLAG_SAFETY_ARMED = 128
+                self.state_manager.update_state(flight_mode=mode, connected=True, armed=is_armed)
             elif msg_type == "SYS_STATUS":
                 voltage = getattr(msg, "voltage_battery", 0) or 0
                 if voltage:
@@ -590,4 +593,99 @@ class MavlinkService:
             
             # Wait for next interval
             self._health_stop_event.wait(self._health_interval)
+
+    def set_mode(self, mode_id: int) -> bool:
+        """
+        Set the flight mode on the autopilot.
+        
+        Used by NavController to request GUIDED mode for Jetson-centric navigation.
+        
+        Args:
+            mode_id: ArduPilot mode ID
+                     - 0: STABILIZE
+                     - 2: ALT_HOLD
+                     - 4: GUIDED
+                     - 5: LOITER
+                     - 6: RTL
+                     - 9: LAND
+        
+        Returns:
+            True if mode change command was sent successfully
+        """
+        if self._conn is None:
+            return False
+        
+        try:
+            # Custom mode for Copter
+            self._conn.mav.command_long_send(
+                self._conn.target_system,
+                self._conn.target_component,
+                mavutil.mavlink.MAV_CMD_DO_SET_MODE,
+                0,              # confirmation
+                1,              # base mode (MAV_MODE_FLAG_CUSTOM_MODE_ENABLED)
+                mode_id,        # custom mode
+                0, 0, 0, 0, 0,  # unused params
+            )
+            return True
+            
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).debug(f"Set mode error: {e}")
+            return False
+
+    def send_position_target(
+        self,
+        x: float,
+        y: float,
+        z: float,
+        yaw: float,
+    ) -> bool:
+        """
+        Send position target via SET_POSITION_TARGET_LOCAL_NED.
+        
+        Used by NavController for position-based navigation commands.
+        
+        Args:
+            x: North position in meters (NED frame)
+            y: East position in meters (NED frame)
+            z: Down position in meters (NED frame, positive = down)
+            yaw: Heading in radians
+        
+        Returns:
+            True if message sent successfully
+        """
+        if self._conn is None:
+            return False
+        
+        try:
+            # type_mask: ignore velocity, acceleration, force, yaw_rate
+            # Use only: x, y, z, yaw
+            type_mask = (
+                0b0000_1111_1111_1000  # = 0x0FF8
+                # Bits 0-2 (pos): used
+                # Bits 3-5 (vel): ignored
+                # Bits 6-8 (acc): ignored
+                # Bit 9 (force): ignored
+                # Bit 10 (yaw): used
+                # Bit 11 (yaw_rate): ignored
+            )
+            
+            self._conn.mav.set_position_target_local_ned_send(
+                0,                          # time_boot_ms (0 = use system time)
+                self._conn.target_system,
+                self._conn.target_component,
+                mavutil.mavlink.MAV_FRAME_LOCAL_NED,
+                type_mask,
+                x, y, z,                    # x, y, z position
+                0, 0, 0,                    # vx, vy, vz (ignored)
+                0, 0, 0,                    # afx, afy, afz (ignored)
+                yaw,                        # yaw
+                0,                          # yaw_rate (ignored)
+            )
+            return True
+            
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).debug(f"Position target error: {e}")
+            return False
 

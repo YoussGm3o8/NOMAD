@@ -100,6 +100,20 @@ namespace NOMAD.MissionPlanner
         public LinkStatistics Statistics { get; set; }
         public bool IsActive { get; set; }
     }
+    
+    /// <summary>
+    /// Snapshot of link status for UI display.
+    /// </summary>
+    public class LinkStatusSnapshot
+    {
+        public bool LTEConnected { get; set; }
+        public double LTELatencyMs { get; set; }
+        public double LTEPacketLoss { get; set; }
+        public bool RadioConnected { get; set; }
+        public double RadioLatencyMs { get; set; }
+        public double RadioPacketLoss { get; set; }
+        public string ActiveLink { get; set; }
+    }
 
     /// <summary>
     /// Event arguments for failover events.
@@ -264,6 +278,26 @@ namespace NOMAD.MissionPlanner
         public bool IsRadioMasterHealthy => _radioMasterStats.IsConnected && 
             _radioMasterStats.Health != LinkHealth.Disconnected && 
             _radioMasterStats.Health != LinkHealth.Critical;
+
+        /// <summary>
+        /// Gets a snapshot of the current link status for UI display.
+        /// </summary>
+        public LinkStatusSnapshot GetLinkStatus()
+        {
+            lock (_lock)
+            {
+                return new LinkStatusSnapshot
+                {
+                    LTEConnected = _lteStats.IsConnected,
+                    LTELatencyMs = _lteStats.LatencyMs,
+                    LTEPacketLoss = _lteStats.PacketLossPercent,
+                    RadioConnected = _radioMasterStats.IsConnected,
+                    RadioLatencyMs = _radioMasterStats.LatencyMs,
+                    RadioPacketLoss = _radioMasterStats.PacketLossPercent,
+                    ActiveLink = _activeLink.ToString()
+                };
+            }
+        }
 
         // ============================================================
         // Constructor

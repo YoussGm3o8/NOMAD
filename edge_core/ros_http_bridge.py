@@ -7,10 +7,17 @@ ROS2 topics to the NOMAD Edge Core HTTP API running on the host.
 
 It subscribes to:
 - /visual_slam/tracking/odometry (VIO pose from Isaac ROS VSLAM)
+- /cmd_vel (Twist velocity commands from nav2/nvblox for autonomous navigation)
 - /nvblox_node/mesh (3D mesh from Nvblox) - optional
 - /nvblox_node/map_slice (2D occupancy slice) - for visualization
 
 And sends data to NOMAD Edge Core via HTTP POST requests.
+
+Architecture (Jetson-Centric Navigation):
+    Isaac ROS (nav2/nvblox) generates /cmd_vel
+    -> ros_http_bridge subscribes and forwards to Edge Core
+    -> Edge Core NavController sends MAVLink velocity commands
+    -> ArduPilot executes in GUIDED mode (flight controller only)
 
 Usage (inside Isaac ROS container):
     python3 ros_http_bridge.py --host 172.17.0.1 --port 8000
@@ -36,7 +43,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Twist
 from std_msgs.msg import Float32MultiArray
 
 logging.basicConfig(
@@ -63,9 +70,24 @@ class VIOData:
     source: str = "isaac_ros"
 
 
+@dataclass
+class VelocityCommand:
+    """Velocity command from nav2/nvblox to send to edge_core."""
+    timestamp: float
+    vx: float       # Forward velocity (m/s)
+    vy: float       # Lateral velocity (m/s)
+    vz: float       # Vertical velocity (m/s)
+    yaw_rate: float # Yaw rate (rad/s)
+    source: str = "nav2"
+
+
 class ROSHTTPBridge(Node):
     """
     ROS2 node that bridges topics to NOMAD Edge Core HTTP API.
+    
+    Bridges:
+    - VIO odometry (position feedback)
+    - Velocity commands from nav2/nvblox (navigation control)
     """
     
     def __init__(
@@ -73,7 +95,9 @@ class ROSHTTPBridge(Node):
         host: str = "172.17.0.1",
         port: int = 8000,
         vio_topic: str = "/zed/zed_node/odom",  # Default to ZED odom
+        cmd_vel_topic: str = "/cmd_vel",         # Nav2 velocity commands
         send_rate_hz: float = 30.0,
+        enable_nav_control: bool = True,         # Enable velocity command forwarding
     ):
         super().__init__("nomad_ros_http_bridge")
         
@@ -81,6 +105,7 @@ class ROSHTTPBridge(Node):
         self._port = port
         self._base_url = f"http://{host}:{port}"
         self._send_interval = 1.0 / send_rate_hz
+        self._enable_nav_control = enable_nav_control
         
         # QoS for sensor data
         sensor_qos = QoSProfile(
@@ -91,13 +116,17 @@ class ROSHTTPBridge(Node):
         
         # Latest data
         self._latest_vio: Optional[VIOData] = None
+        self._latest_cmd_vel: Optional[VelocityCommand] = None
         self._lock = threading.Lock()
         
         # Stats
         self._vio_recv_count = 0
         self._vio_send_count = 0
+        self._cmd_vel_recv_count = 0
+        self._cmd_vel_send_count = 0
         self._send_errors = 0
         self._last_send_time = 0.0
+        self._last_cmd_vel_send_time = 0.0
         
         # Subscribe to VIO odometry
         self.create_subscription(
@@ -108,10 +137,22 @@ class ROSHTTPBridge(Node):
         )
         self.get_logger().info(f"Subscribed to VIO: {vio_topic}")
         
+        # Subscribe to cmd_vel for navigation control
+        if enable_nav_control:
+            self.create_subscription(
+                Twist,
+                cmd_vel_topic,
+                self._handle_cmd_vel,
+                sensor_qos,
+            )
+            self.get_logger().info(f"Subscribed to cmd_vel: {cmd_vel_topic}")
+        
         # Timer to send data to edge_core
         self.create_timer(self._send_interval, self._send_to_edge_core)
         
         self.get_logger().info(f"ROS-HTTP Bridge started -> {self._base_url}")
+        if enable_nav_control:
+            self.get_logger().info("Navigation control ENABLED - forwarding cmd_vel to Edge Core")
     
     def _handle_vio(self, msg: Odometry) -> None:
         """Handle VIO odometry from Isaac ROS VSLAM."""
@@ -152,6 +193,40 @@ class ROSHTTPBridge(Node):
         except Exception as e:
             self.get_logger().error(f"VIO processing error: {e}")
     
+    def _handle_cmd_vel(self, msg: Twist) -> None:
+        """
+        Handle cmd_vel from nav2/nvblox for autonomous navigation.
+        
+        This is the core of Jetson-centric navigation. Velocity commands
+        from the ROS2 navigation stack are forwarded to Edge Core, which
+        sends them to ArduPilot via MAVLink.
+        
+        Twist message convention (ROS REP 103):
+        - linear.x: Forward velocity (m/s)
+        - linear.y: Left velocity (m/s)
+        - linear.z: Up velocity (m/s)
+        - angular.z: Yaw rate (rad/s, CCW positive)
+        """
+        try:
+            cmd = VelocityCommand(
+                timestamp=time.time(),
+                vx=msg.linear.x,    # Forward
+                vy=msg.linear.y,    # Left
+                vz=msg.linear.z,    # Up
+                yaw_rate=msg.angular.z,  # Yaw CCW
+                source="nav2",
+            )
+            
+            with self._lock:
+                self._latest_cmd_vel = cmd
+                self._cmd_vel_recv_count += 1
+            
+            # Send immediately for low latency control
+            self._send_cmd_vel_to_edge_core(cmd)
+            
+        except Exception as e:
+            self.get_logger().error(f"cmd_vel processing error: {e}")
+    
     def _send_to_edge_core(self) -> None:
         """Send latest VIO data to edge_core via HTTP."""
         with self._lock:
@@ -191,6 +266,42 @@ class ROSHTTPBridge(Node):
             self._send_errors += 1
             self.get_logger().error(f"Send error: {e}")
     
+    def _send_cmd_vel_to_edge_core(self, cmd: VelocityCommand) -> None:
+        """
+        Send velocity command to edge_core for navigation control.
+        
+        This enables Jetson-centric navigation where Isaac ROS nav2/nvblox
+        generates velocity commands that are executed by ArduPilot in GUIDED mode.
+        """
+        if not self._enable_nav_control:
+            return
+        
+        try:
+            url = f"{self._base_url}/api/nav/velocity"
+            data = json.dumps(asdict(cmd)).encode("utf-8")
+            
+            request = Request(
+                url,
+                data=data,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            
+            with urlopen(request, timeout=0.1) as response:  # Tight timeout for control
+                if response.status == 200:
+                    self._cmd_vel_send_count += 1
+                    self._last_cmd_vel_send_time = time.time()
+                else:
+                    self._send_errors += 1
+                    
+        except URLError as e:
+            self._send_errors += 1
+            if self._send_errors % 100 == 1:
+                self.get_logger().warning(f"Failed to send cmd_vel: {e}")
+        except Exception as e:
+            self._send_errors += 1
+            self.get_logger().error(f"cmd_vel send error: {e}")
+    
     def _quat_to_euler(
         self, x: float, y: float, z: float, w: float
     ) -> tuple[float, float, float]:
@@ -219,7 +330,10 @@ class ROSHTTPBridge(Node):
         return {
             "vio_received": self._vio_recv_count,
             "vio_sent": self._vio_send_count,
+            "cmd_vel_received": self._cmd_vel_recv_count,
+            "cmd_vel_sent": self._cmd_vel_send_count,
             "send_errors": self._send_errors,
+            "nav_control_enabled": self._enable_nav_control,
         }
 
 
@@ -229,7 +343,11 @@ def main():
     parser.add_argument("--port", type=int, default=8000, help="Edge Core port")
     parser.add_argument("--vio-topic", default="/visual_slam/tracking/odometry",
                         help="VIO odometry topic")
+    parser.add_argument("--cmd-vel-topic", default="/cmd_vel",
+                        help="Navigation velocity command topic")
     parser.add_argument("--rate", type=float, default=30.0, help="Send rate Hz")
+    parser.add_argument("--disable-nav", action="store_true",
+                        help="Disable navigation control (cmd_vel forwarding)")
     args = parser.parse_args()
     
     rclpy.init()
@@ -238,7 +356,9 @@ def main():
         host=args.host,
         port=args.port,
         vio_topic=args.vio_topic,
+        cmd_vel_topic=args.cmd_vel_topic,
         send_rate_hz=args.rate,
+        enable_nav_control=not args.disable_nav,
     )
     
     try:

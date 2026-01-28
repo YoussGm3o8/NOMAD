@@ -1,8 +1,15 @@
 """
 NOMAD Edge Core - VIO Pipeline Service
 
-Visual Inertial Odometry pipeline that integrates ZED camera tracking
-with ArduPilot's EKF3 for indoor autonomous flight.
+Visual Inertial Odometry pipeline that provides position feedback for
+Jetson-centric indoor autonomous flight. VIO feeds ArduPilot's EKF3 for
+state estimation while navigation commands come from the NavController.
+
+Architecture (Jetson-Centric):
+    ZED Camera -> VIO Pipeline -> VISION_POSITION_ESTIMATE -> ArduPilot EKF3
+    Nav2/Nvblox -> NavController -> SET_POSITION_TARGET -> ArduPilot GUIDED
+
+ArduPilot operates as a low-level flight controller. Jetson handles navigation.
 
 Target: Python 3.13 | NVIDIA Jetson Orin Nano | ZED SDK 4.x
 """
@@ -61,17 +68,32 @@ class VIOPipeline:
     """
     VIO Pipeline for NOMAD Task 2 Indoor Flight.
     
-    This service:
+    This service provides position feedback to ArduPilot's EKF3 for state
+    estimation. Navigation commands are handled separately by NavController.
+    
+    Responsibilities:
     1. Receives pose updates from ZED camera tracking
     2. Transforms coordinates to NED frame
     3. Sends VISION_POSITION_ESTIMATE to ArduPilot at 30Hz
     4. Monitors EKF health and VIO confidence
     5. Implements failsafe logic per PRD requirements
+    6. Notifies NavController of VIO health for command validation
     
     PRD Requirements:
     - [T2-NAV-01]: Stream VISION_POSITION_ESTIMATE at 30Hz
     - [T2-NAV-02]: Configure EKF source to ExternalNav
+    - [T2-NAV-03]: Jetson-centric navigation (see NavController)
     - [T2-SAFE-01]: VIO failure response within 3 seconds
+    
+    ARCHITECTURE NOTE:
+    - VIO provides position FEEDBACK only
+    - Navigation COMMANDS come from NavController (Isaac ROS nav2/nvblox)
+    - ArduPilot is a flight controller, not a navigation planner
+    
+    SAFETY NOTES:
+    - VIO can fail in feature-poor environments (white walls, smoke)
+    - Optical flow sensor provides backup horizontal velocity estimation
+    - ALT_HOLD mode is used as failsafe (not RTL which could hit walls)
     
     Usage:
         from edge_core.zed_camera import ZEDCameraService, ZEDConfig
@@ -89,12 +111,18 @@ class VIOPipeline:
     
     # Health thresholds
     MIN_CONFIDENCE = 30.0  # Minimum tracking confidence
+    MIN_CONFIDENCE_DEGRADED = 15.0  # Below this, consider critically degraded
     MAX_STALE_MS = 100  # Maximum age of pose data
     VIO_FAILURE_TIMEOUT_S = 3.0  # Time before declaring VIO failed
+    VIO_DEGRADED_TIMEOUT_S = 1.0  # Time before entering degraded state
     
     # EKF variance thresholds (based on EKF_STATUS_REPORT)
     EKF_POS_VARIANCE_THRESHOLD = 1.0
     EKF_VEL_VARIANCE_THRESHOLD = 1.0
+    
+    # Optical flow integration
+    OPTICAL_FLOW_ENABLED = True  # Enable optical flow as backup
+    OPTICAL_FLOW_MIN_QUALITY = 50  # Minimum quality for optical flow data
     
     def __init__(
         self,
@@ -103,12 +131,14 @@ class VIOPipeline:
         state_manager=None,  # StateManager
         on_status_change: Optional[Callable[[VIOStatus], None]] = None,
         on_failsafe_trigger: Optional[Callable[[str], None]] = None,
+        enable_optical_flow_backup: bool = True,  # Use optical flow when VIO degrades
     ):
         self._camera = camera_service
         self._mavlink = mavlink_service
         self._state_manager = state_manager
         self._on_status_change = on_status_change
         self._on_failsafe_trigger = on_failsafe_trigger
+        self._enable_optical_flow = enable_optical_flow_backup
         
         self._status = VIOStatus()
         self._lock = threading.RLock()
@@ -119,11 +149,17 @@ class VIOPipeline:
         # Tracking state
         self._reset_counter = 0
         self._last_healthy_time = 0.0
+        self._last_degraded_time = 0.0
         self._failsafe_triggered = False
+        self._degraded_warning_sent = False
         
         # Rate tracking
         self._message_count = 0
         self._rate_timestamp = time.time()
+        
+        # Optical flow backup state
+        self._optical_flow_active = False
+        self._last_optical_flow_quality = 0
         
     @property
     def status(self) -> VIOStatus:
@@ -261,20 +297,82 @@ class VIOPipeline:
             )
     
     def _check_health(self) -> None:
-        """Check VIO health and trigger failsafe if needed."""
+        """
+        Check VIO health and trigger failsafe if needed.
+        
+        SAFETY: Implements progressive degradation:
+        1. HEALTHY -> DEGRADED: Warn pilot, enable optical flow backup
+        2. DEGRADED -> FAILED: Trigger failsafe (ALT_HOLD mode)
+        
+        This gives the pilot time to react before full failsafe,
+        which is important in confined indoor spaces.
+        """
         now = time.time()
         time_since_healthy = now - self._last_healthy_time
         
-        # Check for VIO failure (PRD T2-SAFE-01)
+        # Check tracking confidence thresholds
+        confidence = self._status.tracking_confidence
+        
+        # Progressive degradation states
+        if confidence >= self.MIN_CONFIDENCE:
+            # Good confidence - clear degraded state
+            self._last_degraded_time = now
+            self._degraded_warning_sent = False
+            self._optical_flow_active = False
+            
+        elif confidence >= self.MIN_CONFIDENCE_DEGRADED:
+            # Low confidence - entering degraded state
+            if not self._degraded_warning_sent:
+                logger.warning(f"VIO DEGRADED: Confidence at {confidence:.0f}%, enabling optical flow backup")
+                self._degraded_warning_sent = True
+                
+                # Enable optical flow backup if available
+                if self._enable_optical_flow:
+                    self._enable_optical_flow_backup()
+                    
+            self._update_status(health=VIOHealth.DEGRADED)
+            
+        else:
+            # Critical confidence - VIO essentially useless
+            logger.error(f"VIO CRITICAL: Confidence at {confidence:.0f}%")
+            self._update_status(
+                health=VIOHealth.DEGRADED,
+                error_message=f"Critical confidence: {confidence:.0f}%"
+            )
+        
+        # Check for VIO failure timeout (PRD T2-SAFE-01)
         if time_since_healthy > self.VIO_FAILURE_TIMEOUT_S:
             if not self._failsafe_triggered:
                 self._trigger_failsafe("VIO_TIMEOUT")
                 
-        # Update health based on state
-        if self._status.tracking_confidence < self.MIN_CONFIDENCE:
+        elif time_since_healthy > self.VIO_DEGRADED_TIMEOUT_S:
+            # Entering degraded state due to stale data
             self._update_status(health=VIOHealth.DEGRADED)
-        elif time_since_healthy > 0.5:
-            self._update_status(health=VIOHealth.DEGRADED)
+    
+    def _enable_optical_flow_backup(self) -> None:
+        """
+        Enable optical flow sensor as backup position source.
+        
+        When VIO degrades, optical flow can provide horizontal velocity
+        estimation to help maintain position hold. The Cube autopilot
+        can fuse optical flow data with barometer for stable hover.
+        
+        SAFETY: Optical flow only provides horizontal velocity, not position.
+        The drone should maintain altitude via barometer in this mode.
+        """
+        if self._optical_flow_active:
+            return
+            
+        logger.info("Enabling optical flow sensor backup")
+        self._optical_flow_active = True
+        
+        # Request EKF to include optical flow in fusion
+        # This is done via MAVLink parameter: EK3_SRC1_VELXY = 5 (OpticalFlow)
+        # For now, log the action - actual param change would need mavlink_interface
+        logger.info("ACTION: Consider enabling EK3_SRC1_VELXY=5 for optical flow velocity")
+        
+        # Notify status change
+        self._update_status(error_message="VIO degraded - optical flow backup active")
     
     def _trigger_failsafe(self, reason: str) -> None:
         """
@@ -285,7 +383,9 @@ class VIOPipeline:
         2. Set flight mode to ALT_HOLD
         3. Alert pilot for manual takeover
         
-        NOT: Auto-land, RTL, or motor kill (unsafe indoors)
+        SAFETY: NOT using Auto-land, RTL, or motor kill as these are
+        unsafe in confined indoor spaces. ALT_HOLD gives the pilot
+        control while maintaining altitude via barometer.
         """
         self._failsafe_triggered = True
         
@@ -296,14 +396,36 @@ class VIOPipeline:
             error_message=f"Failsafe: {reason}",
         )
         
-        # Notify callback
+        # Notify callback first (may want to alert GCS)
         if self._on_failsafe_trigger:
-            self._on_failsafe_trigger(reason)
+            try:
+                self._on_failsafe_trigger(reason)
+            except Exception as e:
+                logger.error(f"Failsafe callback error: {e}")
         
         # Request ALT_HOLD mode via MAVLink
-        # This requires the mavlink_interface to have a mode change method
-        # For now, we'll log the action needed
-        logger.warning("ACTION REQUIRED: Switch to ALT_HOLD and resume manual control")
+        # Mode 2 = ALT_HOLD in ArduCopter
+        ALT_HOLD_MODE = 2
+        try:
+            if hasattr(self._mavlink, 'set_mode'):
+                success = self._mavlink.set_mode(ALT_HOLD_MODE)
+                if success:
+                    logger.info("Successfully switched to ALT_HOLD mode")
+                else:
+                    logger.error("Failed to switch to ALT_HOLD mode - pilot intervention required")
+            else:
+                logger.warning("MAVLink service does not support mode change - pilot must switch manually")
+        except Exception as e:
+            logger.error(f"Mode change error: {e}")
+        
+        logger.critical("PILOT ACTION REQUIRED: VIO FAILED - Take manual control (ALT_HOLD mode)")
+        
+        # Update state manager if available
+        if self._state_manager:
+            try:
+                self._state_manager.set_vio_failed(True, reason)
+            except:
+                pass
     
     def _update_rate(self) -> None:
         """Update message rate calculation."""

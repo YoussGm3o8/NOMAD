@@ -116,12 +116,17 @@ class ROSVideoPublisher(Node):
         
         SAFETY: Proper socket initialization with error handling to prevent
         resource leaks on failure.
+        
+        LATENCY: Uses optimized buffer sizes to minimize latency while
+        preventing frame drops when encoder is slightly behind.
         """
         import socket
         
         self.tcp_server = None
         self.tcp_client = None
         self._client_connected = False
+        self._frames_dropped = 0  # Track dropped frames for monitoring
+        self._last_send_time = 0  # Track send timing for backpressure detection
         
         try:
             self.tcp_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -156,6 +161,7 @@ class ROSVideoPublisher(Node):
         """Try to accept a new client connection.
         
         SAFETY: Non-blocking accept with proper error handling.
+        LATENCY: Sets optimized socket buffers for low-latency streaming.
         Returns True if a client is connected and ready.
         """
         if self._shutdown_requested:
@@ -173,10 +179,15 @@ class ROSVideoPublisher(Node):
             self.tcp_client.setblocking(True)
             # SAFETY: Set send timeout to prevent blocking on slow/dead clients
             self.tcp_client.settimeout(2.0)
-            # SAFETY: Set TCP_NODELAY for low latency
+            # LATENCY: Set TCP_NODELAY for low latency (disable Nagle's algorithm)
             self.tcp_client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            # LATENCY: Set send buffer to ~2 frames worth to allow slight encoder lag
+            # but drop frames if encoder falls too far behind
+            frame_size = self.width * self.height * 3
+            send_buffer_size = frame_size * 2  # Buffer for 2 frames
+            self.tcp_client.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, send_buffer_size)
             self._client_connected = True
-            logger.info(f"Encoder connected from {addr}")
+            logger.info(f"Encoder connected from {addr}, send buffer: {send_buffer_size} bytes")
             return True
         except BlockingIOError:
             # No client waiting - normal condition
@@ -308,6 +319,9 @@ class ROSVideoPublisher(Node):
             status = f"Frames: {self.frame_count}"
             if self.error_count > 0:
                 status += f", Errors: {self.error_count}"
+            dropped = getattr(self, '_frames_dropped', 0)
+            if dropped > 0:
+                status += f", Dropped: {dropped}"
             logger.info(status)
     
     def _calculate_expected_size(self, encoding: str, width: int, height: int) -> int:
@@ -430,21 +444,39 @@ class ROSVideoPublisher(Node):
         """Send frame data to the TCP client.
         
         SAFETY: Handles connection errors gracefully without crashing.
+        LATENCY: Detects backpressure and drops frames if encoder falls behind.
         """
         with self.lock:
             if self.tcp_client is None or not self._client_connected:
                 return
+            
+            current_time = time.time()
+            
+            # LATENCY: Check for backpressure - if last send took too long, drop this frame
+            # A 30fps stream should have ~33ms between frames. If we're >50ms behind,
+            # the encoder is falling behind and we should drop frames to maintain sync.
+            frame_interval = 1.0 / max(self.fps, 1)
+            if hasattr(self, '_last_send_time') and self._last_send_time > 0:
+                time_since_last = current_time - self._last_send_time
+                if time_since_last < frame_interval * 0.5:  # Too fast - encoder can't keep up
+                    self._frames_dropped = getattr(self, '_frames_dropped', 0) + 1
+                    if self._frames_dropped % 30 == 1:  # Log every 30 dropped frames
+                        logger.warning(f"Dropping frame due to backpressure (dropped: {self._frames_dropped})")
+                    return
                 
             try:
                 self.tcp_client.sendall(frame_bytes)
                 self.frame_count += 1
-                self.last_frame_time = time.time()
+                self.last_frame_time = current_time
+                self._last_send_time = current_time
             except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError) as e:
                 logger.warning(f"Encoder disconnected ({type(e).__name__}), waiting for reconnection...")
                 self._disconnect_client()
             except socket.timeout:
-                logger.warning("Send timeout - encoder may be slow")
-                self._disconnect_client()
+                # LATENCY: On timeout, drop the frame and continue rather than disconnecting
+                # This helps maintain stream continuity during brief encoder stalls
+                self._frames_dropped = getattr(self, '_frames_dropped', 0) + 1
+                logger.warning(f"Send timeout - dropping frame (total dropped: {self._frames_dropped})")
             except Exception as e:
                 logger.error(f"Send error: {e}")
                 self._disconnect_client()

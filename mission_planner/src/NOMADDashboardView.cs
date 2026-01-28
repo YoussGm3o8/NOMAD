@@ -43,6 +43,7 @@ namespace NOMAD.MissionPlanner
         
         private readonly DualLinkSender _sender;
         private readonly MAVLinkConnectionManager _connectionManager;
+        private readonly JetsonConnectionManager _jetsonConnectionManager;
         private NOMADConfig _config;
         
         // Status cards
@@ -77,6 +78,7 @@ namespace NOMAD.MissionPlanner
         private Panel _radioIndicator;
         private Label _lblLteStatus;
         private Label _lblRadioStatus;
+        private Label _lblActiveLink;
         
         // Mini video panel
         private Panel _videoPreviewPanel;
@@ -86,17 +88,48 @@ namespace NOMAD.MissionPlanner
         private bool _jetsonOnline;
         private bool _videoInitialized;
         
+        // Health summary labels (for real-time Jetson health updates)
+        private Label _lblHealthCpu;
+        private Label _lblHealthGpu;
+        private Label _lblHealthMem;
+        private Label _lblHealthDisk;
+        private Label _lblHealthTemp;
+        
+        // Notification system
+        private NotificationService _notificationService;
+        private NotificationPanel _notificationPanel;
+        
         // ============================================================
         // Constructor
         // ============================================================
         
-        public NOMADDashboardView(DualLinkSender sender, NOMADConfig config, MAVLinkConnectionManager connectionManager = null)
+        /// <summary>
+        /// Gets the notification service for external components to add notifications.
+        /// </summary>
+        public NotificationService NotificationService => _notificationService;
+        
+        /// <summary>
+        /// Sets the boundary monitor for boundary violation notifications.
+        /// </summary>
+        public void SetBoundaryMonitor(BoundaryMonitor monitor)
+        {
+            _notificationService?.SetBoundaryMonitor(monitor);
+        }
+        
+        public NOMADDashboardView(DualLinkSender sender, NOMADConfig config, MAVLinkConnectionManager connectionManager = null, JetsonConnectionManager jetsonConnectionManager = null)
         {
             _sender = sender;
             _config = config;
             _connectionManager = connectionManager;
+            _jetsonConnectionManager = jetsonConnectionManager;
+            
+            // Initialize notification service
+            _notificationService = new NotificationService(null, sender);
             
             InitializeUI();
+            
+            // Start notification monitoring after UI is initialized
+            _notificationService.StartMonitoring();
         }
         
         // ============================================================
@@ -128,10 +161,10 @@ namespace NOMAD.MissionPlanner
             mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
             mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
             
-            // Row heights - reduced for better fit
+            // Row heights - adjusted for notification panel
             mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 110)); // Status cards row 1
             mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 110)); // Status cards row 2
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180)); // Quick actions + Link status
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200)); // Quick actions + Notifications + Link status
             mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 220)); // Video preview + Health summary
             
             // Row 1: Connection, Flight Mode, GPS Status
@@ -155,10 +188,14 @@ namespace NOMAD.MissionPlanner
             _jetsonCard = CreateStatusCard("Jetson", "Offline", out _lblJetsonStatus, out _lblJetsonTemp, ERROR_COLOR);
             mainLayout.Controls.Add(_jetsonCard, 2, 1);
             
-            // Row 3: Quick Actions + Link Status
+            // Row 3: Quick Actions + Notifications + Link Status
             var quickActionsPanel = CreateQuickActionsPanel();
             mainLayout.Controls.Add(quickActionsPanel, 0, 2);
-            mainLayout.SetColumnSpan(quickActionsPanel, 2);
+            
+            // Notification panel next to Quick Actions
+            _notificationPanel = new NotificationPanel(_notificationService);
+            _notificationPanel.Margin = new Padding(5);
+            mainLayout.Controls.Add(_notificationPanel, 1, 2);
             
             var linkStatusPanel = CreateLinkStatusPanel();
             mainLayout.Controls.Add(linkStatusPanel, 2, 2);
@@ -257,17 +294,17 @@ namespace NOMAD.MissionPlanner
             };
             panel.Controls.Add(titleLabel);
             
-            // Buttons flow panel
+            // Buttons flow panel - compact layout for single column
             var buttonsPanel = new FlowLayoutPanel
             {
                 Location = new Point(15, 45),
-                Size = new Size(400, 140),
-                FlowDirection = FlowDirection.LeftToRight,
+                Size = new Size(200, 140),
+                FlowDirection = FlowDirection.TopDown,
                 WrapContents = true,
                 BackColor = Color.Transparent,
             };
             
-            _btnCapture = CreateActionButton("Capture", ACCENT_COLOR, 150, 55);
+            _btnCapture = CreateActionButton("Capture", ACCENT_COLOR, 85, 50);
             _btnCapture.Click += async (s, e) =>
             {
                 _btnCapture.Enabled = false;
@@ -288,7 +325,7 @@ namespace NOMAD.MissionPlanner
             };
             buttonsPanel.Controls.Add(_btnCapture);
             
-            _btnResetMap = CreateActionButton("Reset Map", Color.FromArgb(200, 80, 80), 150, 55);
+            _btnResetMap = CreateActionButton("Reset Map", Color.FromArgb(200, 80, 80), 85, 50);
             _btnResetMap.Click += async (s, e) =>
             {
                 var confirm = MessageBox.Show(
@@ -304,15 +341,15 @@ namespace NOMAD.MissionPlanner
             };
             buttonsPanel.Controls.Add(_btnResetMap);
             
-            _btnResetVio = CreateActionButton("Reset VIO", SUCCESS_COLOR, 150, 55);
+            _btnResetVio = CreateActionButton("Reset VIO", SUCCESS_COLOR, 85, 50);
             _btnResetVio.Click += async (s, e) =>
             {
                 await _sender.ResetVioOriginAsync();
             };
             buttonsPanel.Controls.Add(_btnResetVio);
             
-            _btnEmergency = CreateActionButton("EMERGENCY", ERROR_COLOR, 150, 55);
-            _btnEmergency.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+            _btnEmergency = CreateActionButton("EMRG", ERROR_COLOR, 85, 50);
+            _btnEmergency.Font = new Font("Segoe UI", 9, FontStyle.Bold);
             _btnEmergency.Click += (s, e) =>
             {
                 var confirm = MessageBox.Show(
@@ -419,7 +456,7 @@ namespace NOMAD.MissionPlanner
             panel.Controls.Add(_lblRadioStatus);
             
             // Active link label
-            var lblActive = new Label
+            _lblActiveLink = new Label
             {
                 Text = "Active: --",
                 Font = new Font("Segoe UI", 11, FontStyle.Bold),
@@ -427,7 +464,7 @@ namespace NOMAD.MissionPlanner
                 Location = new Point(15, 115),
                 AutoSize = true,
             };
-            panel.Controls.Add(lblActive);
+            panel.Controls.Add(_lblActiveLink);
             
             return panel;
         }
@@ -494,7 +531,7 @@ namespace NOMAD.MissionPlanner
                 
                 // Build RTSP URL for left camera
                 string rtspUrl = $"rtsp://{_config.EffectiveIP}:8554/zed";
-                _videoPlayer = new EmbeddedVideoPlayer("ZED Left", rtspUrl, showControls: false);
+                _videoPlayer = new EmbeddedVideoPlayer("ZED Left", rtspUrl, showControls: false, _jetsonConnectionManager);
                 _videoPlayer.Dock = DockStyle.Fill;
                 _videoPlaceholder.Controls.Add(_videoPlayer);
                 
@@ -537,8 +574,8 @@ namespace NOMAD.MissionPlanner
             
             int yOffset = 50;
             
-            // CPU
-            var lblCpu = new Label
+            // CPU - stored in class field for real-time updates
+            _lblHealthCpu = new Label
             {
                 Text = "CPU: --",
                 Font = new Font("Segoe UI", 10),
@@ -546,11 +583,11 @@ namespace NOMAD.MissionPlanner
                 Location = new Point(15, yOffset),
                 AutoSize = true,
             };
-            panel.Controls.Add(lblCpu);
+            panel.Controls.Add(_lblHealthCpu);
             yOffset += 25;
             
             // GPU
-            var lblGpu = new Label
+            _lblHealthGpu = new Label
             {
                 Text = "GPU: --",
                 Font = new Font("Segoe UI", 10),
@@ -558,11 +595,11 @@ namespace NOMAD.MissionPlanner
                 Location = new Point(15, yOffset),
                 AutoSize = true,
             };
-            panel.Controls.Add(lblGpu);
+            panel.Controls.Add(_lblHealthGpu);
             yOffset += 25;
             
             // Memory
-            var lblMem = new Label
+            _lblHealthMem = new Label
             {
                 Text = "Memory: --",
                 Font = new Font("Segoe UI", 10),
@@ -570,11 +607,11 @@ namespace NOMAD.MissionPlanner
                 Location = new Point(15, yOffset),
                 AutoSize = true,
             };
-            panel.Controls.Add(lblMem);
+            panel.Controls.Add(_lblHealthMem);
             yOffset += 25;
             
             // Disk
-            var lblDisk = new Label
+            _lblHealthDisk = new Label
             {
                 Text = "Disk: --",
                 Font = new Font("Segoe UI", 10),
@@ -582,11 +619,11 @@ namespace NOMAD.MissionPlanner
                 Location = new Point(15, yOffset),
                 AutoSize = true,
             };
-            panel.Controls.Add(lblDisk);
+            panel.Controls.Add(_lblHealthDisk);
             yOffset += 25;
             
             // Temperature
-            var lblTemp = new Label
+            _lblHealthTemp = new Label
             {
                 Text = "Temp: --",
                 Font = new Font("Segoe UI", 10),
@@ -594,7 +631,7 @@ namespace NOMAD.MissionPlanner
                 Location = new Point(15, yOffset),
                 AutoSize = true,
             };
-            panel.Controls.Add(lblTemp);
+            panel.Controls.Add(_lblHealthTemp);
             
             return panel;
         }
@@ -647,7 +684,7 @@ namespace NOMAD.MissionPlanner
                 _lblBattery.ForeColor = cs.battery_remaining > 30 ? SUCCESS_COLOR : 
                                         (cs.battery_remaining > 15 ? WARNING_COLOR : ERROR_COLOR);
                 
-                // Check Jetson online status from sender
+                // Check Jetson online status and get health data
                 bool jetsonOnline = _sender?.IsJetsonConnected ?? false;
                 if (jetsonOnline && !_jetsonOnline)
                 {
@@ -663,11 +700,119 @@ namespace NOMAD.MissionPlanner
                     _jetsonOnline = false;
                     _lblJetsonTemp.Text = "Offline";
                     _lblJetsonTemp.ForeColor = ERROR_COLOR;
+                    
+                    // Reset health indicators to "--"
+                    _lblHealthCpu.Text = "CPU: --";
+                    _lblHealthCpu.ForeColor = TEXT_PRIMARY;
+                    _lblHealthGpu.Text = "GPU: --";
+                    _lblHealthGpu.ForeColor = TEXT_PRIMARY;
+                    _lblHealthMem.Text = "Memory: --";
+                    _lblHealthMem.ForeColor = TEXT_PRIMARY;
+                    _lblHealthDisk.Text = "Disk: --";
+                    _lblHealthDisk.ForeColor = TEXT_PRIMARY;
+                    _lblHealthTemp.Text = "Temp: --";
+                    _lblHealthTemp.ForeColor = TEXT_PRIMARY;
                 }
+                
+                // Update health data from Jetson if online
+                if (jetsonOnline && _sender != null)
+                {
+                    UpdateJetsonHealth();
+                }
+                
+                // Update link status from connection manager
+                UpdateLinkStatus();
             }
             catch
             {
                 // Ignore update errors
+            }
+        }
+        
+        /// <summary>
+        /// Updates Jetson health indicators from real API data.
+        /// </summary>
+        private async void UpdateJetsonHealth()
+        {
+            try
+            {
+                // Get health data from the sender (which caches the last known values)
+                var health = _sender?.LastHealthStatus;
+                if (health == null) return;
+                
+                // CPU
+                var cpuLoad = health.CpuUsage;
+                _lblHealthCpu.Text = $"CPU: {cpuLoad:F0}%";
+                _lblHealthCpu.ForeColor = cpuLoad > 90 ? ERROR_COLOR : (cpuLoad > 70 ? WARNING_COLOR : SUCCESS_COLOR);
+                
+                // GPU
+                var gpuLoad = health.GpuUsage;
+                _lblHealthGpu.Text = $"GPU: {gpuLoad:F0}%";
+                _lblHealthGpu.ForeColor = gpuLoad > 90 ? ERROR_COLOR : (gpuLoad > 70 ? WARNING_COLOR : SUCCESS_COLOR);
+                
+                // Memory
+                var memUsed = health.MemoryUsed;
+                var memTotal = health.MemoryTotal;
+                var memPercent = memTotal > 0 ? (memUsed / memTotal * 100) : 0;
+                _lblHealthMem.Text = $"Memory: {memPercent:F0}%";
+                _lblHealthMem.ForeColor = memPercent > 90 ? ERROR_COLOR : (memPercent > 75 ? WARNING_COLOR : SUCCESS_COLOR);
+                
+                // Disk
+                var diskPercent = health.DiskUsed;
+                _lblHealthDisk.Text = $"Disk: {diskPercent:F0}%";
+                _lblHealthDisk.ForeColor = diskPercent > 90 ? ERROR_COLOR : (diskPercent > 75 ? WARNING_COLOR : SUCCESS_COLOR);
+                
+                // Temperature (use GPU temp as primary indicator)
+                var temp = health.GpuTemp > 0 ? health.GpuTemp : health.CpuTemp;
+                _lblHealthTemp.Text = $"Temp: {temp:F0}C";
+                _lblHealthTemp.ForeColor = temp > 80 ? ERROR_COLOR : (temp > 65 ? WARNING_COLOR : SUCCESS_COLOR);
+                
+                // Also update the Jetson card temperature
+                _lblJetsonTemp.Text = $"{temp:F0}C";
+                _lblJetsonTemp.ForeColor = temp > 80 ? ERROR_COLOR : (temp > 65 ? WARNING_COLOR : SUCCESS_COLOR);
+            }
+            catch
+            {
+                // Ignore health update errors
+            }
+        }
+        
+        /// <summary>
+        /// Updates link status indicators from connection manager.
+        /// </summary>
+        private void UpdateLinkStatus()
+        {
+            if (_connectionManager == null) return;
+            
+            try
+            {
+                var status = _connectionManager.GetLinkStatus();
+                
+                // LTE/Tailscale status
+                bool lteConnected = status.LTEConnected;
+                _lteIndicator.BackColor = lteConnected ? SUCCESS_COLOR : ERROR_COLOR;
+                _lteIndicator.Invalidate();
+                _lblLteStatus.Text = lteConnected 
+                    ? $"LTE/Tailscale: {status.LTELatencyMs}ms" 
+                    : "LTE/Tailscale: Disconnected";
+                
+                // Radio status
+                bool radioConnected = status.RadioConnected;
+                _radioIndicator.BackColor = radioConnected ? SUCCESS_COLOR : ERROR_COLOR;
+                _radioIndicator.Invalidate();
+                _lblRadioStatus.Text = radioConnected 
+                    ? $"RadioMaster: {status.RadioLatencyMs}ms" 
+                    : "RadioMaster: Disconnected";
+                
+                // Active link
+                if (_lblActiveLink != null)
+                {
+                    _lblActiveLink.Text = $"Active: {status.ActiveLink}";
+                }
+            }
+            catch
+            {
+                // Ignore link status errors
             }
         }
     }

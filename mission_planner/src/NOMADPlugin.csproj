@@ -103,14 +103,19 @@
   
   <ItemGroup>
     <!-- Source Files -->
+    <Compile Include="BoundaryManager.cs" />
     <Compile Include="DualLinkSender.cs" />
     <Compile Include="EmbeddedVideoPlayer.cs" />
     <Compile Include="EnhancedHealthDashboard.cs" />
     <Compile Include="EnhancedWASDControl.cs" />
+    <Compile Include="JetsonConnectionManager.cs" />
     <Compile Include="JetsonHealthTab.cs" />
     <Compile Include="JetsonTerminalControl.cs" />
     <Compile Include="LinkHealthPanel.cs" />
     <Compile Include="MAVLinkConnectionManager.cs" />
+    <Compile Include="MissionConfig.cs" />
+    <Compile Include="MissionSetupPanel.cs" />
+    <Compile Include="MapOverlayManager.cs" />
     <Compile Include="NOMADConfig.cs" />
     <Compile Include="NOMADControlPanel.cs" />
     <Compile Include="NOMADDashboardView.cs" />
@@ -118,7 +123,10 @@
     <Compile Include="NOMADPlugin.cs" />
     <Compile Include="NOMADSettingsForm.cs" />
     <Compile Include="NOMADViews.cs" />
+    <Compile Include="NotificationPanel.cs" />
+    <Compile Include="NotificationService.cs" />
     <Compile Include="ServiceControlPanel.cs" />
+    <Compile Include="SnapshotManager.cs" />
     <Compile Include="TelemetryInjector.cs" />
     <Compile Include="WASDNudgeControl.cs" />
   </ItemGroup>
