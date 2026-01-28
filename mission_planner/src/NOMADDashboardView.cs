@@ -14,6 +14,7 @@
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using MissionPlanner;
 
@@ -45,6 +46,7 @@ namespace NOMAD.MissionPlanner
         private readonly MAVLinkConnectionManager _connectionManager;
         private readonly JetsonConnectionManager _jetsonConnectionManager;
         private NOMADConfig _config;
+        private System.Threading.Timer _healthPollTimer;
         
         // Status cards
         private Panel _connectionCard;
@@ -128,8 +130,42 @@ namespace NOMAD.MissionPlanner
             
             InitializeUI();
             
+            // Start health polling to keep Jetson status updated
+            StartHealthPolling();
+            
             // Start notification monitoring after UI is initialized
             _notificationService.StartMonitoring();
+        }
+        
+        /// <summary>
+        /// Starts periodic health polling to keep Jetson connection status updated.
+        /// </summary>
+        private void StartHealthPolling()
+        {
+            _healthPollTimer = new System.Threading.Timer(
+                async _ => await PollJetsonHealth(),
+                null,
+                TimeSpan.FromMilliseconds(500),  // Initial delay
+                TimeSpan.FromMilliseconds(3000)  // Poll every 3 seconds
+            );
+        }
+        
+        /// <summary>
+        /// Polls Jetson health status to update IsJetsonConnected.
+        /// </summary>
+        private async Task PollJetsonHealth()
+        {
+            try
+            {
+                if (_sender != null)
+                {
+                    await _sender.GetHealthAsync();
+                }
+            }
+            catch
+            {
+                // Ignore polling errors
+            }
         }
         
         // ============================================================
@@ -778,36 +814,57 @@ namespace NOMAD.MissionPlanner
         }
         
         /// <summary>
-        /// Updates link status indicators from connection manager.
+        /// Updates link status indicators from connection manager and Jetson status.
         /// </summary>
         private void UpdateLinkStatus()
         {
-            if (_connectionManager == null) return;
-            
             try
             {
-                var status = _connectionManager.GetLinkStatus();
+                // First, check if Jetson is connected via HTTP (Tailscale)
+                bool jetsonHttpConnected = _sender?.IsJetsonConnected ?? false;
                 
-                // LTE/Tailscale status
-                bool lteConnected = status.LTEConnected;
-                _lteIndicator.BackColor = lteConnected ? SUCCESS_COLOR : ERROR_COLOR;
+                // Update LTE/Tailscale indicator based on Jetson HTTP connectivity
+                _lteIndicator.BackColor = jetsonHttpConnected ? SUCCESS_COLOR : ERROR_COLOR;
                 _lteIndicator.Invalidate();
-                _lblLteStatus.Text = lteConnected 
-                    ? $"LTE/Tailscale: {status.LTELatencyMs}ms" 
+                _lblLteStatus.Text = jetsonHttpConnected 
+                    ? "LTE/Tailscale: Connected" 
                     : "LTE/Tailscale: Disconnected";
                 
-                // Radio status
-                bool radioConnected = status.RadioConnected;
-                _radioIndicator.BackColor = radioConnected ? SUCCESS_COLOR : ERROR_COLOR;
-                _radioIndicator.Invalidate();
-                _lblRadioStatus.Text = radioConnected 
-                    ? $"RadioMaster: {status.RadioLatencyMs}ms" 
-                    : "RadioMaster: Disconnected";
-                
-                // Active link
-                if (_lblActiveLink != null)
+                // Get MAVLink status from connection manager if available
+                if (_connectionManager != null)
                 {
-                    _lblActiveLink.Text = $"Active: {status.ActiveLink}";
+                    var status = _connectionManager.GetLinkStatus();
+                    
+                    // Radio status (MAVLink)
+                    bool radioConnected = status.RadioConnected;
+                    _radioIndicator.BackColor = radioConnected ? SUCCESS_COLOR : ERROR_COLOR;
+                    _radioIndicator.Invalidate();
+                    _lblRadioStatus.Text = radioConnected 
+                        ? $"RadioMaster: {status.RadioLatencyMs}ms" 
+                        : "RadioMaster: Disconnected";
+                    
+                    // Active link - prefer Tailscale if connected
+                    if (_lblActiveLink != null)
+                    {
+                        if (jetsonHttpConnected)
+                            _lblActiveLink.Text = "Active: Tailscale (HTTP)";
+                        else if (radioConnected)
+                            _lblActiveLink.Text = "Active: RadioMaster";
+                        else
+                            _lblActiveLink.Text = "Active: None";
+                    }
+                }
+                else
+                {
+                    // No connection manager - show based on Jetson HTTP only
+                    _radioIndicator.BackColor = ERROR_COLOR;
+                    _radioIndicator.Invalidate();
+                    _lblRadioStatus.Text = "RadioMaster: N/A";
+                    
+                    if (_lblActiveLink != null)
+                    {
+                        _lblActiveLink.Text = jetsonHttpConnected ? "Active: Tailscale (HTTP)" : "Active: None";
+                    }
                 }
             }
             catch

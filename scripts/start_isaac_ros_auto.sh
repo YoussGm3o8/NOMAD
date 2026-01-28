@@ -343,10 +343,11 @@ VIDEO_SCRIPT
     
     # Start FFmpeg encoder on HOST to receive frames and stream to MediaMTX
     # This runs with --network host so container port 9999 is accessible
+    # yuv420p is required for broad decoder compatibility (GStreamer, VLC, etc.)
     log_info "Starting FFmpeg encoder on host..."
     nohup ffmpeg -f rawvideo -pix_fmt bgr24 -s 640x360 -r 30 \
         -i tcp://localhost:9999 \
-        -c:v libx264 -preset ultrafast -tune zerolatency -b:v 2M -g 30 \
+        -c:v libx264 -pix_fmt yuv420p -preset ultrafast -tune zerolatency -b:v 2M -g 30 \
         -f rtsp -rtsp_transport tcp rtsp://localhost:8554/zed \
         > /tmp/ffmpeg_encoder.log 2>&1 &
     echo $! > /tmp/ffmpeg_encoder.pid
