@@ -60,8 +60,15 @@ class VideoStreamManager:
         self.mediamtx_port = 8554
         self._auto_started = False
         self._container_ready = False
+        self._use_nvenc = True  # Default to NVENC hardware encoding
         
         logger.info(f"VideoStreamManager initialized for container: {container_name}")
+        logger.info(f"Using {'NVENC hardware' if self._use_nvenc else 'libx264 software'} encoding")
+
+    def set_use_nvenc(self, use_nvenc: bool) -> None:
+        """Set whether to use NVENC hardware encoding (default: True)."""
+        self._use_nvenc = use_nvenc
+        logger.info(f"Encoding mode: {'NVENC hardware' if use_nvenc else 'libx264 software'}")
 
     def set_container_name(self, name: str) -> None:
         """Update the container name (useful when container is discovered dynamically)."""
@@ -221,14 +228,15 @@ class VideoStreamManager:
             
             logger.info(f"Starting stream '{stream_name}': {topic} -> {rtsp_url}")
             
-            # Start ROS video bridge inside container
-            bridge_pid = self._start_bridge(stream_name, topic, tcp_port, width, height, fps)
-            
-            # Wait for bridge to initialize
-            time.sleep(2)
-            
-            # Start FFmpeg encoder on host
-            encoder_pid = self._start_encoder(stream_name, tcp_port, rtsp_url, width, height, fps)
+            if self._use_nvenc:
+                # Use NVENC hardware encoding (single process in container)
+                bridge_pid = self._start_nvenc_bridge(stream_name, topic, rtsp_url, width, height, fps)
+                encoder_pid = None  # NVENC bridge handles encoding internally
+            else:
+                # Use legacy TCP + FFmpeg libx264 approach
+                bridge_pid = self._start_bridge(stream_name, topic, tcp_port, width, height, fps)
+                time.sleep(2)
+                encoder_pid = self._start_encoder(stream_name, tcp_port, rtsp_url, width, height, fps)
             
             # Track stream
             stream = StreamInfo(
@@ -310,6 +318,69 @@ class VideoStreamManager:
         port = self.next_port
         self.next_port += 1
         return port
+
+    def _start_nvenc_bridge(
+        self,
+        stream_name: str,
+        topic: str,
+        rtsp_url: str,
+        width: int,
+        height: int,
+        fps: int
+    ) -> Optional[int]:
+        """Start NVENC video bridge inside container (hardware encoding). Returns PID.
+        
+        This approach uses GStreamer with nvv4l2h264enc for hardware H.264 encoding
+        directly in the container. Lower CPU/memory usage than TCP+FFmpeg libx264.
+        """
+        try:
+            # Copy NVENC bridge script to container /tmp
+            bridge_script = os.path.join(os.path.dirname(__file__), 'ros_video_bridge_nvenc.py')
+            if os.path.exists(bridge_script):
+                subprocess.run(
+                    ["docker", "cp", bridge_script, f"{self.container_name}:/tmp/ros_video_bridge_nvenc.py"],
+                    capture_output=True,
+                    timeout=5
+                )
+            else:
+                logger.warning(f"NVENC bridge script not found: {bridge_script}, falling back to TCP+FFmpeg")
+                # Fallback to legacy bridge
+                tcp_port = self._allocate_port()
+                pid = self._start_bridge(stream_name, topic, tcp_port, width, height, fps)
+                time.sleep(2)
+                self._start_encoder(stream_name, tcp_port, rtsp_url, width, height, fps)
+                return pid
+            
+            # Start NVENC bridge in background using docker exec -d
+            cmd = [
+                "docker", "exec", "-d", self.container_name,
+                "bash", "-c",
+                f"source /opt/ros/humble/setup.bash && "
+                f"source /workspaces/isaac_ros-dev/install/setup.bash 2>/dev/null ; "
+                f"python3 /tmp/ros_video_bridge_nvenc.py "
+                f"--topic '{topic}' "
+                f"--stream '{stream_name}' "
+                f"--host '{self.mediamtx_host}' "
+                f"--port {self.mediamtx_port} "
+                f"--width {width} "
+                f"--height {height} "
+                f"--fps {fps} "
+                f"--bitrate 4000 "
+                f"> /tmp/video_bridge_{stream_name}.log 2>&1"
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            
+            if result.returncode == 0:
+                logger.info(f"NVENC bridge started for '{stream_name}' (hardware encoding)")
+                return 1  # Dummy PID
+            else:
+                logger.error(f"Failed to start NVENC bridge: {result.stderr}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error starting NVENC bridge: {e}")
+            return None
 
     def _start_bridge(
         self,

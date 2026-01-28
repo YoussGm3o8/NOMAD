@@ -1448,4 +1448,44 @@ def create_app(state_manager: StateManager) -> FastAPI:
             return {"active": False, "stream": None}
         return {"active": True, "stream": stream}
 
+    @app.get("/api/video/encoding", tags=["Video"])
+    async def get_video_encoding():
+        """
+        Get the current video encoding mode.
+        
+        Returns whether NVENC hardware encoding is enabled.
+        NVENC uses ~5-10% CPU vs ~60-90% for libx264.
+        """
+        mgr = get_video_manager()
+        return {
+            "use_nvenc": mgr._use_nvenc,
+            "encoder": "nvv4l2h264enc (NVENC hardware)" if mgr._use_nvenc else "libx264 (software)",
+            "description": "Hardware encoding uses GPU, lower CPU/memory" if mgr._use_nvenc else "Software encoding, higher CPU usage"
+        }
+
+    @app.post("/api/video/encoding", tags=["Video"])
+    async def set_video_encoding(use_nvenc: bool = Query(True, description="Use NVENC hardware encoding")):
+        """
+        Set the video encoding mode.
+        
+        Args:
+            use_nvenc: True for NVENC hardware encoding (default), False for libx264 software encoding
+        
+        Note: This only affects NEW streams. Existing streams continue with their current encoder.
+        To apply to existing streams, stop and restart them.
+        
+        NVENC hardware encoding benefits:
+        - ~5-10% CPU usage (vs ~60-90% for libx264)
+        - Lower memory usage (GPU memory vs RAM)
+        - Lower latency (~5ms vs ~30ms)
+        """
+        mgr = get_video_manager()
+        mgr.set_use_nvenc(use_nvenc)
+        return {
+            "success": True,
+            "use_nvenc": use_nvenc,
+            "encoder": "nvv4l2h264enc (NVENC hardware)" if use_nvenc else "libx264 (software)",
+            "note": "Setting applies to new streams only"
+        }
+
     return app
