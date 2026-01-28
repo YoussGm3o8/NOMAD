@@ -1,0 +1,135 @@
+# NOMAD Custom Object Detection Configuration
+# For ZED ROS2 Wrapper with YOLO26n trained on colored circles
+# AEAC 2026 Competition Target Detection
+/**:
+  ros__parameters:
+    object_detection:
+      custom_onnx_file: '/home/mad/NOMAD/best.onnx'  # Path to ONNX model
+      custom_onnx_input_size: 512                    # Model input resolution
+      custom_class_count: 6                          # Number of target classes
+
+      # Class 0: Black Circle
+      class_0:
+        label: 'black_circle'
+        model_class_id: 0
+        enabled: true
+        confidence_threshold: 40.0
+        is_grounded: true
+        is_static: true
+        tracking_timeout: 5.0
+        tracking_max_dist: 5.0
+        max_box_width_normalized: -1.0
+        min_box_width_normalized: 0.01
+        max_box_height_normalized: -1.0
+        min_box_height_normalized: 0.01
+        max_box_width_meters: 2.0
+        min_box_width_meters: 0.05
+        max_box_height_meters: 2.0
+        min_box_height_meters: 0.05
+        object_acceleration_preset: 'LOW'
+        max_allowed_acceleration: 5.0
+
+      # Class 1: Blue Circle
+      class_1:
+        label: 'blue_circle'
+        model_class_id: 1
+        enabled: true
+        confidence_threshold: 40.0
+        is_grounded: true
+        is_static: true
+        tracking_timeout: 5.0
+        tracking_max_dist: 5.0
+        max_box_width_normalized: -1.0
+        min_box_width_normalized: 0.01
+        max_box_height_normalized: -1.0
+        min_box_height_normalized: 0.01
+        max_box_width_meters: 2.0
+        min_box_width_meters: 0.05
+        max_box_height_meters: 2.0
+        min_box_height_meters: 0.05
+        object_acceleration_preset: 'LOW'
+        max_allowed_acceleration: 5.0
+
+      # Class 2: Green Circle
+      class_2:
+        label: 'green_circle'
+        model_class_id: 2
+        enabled: true
+        confidence_threshold: 40.0
+        is_grounded: true
+        is_static: true
+        tracking_timeout: 5.0
+        tracking_max_dist: 5.0
+        max_box_width_normalized: -1.0
+        min_box_width_normalized: 0.01
+        max_box_height_normalized: -1.0
+        min_box_height_normalized: 0.01
+        max_box_width_meters: 2.0
+        min_box_width_meters: 0.05
+        max_box_height_meters: 2.0
+        min_box_height_meters: 0.05
+        object_acceleration_preset: 'LOW'
+        max_allowed_acceleration: 5.0
+
+      # Class 3: Red Circle
+      class_3:
+        label: 'red_circle'
+        model_class_id: 3
+        enabled: true
+        confidence_threshold: 40.0
+        is_grounded: true
+        is_static: true
+        tracking_timeout: 5.0
+        tracking_max_dist: 5.0
+        max_box_width_normalized: -1.0
+        min_box_width_normalized: 0.01
+        max_box_height_normalized: -1.0
+        min_box_height_normalized: 0.01
+        max_box_width_meters: 2.0
+        min_box_width_meters: 0.05
+        max_box_height_meters: 2.0
+        min_box_height_meters: 0.05
+        object_acceleration_preset: 'LOW'
+        max_allowed_acceleration: 5.0
+
+      # Class 4: White Circle
+      class_4:
+        label: 'white_circle'
+        model_class_id: 4
+        enabled: true
+        confidence_threshold: 40.0
+        is_grounded: true
+        is_static: true
+        tracking_timeout: 5.0
+        tracking_max_dist: 5.0
+        max_box_width_normalized: -1.0
+        min_box_width_normalized: 0.01
+        max_box_height_normalized: -1.0
+        min_box_height_normalized: 0.01
+        max_box_width_meters: 2.0
+        min_box_width_meters: 0.05
+        max_box_height_meters: 2.0
+        min_box_height_meters: 0.05
+        object_acceleration_preset: 'LOW'
+        max_allowed_acceleration: 5.0
+
+      # Class 5: Yellow Circle
+      class_5:
+        label: 'yellow_circle'
+        model_class_id: 5
+        enabled: true
+        confidence_threshold: 40.0
+        is_grounded: true
+        is_static: true
+        tracking_timeout: 5.0
+        tracking_max_dist: 5.0
+        max_box_width_normalized: -1.0
+        min_box_width_normalized: 0.01
+        max_box_height_normalized: -1.0
+        min_box_height_normalized: 0.01
+        max_box_width_meters: 2.0
+        min_box_width_meters: 0.05
+        max_box_height_meters: 2.0
+        min_box_height_meters: 0.05
+        object_acceleration_preset: 'LOW'
+        max_allowed_acceleration: 5.0

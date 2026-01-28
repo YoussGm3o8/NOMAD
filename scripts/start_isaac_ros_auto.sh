@@ -156,8 +156,12 @@ install_dependencies() {
             ros-humble-tf2-ros \
             ros-humble-tf2-tools \
             ros-humble-cob-srvs \
+            liburdfdom-dev \
             python3-pip 2>/dev/null
-        pip3 install requests 2>/dev/null
+        # Update library cache for newly installed packages
+        echo /opt/ros/humble/lib >> /etc/ld.so.conf.d/ros.conf
+        ldconfig
+        pip3 install requests opencv-python-headless 2>/dev/null
     " 2>&1 | tail -3
     
     # Run rosdep to install remaining dependencies
@@ -226,8 +230,8 @@ launch_zed_nvblox() {
 source /opt/ros/humble/setup.bash
 source /workspaces/isaac_ros-dev/install/setup.bash
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-export LD_LIBRARY_PATH=/usr/local/zed/lib:\$LD_LIBRARY_PATH
-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2
+export LD_LIBRARY_PATH=/opt/ros/humble/lib:/usr/local/zed/lib:/workspaces/isaac_ros-dev/install/zed_components/lib:\$LD_LIBRARY_PATH
+ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2i
 LAUNCH_SCRIPT
             chmod +x /tmp/launch_zed_only.sh
         "
@@ -315,13 +319,14 @@ source /workspaces/isaac_ros-dev/install/setup.bash
 sleep 8
 
 # Start the video bridge - outputs raw frames via TCP port 9999
+# Note: ZED 2i default resolution is 640x360 in VGA mode
 python3 /tmp/ros_video_bridge.py \\
     --topic /zed/zed_node/rgb/image_rect_color \\
     --stream zed \\
     --host localhost \\
     --port 8554 \\
-    --width 1280 \\
-    --height 720 \\
+    --width 640 \\
+    --height 360 \\
     --fps 30
 VIDEO_SCRIPT
         chmod +x /tmp/launch_video_bridge.sh
@@ -339,9 +344,9 @@ VIDEO_SCRIPT
     # Start FFmpeg encoder on HOST to receive frames and stream to MediaMTX
     # This runs with --network host so container port 9999 is accessible
     log_info "Starting FFmpeg encoder on host..."
-    nohup ffmpeg -f rawvideo -pix_fmt bgr24 -s 1280x720 -r 30 \
+    nohup ffmpeg -f rawvideo -pix_fmt bgr24 -s 640x360 -r 30 \
         -i tcp://localhost:9999 \
-        -c:v libx264 -preset ultrafast -tune zerolatency -b:v 4M -g 30 \
+        -c:v libx264 -preset ultrafast -tune zerolatency -b:v 2M -g 30 \
         -f rtsp -rtsp_transport tcp rtsp://localhost:8554/zed \
         > /tmp/ffmpeg_encoder.log 2>&1 &
     echo $! > /tmp/ffmpeg_encoder.pid

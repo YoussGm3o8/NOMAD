@@ -85,7 +85,7 @@ namespace NOMAD.MissionPlanner
         /// <summary>
         /// Gets the configured Jetson IP address.
         /// </summary>
-        public string JetsonIP => _config.JetsonIP;
+        public string JetsonIP => _config.EffectiveIP;
         
         /// <summary>
         /// Gets whether the Jetson is currently connected/reachable.
@@ -207,7 +207,7 @@ namespace NOMAD.MissionPlanner
         {
             try
             {
-                var url = $"http://{_config.JetsonIP}:{_config.JetsonPort}/health";
+                var url = $"http://{_config.EffectiveIP}:{_config.JetsonPort}/health";
                 var response = await _httpClient.GetAsync(url);
                 var responseBody = await response.Content.ReadAsStringAsync();
 
@@ -222,13 +222,14 @@ namespace NOMAD.MissionPlanner
                         var data = JsonConvert.DeserializeObject<dynamic>(responseBody);
                         LastHealthStatus = new JetsonHealthStatus
                         {
-                            CpuUsage = data.cpu_usage_pct ?? data.cpu_load ?? 0,
-                            GpuUsage = data.gpu_usage_pct ?? data.gpu_load ?? 0,
+                            // Match actual API field names from /health endpoint
+                            CpuUsage = data.cpu_load ?? data.cpu_usage_pct ?? 0,
+                            GpuUsage = data.gpu_load ?? data.gpu_usage_pct ?? 0,
                             CpuTemp = data.cpu_temp ?? data.cpu_temp_c ?? 0,
                             GpuTemp = data.gpu_temp ?? data.gpu_temp_c ?? 0,
-                            MemoryUsed = data.memory_used_mb ?? data.mem_used_mb ?? 0,
-                            MemoryTotal = data.memory_total_mb ?? data.mem_total_mb ?? 8192,
-                            DiskUsed = data.disk_used_pct ?? 0,
+                            MemoryUsed = data.memory_used_pct ?? data.memory_used_mb ?? 0,
+                            MemoryTotal = 100, // memory_used_pct is already a percentage
+                            DiskUsed = 100 - ((float)(data.disk_free_gb ?? 800) / 1000 * 100), // Approx: 1TB disk
                             Timestamp = DateTime.Now
                         };
                     }
@@ -381,7 +382,7 @@ namespace NOMAD.MissionPlanner
         {
             try
             {
-                var url = $"http://{_config.JetsonIP}:{_config.JetsonPort}{endpoint}";
+                var url = $"http://{_config.EffectiveIP}:{_config.JetsonPort}{endpoint}";
                 var response = await _httpClient.GetAsync(url);
                 var responseBody = await response.Content.ReadAsStringAsync();
 
@@ -421,7 +422,7 @@ namespace NOMAD.MissionPlanner
         {
             try
             {
-                var url = $"http://{_config.JetsonIP}:{_config.JetsonPort}{endpoint}";
+                var url = $"http://{_config.EffectiveIP}:{_config.JetsonPort}{endpoint}";
                 
                 var content = body != null
                     ? new StringContent(
