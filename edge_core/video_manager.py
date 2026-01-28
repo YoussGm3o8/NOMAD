@@ -228,12 +228,22 @@ class VideoStreamManager:
     ) -> Optional[int]:
         """Start ROS video bridge inside container. Returns PID."""
         try:
-            # Start bridge in background, get PID
+            # Copy bridge script to container /tmp if not already there
+            bridge_script = os.path.join(os.path.dirname(__file__), '../edge_core/ros_video_bridge.py')
+            if os.path.exists(bridge_script):
+                subprocess.run(
+                    ["docker", "cp", bridge_script, f"{self.container_name}:/tmp/ros_video_bridge.py"],
+                    capture_output=True,
+                    timeout=5
+                )
+            
+            # Start bridge in background using docker exec -d
+            # Note: PID tracking isn't reliable with 'docker exec -d', but the process will run
             cmd = [
                 "docker", "exec", "-d", self.container_name,
                 "bash", "-c",
                 f"source /opt/ros/humble/setup.bash && "
-                f"source /workspaces/isaac_ros-dev/install/setup.bash && "
+                f"source /workspaces/isaac_ros-dev/install/setup.bash 2>/dev/null ; "
                 f"python3 /tmp/ros_video_bridge.py "
                 f"--topic '{topic}' "
                 f"--stream '{stream_name}' "
@@ -241,19 +251,17 @@ class VideoStreamManager:
                 f"--width {width} "
                 f"--height {height} "
                 f"--fps {fps} "
-                f"> /tmp/video_bridge_{stream_name}.log 2>&1 & "
-                f"echo $!"
+                f"> /tmp/video_bridge_{stream_name}.log 2>&1"
             ]
             
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-            pid_str = result.stdout.strip()
             
-            if pid_str and pid_str.isdigit():
-                pid = int(pid_str)
-                logger.info(f"Bridge started for '{stream_name}' (PID: {pid})")
-                return pid
+            if result.returncode == 0:
+                logger.info(f"Bridge started for '{stream_name}' on TCP port {tcp_port}")
+                # Return a dummy PID since we can't reliably get it with 'docker exec -d'
+                return 1
             else:
-                logger.error(f"Failed to get bridge PID: {result.stderr}")
+                logger.error(f"Failed to start bridge: {result.stderr}")
                 return None
                 
         except Exception as e:
