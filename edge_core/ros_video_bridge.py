@@ -90,9 +90,10 @@ class ROSVideoPublisher(Node):
         # Start TCP server
         self._start_tcp_server()
         
-        # SAFETY: Use reliable QoS with limited queue to prevent memory buildup
+        # SAFETY: Use QoS compatible with ZED (RELIABLE publisher)
+        # ZED publishes with RELIABLE, so we must use RELIABLE to receive
         sensor_qos = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
+            reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
             depth=1,  # Only keep latest frame
             durability=DurabilityPolicy.VOLATILE,
