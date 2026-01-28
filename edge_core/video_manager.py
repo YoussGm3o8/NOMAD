@@ -274,29 +274,30 @@ class VideoStreamManager:
             
             logger.info(f"Stopping stream '{stream_name}'")
             
-            # Stop FFmpeg encoder first (consumer)
-            if stream.encoder_pid:
+            # Stop FFmpeg encoder first (consumer) - use pkill to find by TCP port
+            if stream.encoder_pid and stream.encoder_pid != -1:
                 try:
-                    subprocess.run(["kill", "-TERM", str(stream.encoder_pid)], timeout=2)
-                    time.sleep(1)
-                    subprocess.run(["kill", "-KILL", str(stream.encoder_pid)], timeout=1)
+                    subprocess.run(["pkill", "-f", f"tcp://127.0.0.1:{stream.tcp_port}"], timeout=2, capture_output=True)
+                    time.sleep(0.5)
+                    subprocess.run(["pkill", "-9", "-f", f"tcp://127.0.0.1:{stream.tcp_port}"], timeout=2, capture_output=True)
                 except:
                     pass
             
-            # Stop bridge inside container (producer)
-            if stream.bridge_pid:
-                try:
-                    subprocess.run([
-                        "docker", "exec", self.container_name,
-                        "kill", "-TERM", str(stream.bridge_pid)
-                    ], timeout=2)
-                    time.sleep(1)
-                    subprocess.run([
-                        "docker", "exec", self.container_name,
-                        "kill", "-KILL", str(stream.bridge_pid)
-                    ], timeout=1)
-                except:
-                    pass
+            # Stop bridge inside container by matching the stream name in process args
+            # Since we can't reliably get PID, we kill by matching the topic pattern
+            try:
+                # Kill any bridge process that is streaming to this stream name
+                subprocess.run([
+                    "docker", "exec", self.container_name,
+                    "pkill", "-f", f"--stream '{stream_name}'"
+                ], timeout=5, capture_output=True)
+                time.sleep(0.5)
+                subprocess.run([
+                    "docker", "exec", self.container_name,
+                    "pkill", "-9", "-f", f"--stream '{stream_name}'"
+                ], timeout=5, capture_output=True)
+            except Exception as e:
+                logger.warning(f"Error killing bridge: {e}")
             
             # Remove from tracking
             del self.streams[stream_name]

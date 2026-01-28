@@ -626,7 +626,13 @@ namespace NOMAD.MissionPlanner
                             foreach (var t in topics)
                             {
                                 var topic = t.ToString();
-                                _availableStreams.Add(("ros:" + topic, $"[ROS] {topic}"));
+                                // Create shorter display name by removing common prefix
+                                var displayName = topic;
+                                if (topic.StartsWith("/zed/zed_node/"))
+                                    displayName = topic.Substring("/zed/zed_node/".Length);
+                                else if (topic.StartsWith("/"))
+                                    displayName = topic.Substring(1);
+                                _availableStreams.Add(("ros:" + topic, $"[ROS] {displayName}"));
                             }
                         }
                     }
