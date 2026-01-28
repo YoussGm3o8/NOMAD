@@ -239,14 +239,15 @@ LAUNCH_SCRIPT
     fi
     
     # Create a launch script inside container for full Nvblox
+    # Note: Using zed2i for ZED 2i camera (not zed2!)
     docker exec "$CONTAINER_NAME" bash -c "
         cat > /tmp/launch_zed_nvblox.sh << 'LAUNCH_SCRIPT'
 #!/bin/bash
 source /opt/ros/humble/setup.bash
 source /workspaces/isaac_ros-dev/install/setup.bash
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-# Use zed2 for ZED 2i camera as per NVIDIA docs
-ros2 launch nvblox_examples_bringup zed_example.launch.py camera:=zed2
+# Use zed2i for ZED 2i camera (fixed from zed2)
+ros2 launch nvblox_examples_bringup zed_example.launch.py camera:=zed2i
 LAUNCH_SCRIPT
         chmod +x /tmp/launch_zed_nvblox.sh
     "
