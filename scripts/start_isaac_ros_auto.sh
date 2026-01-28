@@ -215,50 +215,41 @@ launch_zed_nvblox() {
     # Check if nvblox is available
     if ! docker exec "$CONTAINER_NAME" bash -c "source /opt/ros/humble/setup.bash && source /workspaces/isaac_ros-dev/install/setup.bash && ros2 pkg list 2>/dev/null | grep -q nvblox"; then
         log_warn "Nvblox not available - launching ZED wrapper only"
-        
-        # Create a ZED-only launch script
-        docker exec "$CONTAINER_NAME" bash -c "
-            cat > /tmp/launch_zed_only.sh << 'LAUNCH_SCRIPT'
+        launch_zed_only
+        return
+    fi
+    
+    # Note: nvblox_examples_bringup only supports zed2 and zedx cameras
+    # For ZED 2i, we need to use the ZED-only launch with camera_model:=zed2i
+    # Since the camera is detected as zed2i, we use ZED-only mode
+    log_info "Using ZED-only launch for ZED 2i camera (nvblox requires zed2/zedx)"
+    launch_zed_only
+}
+
+launch_zed_only() {
+    log_info "Launching ZED wrapper only (camera_model:=zed2i)..."
+    
+    # Create a ZED-only launch script
+    docker exec "$CONTAINER_NAME" bash -c "
+        cat > /tmp/launch_zed_only.sh << 'LAUNCH_SCRIPT'
 #!/bin/bash
 source /opt/ros/humble/setup.bash
 source /workspaces/isaac_ros-dev/install/setup.bash
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 export LD_LIBRARY_PATH=/opt/ros/humble/lib:/usr/local/zed/lib:/workspaces/isaac_ros-dev/install/zed_components/lib:\$LD_LIBRARY_PATH
-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2i od_enabled:=true
+# Use zed2i for ZED 2i camera
+ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2i
 LAUNCH_SCRIPT
-            chmod +x /tmp/launch_zed_only.sh
-        "
-        
-        docker exec -d "$CONTAINER_NAME" bash -c "
-            bash /tmp/launch_zed_only.sh > /tmp/zed_nvblox.log 2>&1 &
-            echo \$! > /tmp/zed_nvblox.pid
-        "
-        
-        log_info "ZED wrapper launched (without Nvblox)"
-        return
-    fi
-    
-    # Create a launch script inside container for full Nvblox
-    # Note: Using zed2i for ZED 2i camera (not zed2!)
-    docker exec "$CONTAINER_NAME" bash -c "
-        cat > /tmp/launch_zed_nvblox.sh << 'LAUNCH_SCRIPT'
-#!/bin/bash
-source /opt/ros/humble/setup.bash
-source /workspaces/isaac_ros-dev/install/setup.bash
-export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-# Use zed2i for ZED 2i camera (fixed from zed2)
-ros2 launch nvblox_examples_bringup zed_example.launch.py camera:=zed2i
-LAUNCH_SCRIPT
-        chmod +x /tmp/launch_zed_nvblox.sh
+        chmod +x /tmp/launch_zed_only.sh
     "
     
-    # Launch in background with nohup
     docker exec -d "$CONTAINER_NAME" bash -c "
-        nohup /tmp/launch_zed_nvblox.sh > /tmp/zed_nvblox.log 2>&1 &
+        bash /tmp/launch_zed_only.sh > /tmp/zed_nvblox.log 2>&1 &
         echo \$! > /tmp/zed_nvblox.pid
     "
     
-    log_info "ZED + Nvblox launched (logs at /tmp/zed_nvblox.log inside container)"
+    log_info "ZED wrapper launched (logs at /tmp/zed_nvblox.log inside container)"
+    log_warn "Note: First-time launch may take several minutes for AI model optimization"
 }
 
 launch_ros_http_bridge() {
