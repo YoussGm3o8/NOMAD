@@ -62,8 +62,15 @@ namespace NOMAD.MissionPlanner
         // Network labels
         private Label _lblTailscaleStatus;
         private Label _lblTailscaleIP;
-        private Label _lblLatency;
         private Label _lblVioStatus;
+        
+        // Extended network labels (from /network/status)
+        private Label _lblInternetStatus;
+        private Label _lblGcsReachable;
+        private Label _lblModemStatus;
+        private Label _lblModemSignal;
+        private Label _lblPeerCount;
+        private Button _btnReconnectTailscale;
         
         // Graph panel for drawing
         private PictureBox _graphBox;
@@ -290,6 +297,7 @@ namespace NOMAD.MissionPlanner
                 BackColor = Color.FromArgb(45, 45, 48),
                 Margin = new Padding(5),
                 Padding = new Padding(10),
+                AutoScroll = true,
             };
             
             var title = new Label
@@ -302,7 +310,22 @@ namespace NOMAD.MissionPlanner
             };
             panel.Controls.Add(title);
             
-            int yOffset = 40;
+            // Reconnect Button
+            _btnReconnectTailscale = new Button
+            {
+                Text = "Reconnect",
+                Location = new Point(240, 7),
+                Size = new Size(70, 22),
+                BackColor = Color.FromArgb(60, 60, 65),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 8),
+            };
+            _btnReconnectTailscale.FlatAppearance.BorderSize = 0;
+            _btnReconnectTailscale.Click += async (s, e) => await TriggerTailscaleReconnect();
+            panel.Controls.Add(_btnReconnectTailscale);
+            
+            int yOffset = 38;
             
             // Tailscale Status
             var lblTsTitle = new Label
@@ -324,7 +347,17 @@ namespace NOMAD.MissionPlanner
                 AutoSize = true,
             };
             panel.Controls.Add(_lblTailscaleStatus);
-            yOffset += 25;
+            
+            _lblPeerCount = new Label
+            {
+                Text = "",
+                Font = new Font("Segoe UI", 8),
+                ForeColor = Color.Gray,
+                Location = new Point(180, yOffset),
+                AutoSize = true,
+            };
+            panel.Controls.Add(_lblPeerCount);
+            yOffset += 22;
             
             // Tailscale IP
             var lblIpTitle = new Label
@@ -346,7 +379,83 @@ namespace NOMAD.MissionPlanner
                 AutoSize = true,
             };
             panel.Controls.Add(_lblTailscaleIP);
-            yOffset += 35;
+            yOffset += 22;
+            
+            // Internet Reachability
+            var lblInternetTitle = new Label
+            {
+                Text = "Internet:",
+                Font = new Font("Segoe UI", 9),
+                ForeColor = Color.LightGray,
+                Location = new Point(10, yOffset),
+                AutoSize = true,
+            };
+            panel.Controls.Add(lblInternetTitle);
+            
+            _lblInternetStatus = new Label
+            {
+                Text = "--",
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                ForeColor = Color.Gray,
+                Location = new Point(90, yOffset),
+                AutoSize = true,
+            };
+            panel.Controls.Add(_lblInternetStatus);
+            yOffset += 22;
+            
+            // GCS Reachability
+            var lblGcsTitle = new Label
+            {
+                Text = "GCS:",
+                Font = new Font("Segoe UI", 9),
+                ForeColor = Color.LightGray,
+                Location = new Point(10, yOffset),
+                AutoSize = true,
+            };
+            panel.Controls.Add(lblGcsTitle);
+            
+            _lblGcsReachable = new Label
+            {
+                Text = "--",
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                ForeColor = Color.Gray,
+                Location = new Point(90, yOffset),
+                AutoSize = true,
+            };
+            panel.Controls.Add(_lblGcsReachable);
+            yOffset += 22;
+            
+            // Modem Status
+            var lblModemTitle = new Label
+            {
+                Text = "Modem:",
+                Font = new Font("Segoe UI", 9),
+                ForeColor = Color.LightGray,
+                Location = new Point(10, yOffset),
+                AutoSize = true,
+            };
+            panel.Controls.Add(lblModemTitle);
+            
+            _lblModemStatus = new Label
+            {
+                Text = "--",
+                Font = new Font("Segoe UI", 9),
+                ForeColor = Color.Gray,
+                Location = new Point(90, yOffset),
+                AutoSize = true,
+            };
+            panel.Controls.Add(_lblModemStatus);
+            
+            _lblModemSignal = new Label
+            {
+                Text = "",
+                Font = new Font("Segoe UI", 8),
+                ForeColor = Color.Gray,
+                Location = new Point(180, yOffset),
+                AutoSize = true,
+            };
+            panel.Controls.Add(_lblModemSignal);
+            yOffset += 25;
             
             // VIO Status
             var vioGroup = new GroupBox
@@ -355,7 +464,7 @@ namespace NOMAD.MissionPlanner
                 ForeColor = Color.FromArgb(255, 150, 50),
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 Location = new Point(10, yOffset),
-                Size = new Size(300, 100),
+                Size = new Size(300, 75),
                 BackColor = Color.FromArgb(40, 40, 43),
             };
             
@@ -364,8 +473,8 @@ namespace NOMAD.MissionPlanner
                 Text = "Status: Unknown\nConfidence: --\nRate: -- Hz",
                 Font = new Font("Consolas", 9),
                 ForeColor = Color.White,
-                Location = new Point(15, 25),
-                Size = new Size(270, 60),
+                Location = new Point(15, 20),
+                Size = new Size(270, 50),
             };
             vioGroup.Controls.Add(_lblVioStatus);
             
@@ -505,18 +614,33 @@ namespace NOMAD.MissionPlanner
         {
             try
             {
-                var response = await _httpClient.GetAsync($"{_config.EffectiveBaseUrl}/health/detailed");
+                // Fetch health/detailed for system metrics
+                var healthTask = _httpClient.GetAsync($"{_config.EffectiveBaseUrl}/health/detailed");
+                // Fetch network/status for detailed network info
+                var networkTask = _httpClient.GetAsync($"{_config.EffectiveBaseUrl}/network/status");
                 
-                if (response.IsSuccessStatusCode)
+                await Task.WhenAll(healthTask, networkTask);
+                
+                var healthResponse = await healthTask;
+                var networkResponse = await networkTask;
+                
+                if (healthResponse.IsSuccessStatusCode)
                 {
-                    var json = await response.Content.ReadAsStringAsync();
-                    var data = JObject.Parse(json);
+                    var healthJson = await healthResponse.Content.ReadAsStringAsync();
+                    var healthData = JObject.Parse(healthJson);
                     
-                    this.BeginInvoke((Action)(() => UpdateUI(data)));
+                    JObject networkData = null;
+                    if (networkResponse.IsSuccessStatusCode)
+                    {
+                        var networkJson = await networkResponse.Content.ReadAsStringAsync();
+                        networkData = JObject.Parse(networkJson);
+                    }
+                    
+                    this.BeginInvoke((Action)(() => UpdateUI(healthData, networkData)));
                 }
                 else
                 {
-                    this.BeginInvoke((Action)(() => UpdateStatusError($"HTTP {response.StatusCode}")));
+                    this.BeginInvoke((Action)(() => UpdateStatusError($"HTTP {healthResponse.StatusCode}")));
                 }
             }
             catch (Exception ex)
@@ -534,7 +658,7 @@ namespace NOMAD.MissionPlanner
         // UI Updates
         // ============================================================
         
-        private void UpdateUI(JObject data)
+        private void UpdateUI(JObject data, JObject networkData = null)
         {
             try
             {
@@ -545,13 +669,13 @@ namespace NOMAD.MissionPlanner
                 // CPU
                 var cpuTemp = data["cpu_temp"]?.Value<float>() ?? 0;
                 var cpuLoad = data["cpu_load"]?.Value<float>() ?? 0;
-                UpdateMetric(_lblCpuTemp, _prgCpuTemp, cpuTemp, "°C", 85, 95);
+                UpdateMetric(_lblCpuTemp, _prgCpuTemp, cpuTemp, "C", 85, 95);
                 UpdateMetric(_lblCpuLoad, _prgCpuLoad, cpuLoad, "%", 80, 95);
                 
                 // GPU
                 var gpuTemp = data["gpu_temp"]?.Value<float>() ?? 0;
                 var gpuLoad = data["gpu_load"]?.Value<float>() ?? 0;
-                UpdateMetric(_lblGpuTemp, _prgGpuTemp, gpuTemp, "°C", 85, 95);
+                UpdateMetric(_lblGpuTemp, _prgGpuTemp, gpuTemp, "C", 85, 95);
                 UpdateMetric(_lblGpuLoad, _prgGpuLoad, gpuLoad, "%", 80, 95);
                 
                 // Memory
@@ -568,12 +692,27 @@ namespace NOMAD.MissionPlanner
                 _lblPower.Text = $"Power: {power:F1}W";
                 _lblFan.Text = $"Fan: {fan:F0}%";
                 
-                // Tailscale
-                var tsConnected = data["tailscale_connected"]?.Value<bool>() ?? false;
-                var tsIp = data["tailscale_ip"]?.ToString() ?? "--";
-                _lblTailscaleStatus.Text = tsConnected ? "Connected" : "Disconnected";
-                _lblTailscaleStatus.ForeColor = tsConnected ? Color.LimeGreen : Color.Red;
-                _lblTailscaleIP.Text = tsIp;
+                // Network status from /network/status endpoint
+                if (networkData != null)
+                {
+                    UpdateNetworkStatus(networkData);
+                }
+                else
+                {
+                    // Fallback to basic tailscale info from /health/detailed
+                    var tsConnected = data["tailscale_connected"]?.Value<bool>() ?? false;
+                    var tsIp = data["tailscale_ip"]?.ToString() ?? "--";
+                    _lblTailscaleStatus.Text = tsConnected ? "Connected" : "Disconnected";
+                    _lblTailscaleStatus.ForeColor = tsConnected ? Color.LimeGreen : Color.Red;
+                    _lblTailscaleIP.Text = tsIp;
+                    _lblPeerCount.Text = "";
+                    _lblInternetStatus.Text = "--";
+                    _lblInternetStatus.ForeColor = Color.Gray;
+                    _lblGcsReachable.Text = "--";
+                    _lblGcsReachable.ForeColor = Color.Gray;
+                    _lblModemStatus.Text = "--";
+                    _lblModemSignal.Text = "";
+                }
                 
                 // Update history
                 UpdateHistory(cpuTemp, gpuTemp, cpuLoad, gpuLoad, memUsed);
@@ -590,6 +729,145 @@ namespace NOMAD.MissionPlanner
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Health UI error: {ex.Message}");
+            }
+        }
+        
+        private void UpdateNetworkStatus(JObject networkData)
+        {
+            try
+            {
+                // Tailscale status
+                var tailscale = networkData["tailscale"];
+                if (tailscale != null && tailscale.Type != JTokenType.Null)
+                {
+                    var status = tailscale["status"]?.ToString() ?? "unknown";
+                    var ip = tailscale["ip"]?.ToString() ?? "--";
+                    var peerCount = tailscale["peer_count"]?.Value<int>() ?? 0;
+                    var latency = tailscale["latency_ms"];
+                    
+                    bool isConnected = status == "connected";
+                    _lblTailscaleStatus.Text = isConnected ? "Connected" : status.Replace("_", " ");
+                    _lblTailscaleStatus.ForeColor = isConnected ? Color.LimeGreen : 
+                        (status == "connecting" ? Color.Yellow : Color.Red);
+                    _lblTailscaleIP.Text = ip ?? "--";
+                    _lblPeerCount.Text = peerCount > 0 ? $"({peerCount} peers)" : "";
+                }
+                else
+                {
+                    _lblTailscaleStatus.Text = "Not Available";
+                    _lblTailscaleStatus.ForeColor = Color.Gray;
+                    _lblTailscaleIP.Text = "--";
+                    _lblPeerCount.Text = "";
+                }
+                
+                // Internet reachability
+                var internetReachable = networkData["internet_reachable"]?.Value<bool>() ?? false;
+                _lblInternetStatus.Text = internetReachable ? "Reachable" : "Unreachable";
+                _lblInternetStatus.ForeColor = internetReachable ? Color.LimeGreen : Color.Red;
+                
+                // GCS reachability
+                var gcsReachable = networkData["gcs_reachable"]?.Value<bool>() ?? false;
+                _lblGcsReachable.Text = gcsReachable ? "Reachable" : "Unreachable";
+                _lblGcsReachable.ForeColor = gcsReachable ? Color.LimeGreen : Color.Red;
+                
+                // Modem status
+                var modem = networkData["modem"];
+                if (modem != null && modem.Type != JTokenType.Null)
+                {
+                    var modemConnected = modem["connected"]?.Value<bool>() ?? false;
+                    var carrier = modem["carrier"]?.ToString() ?? "";
+                    var technology = modem["technology"]?.ToString() ?? "";
+                    var signalQuality = modem["signal_quality"]?.ToString() ?? "";
+                    var signalDbm = modem["signal_strength_dbm"];
+                    
+                    if (modemConnected)
+                    {
+                        _lblModemStatus.Text = string.IsNullOrEmpty(carrier) ? "Connected" : carrier;
+                        _lblModemStatus.ForeColor = Color.LimeGreen;
+                        
+                        // Signal info
+                        string signalText = "";
+                        if (!string.IsNullOrEmpty(technology))
+                            signalText = technology;
+                        if (signalDbm != null && signalDbm.Type != JTokenType.Null)
+                            signalText += $" ({signalDbm}dBm)";
+                        else if (!string.IsNullOrEmpty(signalQuality))
+                            signalText += $" ({signalQuality})";
+                        _lblModemSignal.Text = signalText;
+                        _lblModemSignal.ForeColor = GetSignalColor(signalQuality);
+                    }
+                    else
+                    {
+                        _lblModemStatus.Text = "Disconnected";
+                        _lblModemStatus.ForeColor = Color.Red;
+                        _lblModemSignal.Text = "";
+                    }
+                }
+                else
+                {
+                    _lblModemStatus.Text = "Not Available";
+                    _lblModemStatus.ForeColor = Color.Gray;
+                    _lblModemSignal.Text = "";
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Network status error: {ex.Message}");
+            }
+        }
+        
+        private Color GetSignalColor(string quality)
+        {
+            return quality?.ToLower() switch
+            {
+                "excellent" => Color.LimeGreen,
+                "good" => Color.LightGreen,
+                "fair" => Color.Yellow,
+                "poor" => Color.Orange,
+                _ => Color.Gray
+            };
+        }
+        
+        private async Task TriggerTailscaleReconnect()
+        {
+            try
+            {
+                _btnReconnectTailscale.Enabled = false;
+                _btnReconnectTailscale.Text = "...";
+                
+                var response = await _httpClient.PostAsync(
+                    $"{_config.EffectiveBaseUrl}/network/reconnect", 
+                    null
+                );
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var json = await response.Content.ReadAsStringAsync();
+                    var data = JObject.Parse(json);
+                    var success = data["success"]?.Value<bool>() ?? false;
+                    
+                    if (success)
+                    {
+                        AddAlert($"[{DateTime.Now:HH:mm:ss}] Tailscale reconnection triggered");
+                    }
+                    else
+                    {
+                        AddAlert($"[{DateTime.Now:HH:mm:ss}] Tailscale reconnect failed");
+                    }
+                }
+                else
+                {
+                    AddAlert($"[{DateTime.Now:HH:mm:ss}] Reconnect request failed: HTTP {response.StatusCode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                AddAlert($"[{DateTime.Now:HH:mm:ss}] Reconnect error: {ex.Message}");
+            }
+            finally
+            {
+                _btnReconnectTailscale.Enabled = true;
+                _btnReconnectTailscale.Text = "Reconnect";
             }
         }
         

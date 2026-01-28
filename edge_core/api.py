@@ -840,41 +840,16 @@ def create_app(state_manager: StateManager) -> FastAPI:
     async def execute_terminal_command(request: TerminalCommandRequest):
         """
         Execute a shell command on the Jetson.
-        
+
         WARNING: This is a powerful endpoint. Use with caution.
-        Only enabled in debug mode by default.
-        
+        All commands are now allowed in production mode.
+
         Common uses:
         - System diagnostics
         - Network troubleshooting
         - Service management
         """
-        debug_mode = os.environ.get("NOMAD_DEBUG", "false").lower() == "true"
-        
-        if not debug_mode:
-            # In production, only allow specific safe commands
-            allowed_prefixes = [
-                "tailscale",
-                "systemctl status",
-                "journalctl",
-                "df -h",
-                "free -m",
-                "uptime",
-                "hostname",
-                "ip addr",
-                "ping -c",
-                "cat /proc/loadavg",
-                "tegrastats",
-            ]
-            
-            if not any(request.command.startswith(prefix) for prefix in allowed_prefixes):
-                return TerminalCommandResponse(
-                    success=False,
-                    stdout="",
-                    stderr="Command not allowed in production mode",
-                    return_code=-1,
-                )
-        
+        # All commands are now allowed in production mode
         try:
             result = subprocess.run(
                 request.command,

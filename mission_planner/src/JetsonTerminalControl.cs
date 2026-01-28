@@ -425,7 +425,7 @@ namespace NOMAD.MissionPlanner
 |  Type commands below and press Enter to execute.          |
 |                                                           |
 |  [!] Commands run with API user permissions.              |
-|  [!] Some commands may be restricted in production.       |
+|  [!] All commands are now enabled in production mode.     |
 +===========================================================+
 
 ", Color.Cyan);
