@@ -33,6 +33,7 @@ from .api import ( create_app,
                   set_network_monitor,
 )
 
+from .video_manager import init_video_manager
 
 from .mavlink_interface import MavlinkService
 from .state import StateManager
@@ -173,6 +174,15 @@ def run(
         logger.warning("Isaac ROS enabled but rclpy not available - skipping bridge")
     else:
         logger.info("Isaac ROS bridge disabled (set NOMAD_ENABLE_ISAAC_ROS=true to enable)")
+
+    # Initialize video stream manager with auto-start
+    # This runs in background and will auto-start a default ZED stream when container is ready
+    enable_video_auto_start = os.environ.get("NOMAD_VIDEO_AUTO_START", "true").lower() == "true"
+    init_video_manager(
+        container_name="nomad_isaac_ros_32",
+        auto_start=enable_video_auto_start
+    )
+    logger.info(f"Video manager initialized (auto_start={enable_video_auto_start})")
 
     # Initialize time synchronization service
     def on_time_sync_change(status: TimeSyncStatus) -> None:

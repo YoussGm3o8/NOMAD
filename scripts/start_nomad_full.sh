@@ -274,12 +274,17 @@ main() {
             start_multi_stream
             ;;
         all|*)
-            log_info "Starting all services (Isaac ROS + Dynamic Stream)..."
+            log_info "Starting all services (Isaac ROS + Dynamic Video)..."
             start_mavlink_router
             start_mediamtx
             start_edge_core
             start_isaac_ros
-            # start_multi_stream  # Disabled for dynamic switching
+            # Video streaming is now handled automatically by edge_core's VideoStreamManager
+            # It auto-starts a default ZED stream when the container is ready
+            # Use the API for dynamic stream switching:
+            #   GET  /api/video/topics           - List available ROS image topics
+            #   POST /api/video/source?topic=X   - Switch to a specific topic
+            #   GET  /api/video/streams          - List active streams
             ;;
     esac
     

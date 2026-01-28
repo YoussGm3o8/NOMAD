@@ -1386,4 +1386,66 @@ def create_app(state_manager: StateManager) -> FastAPI:
         count = mgr.stop_all_streams()
         return {"success": True, "stopped": count}
 
+    @app.post("/api/video/source", tags=["Video"])
+    async def switch_video_source(topic: str = Query(..., description="ROS image topic to stream")):
+        """
+        Switch the active video stream to a different ROS topic.
+        
+        This endpoint enables dynamic stream switching from Mission Planner:
+        1. Stops any existing 'dynamic' stream
+        2. Starts a new stream from the specified topic as 'dynamic'
+        3. Returns the RTSP URL for the new stream
+        
+        The stream is always named 'dynamic' to allow easy switching without
+        needing to track multiple stream names.
+        
+        Example:
+            POST /api/video/source?topic=/zed/zed_node/left/image_rect_color
+        """
+        try:
+            mgr = get_video_manager()
+            
+            # Stop existing dynamic stream if any
+            if mgr.get_stream("dynamic"):
+                logger.info(f"Stopping existing 'dynamic' stream before switching to {topic}")
+                mgr.stop_stream("dynamic")
+                # Wait for cleanup
+                import time
+                time.sleep(1)
+            
+            # Start new stream with the specified topic
+            stream = mgr.start_stream(
+                stream_name="dynamic",
+                topic=topic,
+                width=1280,
+                height=720,
+                fps=30
+            )
+            
+            return {
+                "success": True,
+                "topic": topic,
+                "rtsp_url": stream["rtsp_url"],
+                "stream": stream
+            }
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.error(f"Failed to switch video source: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/video/source", tags=["Video"])
+    async def get_video_source():
+        """
+        Get the current active video source (the 'dynamic' stream).
+        
+        Returns information about the currently streaming topic,
+        or null if no dynamic stream is active.
+        """
+        mgr = get_video_manager()
+        stream = mgr.get_stream("dynamic")
+        if not stream:
+            return {"active": False, "stream": None}
+        return {"active": True, "stream": stream}
+
     return app

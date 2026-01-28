@@ -289,66 +289,12 @@ BRIDGE_SCRIPT
     log_info "ROS-HTTP bridge launched (logs at /tmp/ros_bridge.log inside container)"
 }
 
-launch_video_bridge() {
-    log_info "Launching ROS-to-RTSP video bridge..."
-    
-    # Copy the video bridge script into container
-    docker cp "$SCRIPT_DIR/../edge_core/ros_video_bridge.py" "$CONTAINER_NAME:/tmp/ros_video_bridge.py"
-    
-    # Install opencv for video processing (numpy should be correct version)
-    docker exec "$CONTAINER_NAME" bash -c "
-        pip3 install 'opencv-python-headless==4.8.1.78' 'numpy==1.26.4' --quiet 2>/dev/null || true
-    " 2>&1 | tail -3
-    
-    # Create a launch script for the video bridge
-    # The video bridge runs inside container, outputs raw frames via TCP port 9999
-    # FFmpeg runs on HOST to encode with libx264 and stream to MediaMTX
-    docker exec "$CONTAINER_NAME" bash -c "
-        cat > /tmp/launch_video_bridge.sh << 'VIDEO_SCRIPT'
-#!/bin/bash
-source /opt/ros/humble/setup.bash
-source /workspaces/isaac_ros-dev/install/setup.bash
-
-# Wait for ZED images to be publishing
-sleep 8
-
-# Start the video bridge - outputs raw frames via TCP port 9999
-# Note: ZED 2i default resolution is 640x360 in VGA mode
-python3 /tmp/ros_video_bridge.py \\
-    --topic /zed/zed_node/rgb/image_rect_color \\
-    --stream zed \\
-    --host localhost \\
-    --port 8554 \\
-    --width 640 \\
-    --height 360 \\
-    --fps 30
-VIDEO_SCRIPT
-        chmod +x /tmp/launch_video_bridge.sh
-    "
-    
-    # Launch video bridge in container background
-    docker exec -d "$CONTAINER_NAME" bash -c "
-        nohup /tmp/launch_video_bridge.sh > /tmp/video_bridge.log 2>&1 &
-        echo \$! > /tmp/video_bridge.pid
-    "
-    
-    # Give the video bridge time to start TCP server
-    sleep 3
-    
-    # Start FFmpeg encoder on HOST to receive frames and stream to MediaMTX
-    # This runs with --network host so container port 9999 is accessible
-    # yuv420p is required for broad decoder compatibility (GStreamer, VLC, etc.)
-    log_info "Starting FFmpeg encoder on host..."
-    nohup ffmpeg -f rawvideo -pix_fmt bgr24 -s 640x360 -r 30 \
-        -i tcp://localhost:9999 \
-        -c:v libx264 -pix_fmt yuv420p -preset ultrafast -tune zerolatency -b:v 2M -g 30 \
-        -f rtsp -rtsp_transport tcp rtsp://localhost:8554/zed \
-        > /tmp/ffmpeg_encoder.log 2>&1 &
-    echo $! > /tmp/ffmpeg_encoder.pid
-    
-    log_info "Video bridge launched - TCP server in container, FFmpeg encoder on host"
-    log_info "Video bridge launched (logs at /tmp/video_bridge.log inside container)"
-}
+# Video bridge is now managed by Edge Core's VideoStreamManager API
+# The edge_core will auto-start a default stream when the container is ready
+# Use the API endpoints to dynamically switch streams:
+#   GET  /api/video/topics          - List available ROS image topics
+#   POST /api/video/source?topic=X  - Switch to a specific topic
+#   GET  /api/video/streams         - List active streams
 
 stop_services() {
     log_info "Stopping Isaac ROS services..."
@@ -457,7 +403,12 @@ case "${1:-start}" in
         fi
         
         launch_ros_http_bridge
-        launch_video_bridge
+        
+        # Note: Video streaming is now handled by Edge Core's VideoStreamManager
+        # It will auto-start a default stream when topics become available
+        # Use the API to switch streams: POST /api/video/source?topic=...
+        log_info "Video streaming managed by Edge Core API (auto-starts when ready)"
+        
         log_info "Isaac ROS startup complete!"
         show_status
         ;;

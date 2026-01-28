@@ -16,6 +16,13 @@ from dataclasses import dataclass, asdict
 
 logger = logging.getLogger("edge_core.video_manager")
 
+# Default ROS topics to try for auto-start (in order of preference)
+DEFAULT_ZED_TOPICS = [
+    "/zed/zed_node/rgb/image_rect_color",
+    "/zed/zed_node/left/image_rect_color", 
+    "/zed/zed_node/stereo/image_rect_color",
+]
+
 
 @dataclass
 class StreamInfo:
@@ -44,15 +51,102 @@ class VideoStreamManager:
     2. FFmpeg encoder (on host) - reads from TCP, encodes, pushes to MediaMTX
     """
     
-    def __init__(self, container_name="nomad_isaac_ros"):
+    def __init__(self, container_name="nomad_isaac_ros_32"):
         self.container_name = container_name
         self.streams: Dict[str, StreamInfo] = {}
         self.lock = threading.RLock()
         self.next_port = 9999  # Start port allocation from 9999
         self.mediamtx_host = "localhost"
         self.mediamtx_port = 8554
+        self._auto_started = False
+        self._container_ready = False
         
         logger.info(f"VideoStreamManager initialized for container: {container_name}")
+
+    def set_container_name(self, name: str) -> None:
+        """Update the container name (useful when container is discovered dynamically)."""
+        self.container_name = name
+        logger.info(f"VideoStreamManager container updated to: {name}")
+
+    def is_container_running(self) -> bool:
+        """Check if the Isaac ROS container is running."""
+        try:
+            result = subprocess.run(
+                ["docker", "ps", "--filter", f"name={self.container_name}", "--format", "{{.Names}}"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            running = self.container_name in result.stdout
+            self._container_ready = running
+            return running
+        except Exception as e:
+            logger.error(f"Error checking container status: {e}")
+            return False
+
+    def wait_for_container(self, timeout: int = 60) -> bool:
+        """Wait for the container to be running."""
+        logger.info(f"Waiting for container '{self.container_name}' (max {timeout}s)...")
+        start = time.time()
+        while time.time() - start < timeout:
+            if self.is_container_running():
+                logger.info(f"Container ready after {int(time.time() - start)}s")
+                return True
+            time.sleep(2)
+        logger.warning(f"Container not ready after {timeout}s")
+        return False
+
+    def auto_start_default_stream(self) -> Optional[Dict]:
+        """
+        Auto-start a default video stream when edge_core initializes.
+        
+        Tries to find an available ZED topic and starts streaming it as 'zed'.
+        This is called automatically after Isaac ROS container is ready.
+        
+        Returns:
+            Stream info dict if successful, None otherwise.
+        """
+        if self._auto_started:
+            logger.info("Auto-start already completed, skipping")
+            return None
+        
+        if not self.is_container_running():
+            logger.warning("Cannot auto-start: container not running")
+            return None
+        
+        # Find available image topics
+        topics = self.list_topics()
+        if not topics:
+            logger.warning("No image topics available for auto-start")
+            return None
+        
+        # Try preferred topics first, then any available
+        topic_to_use = None
+        for preferred in DEFAULT_ZED_TOPICS:
+            if preferred in topics:
+                topic_to_use = preferred
+                break
+        
+        if not topic_to_use:
+            # Use first available image topic
+            topic_to_use = topics[0]
+        
+        logger.info(f"Auto-starting default stream with topic: {topic_to_use}")
+        
+        try:
+            stream = self.start_stream(
+                stream_name="zed",
+                topic=topic_to_use,
+                width=1280,
+                height=720,
+                fps=30
+            )
+            self._auto_started = True
+            logger.info(f"Auto-start successful: {stream['rtsp_url']}")
+            return stream
+        except Exception as e:
+            logger.error(f"Auto-start failed: {e}")
+            return None
 
     def list_topics(self) -> List[str]:
         """List available image topics from ROS 2."""
@@ -228,14 +322,17 @@ class VideoStreamManager:
     ) -> Optional[int]:
         """Start ROS video bridge inside container. Returns PID."""
         try:
-            # Copy bridge script to container /tmp if not already there
-            bridge_script = os.path.join(os.path.dirname(__file__), '../edge_core/ros_video_bridge.py')
+            # Copy bridge script to container /tmp
+            bridge_script = os.path.join(os.path.dirname(__file__), 'ros_video_bridge.py')
             if os.path.exists(bridge_script):
                 subprocess.run(
                     ["docker", "cp", bridge_script, f"{self.container_name}:/tmp/ros_video_bridge.py"],
                     capture_output=True,
                     timeout=5
                 )
+            else:
+                logger.error(f"Bridge script not found: {bridge_script}")
+                return None
             
             # Start bridge in background using docker exec -d
             # Note: PID tracking isn't reliable with 'docker exec -d', but the process will run
@@ -322,9 +419,80 @@ class VideoStreamManager:
 
 
 # Global instance
-_video_manager = VideoStreamManager()
+_video_manager: Optional[VideoStreamManager] = None
 
 
 def get_video_manager() -> VideoStreamManager:
     """Get the global video manager instance."""
+    global _video_manager
+    if _video_manager is None:
+        # Default to nomad_isaac_ros_32 (the common container name)
+        _video_manager = VideoStreamManager(container_name="nomad_isaac_ros_32")
     return _video_manager
+
+
+def init_video_manager(container_name: str = "nomad_isaac_ros_32", auto_start: bool = True) -> VideoStreamManager:
+    """
+    Initialize the global video manager with specific settings.
+    
+    Args:
+        container_name: Name of the Isaac ROS Docker container
+        auto_start: Whether to auto-start a default stream when container is ready
+        
+    Returns:
+        The initialized VideoStreamManager instance
+    """
+    global _video_manager
+    _video_manager = VideoStreamManager(container_name=container_name)
+    
+    # Clean up any legacy video processes from old approach
+    _cleanup_legacy_video_processes(container_name)
+    
+    if auto_start:
+        # Start auto-start in background thread to not block startup
+        def _delayed_auto_start():
+            # Wait for container to be ready
+            if _video_manager.wait_for_container(timeout=90):
+                # Wait a bit more for ZED to publish topics
+                logger.info("Container ready, waiting for ZED topics...")
+                time.sleep(10)
+                _video_manager.auto_start_default_stream()
+            else:
+                logger.warning("Skipping video auto-start: container not available")
+        
+        thread = threading.Thread(target=_delayed_auto_start, daemon=True)
+        thread.start()
+        logger.info("Video auto-start scheduled in background")
+    
+    return _video_manager
+
+
+def _cleanup_legacy_video_processes(container_name: str) -> None:
+    """
+    Clean up any legacy video bridge or FFmpeg processes from old static approach.
+    
+    This ensures the new dynamic VideoStreamManager has a clean slate.
+    """
+    logger.info("Cleaning up any legacy video processes...")
+    
+    try:
+        # Kill any old FFmpeg RTSP processes on host
+        subprocess.run(
+            ["pkill", "-f", "ffmpeg.*rtsp://localhost:8554"],
+            capture_output=True,
+            timeout=5
+        )
+    except Exception as e:
+        logger.debug(f"FFmpeg cleanup: {e}")
+    
+    try:
+        # Kill any old video bridge processes in container
+        subprocess.run(
+            ["docker", "exec", container_name, "pkill", "-f", "ros_video_bridge"],
+            capture_output=True,
+            timeout=5
+        )
+    except Exception as e:
+        logger.debug(f"Container video bridge cleanup: {e}")
+    
+    logger.info("Legacy video process cleanup complete")
