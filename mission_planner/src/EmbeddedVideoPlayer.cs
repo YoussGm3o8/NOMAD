@@ -73,6 +73,7 @@ namespace NOMAD.MissionPlanner
         private System.Collections.Generic.List<(string Name, string DisplayName)> _availableStreams;
         private Button _btnRefreshStreams;
         private ComboBox _cmbStreamSelect;  // Stream selector (replaces camera view)
+        private CheckBox _chkOverlay;       // Overlay toggle
         
         // ============================================================
         // Constructor
@@ -506,6 +507,19 @@ namespace NOMAD.MissionPlanner
             _btnRefreshStreams.Click += (s, e) => RefreshAvailableStreams();
             panel.Controls.Add(_btnRefreshStreams);
             
+            // Overlay Checkbox
+            _chkOverlay = new CheckBox
+            {
+                Text = "Overlay",
+                Location = new Point(500, 13),
+                ForeColor = Color.LightGray,
+                Font = new Font("Segoe UI", 9),
+                AutoSize = true,
+                Checked = true
+            };
+            _chkOverlay.CheckedChanged += (s, e) => ToggleOverlay(_chkOverlay.Checked);
+            panel.Controls.Add(_chkOverlay);
+            
             // Quality is fixed at 720p - no selector needed
             _quality = "720p";
             
@@ -529,87 +543,112 @@ namespace NOMAD.MissionPlanner
         }
         
         /// <summary>
-        /// Refreshes available streams from MediaMTX API.
+        /// Toggles the object detection overlay on the Jetson.
+        /// </summary>
+        private async void ToggleOverlay(bool enabled)
+        {
+            try
+            {
+                var uri = new Uri(_baseRtspUrl);
+                var apiUrl = $"http://{uri.Host}:8000/api/video/overlay?enabled={enabled}";
+                
+                using (var client = new System.Net.Http.HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(2);
+                    await client.PostAsync(apiUrl, null);
+                    System.Diagnostics.Debug.WriteLine($"NOMAD Video: Overlay set to {enabled}");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"NOMAD Video: Overlay toggle failed - {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Refreshes available streams from MediaMTX API and ROS Topics.
         /// </summary>
         private async void RefreshAvailableStreams()
         {
             try
             {
                 UpdateStatus("Refreshing streams...", Color.Yellow);
-                
-                // Query MediaMTX API for available paths
                 var uri = new Uri(_baseRtspUrl);
-                var apiUrl = $"http://{uri.Host}:9997/v3/paths/list";
                 
-                System.Diagnostics.Debug.WriteLine($"NOMAD Video: Fetching streams from: {apiUrl}");
-                
+                // Preserve current selection if possible
+                var currentSelection = _selectedStream;
+                _availableStreams.Clear();
+
                 using (var client = new System.Net.Http.HttpClient())
                 {
-                    client.Timeout = TimeSpan.FromSeconds(10);  // Increased timeout
-                    var response = await client.GetStringAsync(apiUrl);
-                    
-                    System.Diagnostics.Debug.WriteLine($"NOMAD Video: Received response: {response.Substring(0, Math.Min(200, response.Length))}...");
-                    
-                    // Parse JSON response
-                    var paths = Newtonsoft.Json.Linq.JObject.Parse(response);
-                    var items = paths["items"] as Newtonsoft.Json.Linq.JArray;
-                    
-                    if (items != null && items.Count > 0)
+                    client.Timeout = TimeSpan.FromSeconds(5);
+
+                    // 1. Fetch MediaMTX streams (Standard RTSP)
+                    try 
                     {
-                        _availableStreams.Clear();
-                        foreach (var item in items)
+                        var mtxUrl = $"http://{uri.Host}:9997/v3/paths/list";
+                        var response = await client.GetStringAsync(mtxUrl);
+                        var paths = Newtonsoft.Json.Linq.JObject.Parse(response);
+                        var items = paths["items"] as Newtonsoft.Json.Linq.JArray;
+                        
+                        if (items != null)
                         {
-                            var name = item["name"]?.ToString();
-                            var ready = item["ready"]?.ToObject<bool>() ?? false;
-                            var tracks = item["tracks"] as Newtonsoft.Json.Linq.JArray;
-                            
-                            if (!string.IsNullOrEmpty(name))
+                            foreach (var item in items)
                             {
-                                var status = ready ? "[LIVE]" : "[--]";
-                                var trackInfo = tracks?.Count > 0 ? $" ({string.Join(",", tracks)})" : "";
-                                _availableStreams.Add((name, $"{status} {name}{trackInfo}"));
+                                var name = item["name"]?.ToString();
+                                var ready = item["ready"]?.ToObject<bool>() ?? false;
+                                if (!string.IsNullOrEmpty(name) && name != "dynamic") 
+                                {
+                                    var status = ready ? "" : "(Offline)";
+                                    _availableStreams.Add((name, $"[Stream] {name} {status}"));
+                                }
                             }
                         }
-                        
-                        PopulateStreamSelector();
-                        UpdateStatus($"Found {_availableStreams.Count} streams", Color.LimeGreen);
                     }
-                    else
+                    catch (Exception ex) 
+                    { 
+                        System.Diagnostics.Debug.WriteLine($"MediaMTX fetch failed: {ex.Message}");
+                        // Add default fallback if fetch failed
+                        _availableStreams.Add(("zed", "[Stream] zed (Default)"));
+                    }
+
+                    // 2. Fetch ROS Topics (Dynamic)
+                    try
                     {
-                        UpdateStatus("No streams found", Color.Orange);
+                        var apiUrl = $"http://{uri.Host}:8000/api/video/topics";
+                        var response = await client.GetStringAsync(apiUrl);
+                        var data = Newtonsoft.Json.Linq.JObject.Parse(response);
+                        var topics = data["topics"] as Newtonsoft.Json.Linq.JArray;
+                        
+                        if (topics != null)
+                        {
+                            foreach (var t in topics)
+                            {
+                                var topic = t.ToString();
+                                _availableStreams.Add(("ros:" + topic, $"[ROS] {topic}"));
+                            }
+                        }
+                    }
+                    catch (Exception ex) 
+                    { 
+                        System.Diagnostics.Debug.WriteLine($"ROS topics fetch failed: {ex.Message}"); 
                     }
                 }
-            }
-            catch (System.Net.Http.HttpRequestException ex) when (ex.Message.Contains("401") || ex.Message.Contains("Unauthorized"))
-            {
-                // Authentication required - use default stream list
-                System.Diagnostics.Debug.WriteLine("NOMAD Video: API requires authentication - using defaults");
-                UpdateStatus("Using default streams (API auth required)", Color.Yellow);
+
+                PopulateStreamSelector();
+                UpdateStatus($"Found {_availableStreams.Count} sources", Color.LimeGreen);
             }
             catch (Exception ex)
             {
-                var errorMsg = ex.Message;
-                if (ex.InnerException != null)
-                    errorMsg += $" ({ex.InnerException.Message})";
-                    
-                System.Diagnostics.Debug.WriteLine($"NOMAD Video: Failed to refresh streams - {errorMsg}");
-                UpdateStatus($"Fetch error: {errorMsg}", Color.Red);
-                
-                // Show the URL that failed for debugging
-                var uri = new Uri(_baseRtspUrl);
-                var apiUrl = $"http://{uri.Host}:9997/v3/paths/list";
-                System.Diagnostics.Debug.WriteLine($"NOMAD Video: Attempted URL: {apiUrl}");
+                UpdateStatus($"Refresh Error: {ex.Message}", Color.Red);
             }
         }
         
         /// <summary>
         /// Handles stream selection change.
         /// Restarts playback with the new stream.
-        /// 
-        /// SAFETY: Stream switching is serialized to prevent race conditions
-        /// that could cause memory access violations in GStreamer.
         /// </summary>
-        private void CmbStreamSelect_SelectedIndexChanged(object sender, EventArgs e)
+        private async void CmbStreamSelect_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (_cmbStreamSelect.SelectedIndex < 0 || _cmbStreamSelect.SelectedIndex >= _availableStreams.Count)
                 return;
@@ -620,35 +659,68 @@ namespace NOMAD.MissionPlanner
             if (name == _selectedStream)
                 return;
             
+            // Handle ROS Topic selection (Dynamic)
+            if (name.StartsWith("ros:"))
+            {
+                var topic = name.Substring(4); // Remove "ros:"
+                UpdateStatus($"Switching to {topic}...", Color.Yellow);
+                
+                try
+                {
+                    // Call API to switch source
+                    var uri = new Uri(_baseRtspUrl);
+                    var apiUrl = $"http://{uri.Host}:8000/api/video/source?topic={Uri.EscapeDataString(topic)}";
+                    
+                    using (var client = new System.Net.Http.HttpClient())
+                    {
+                        await client.PostAsync(apiUrl, null);
+                    }
+                    
+                    // Switch to dynamic stream URL
+                    _selectedStream = name;
+                    _streamUrl = $"{_baseRtspUrl}/dynamic";
+                    
+                    // Allow time for bridge to restart
+                    await Task.Delay(1000);
+                    
+                    RestartStream();
+                }
+                catch (Exception ex)
+                {
+                    UpdateStatus($"Switch Failed: {ex.Message}", Color.Red);
+                }
+            }
+            else
+            {
+                // Standard MediaMTX Stream
+                _selectedStream = name;
+                _streamUrl = $"{_baseRtspUrl}/{_selectedStream}";
+                RestartStream();
+            }
+        }
+
+        private void RestartStream()
+        {
             // SAFETY: Prevent concurrent stream switches
             lock (_streamLock)
             {
-                if (_isStreamSwitching)
-                {
-                    System.Diagnostics.Debug.WriteLine("NOMAD Video: Stream switch already in progress, ignoring");
-                    return;
-                }
+                if (_isStreamSwitching) return;
                 _isStreamSwitching = true;
             }
             
             try
             {
-                _selectedStream = name;
-                _streamUrl = $"{_baseRtspUrl}/{_selectedStream}";
+                System.Diagnostics.Debug.WriteLine($"NOMAD Video: Restarting stream -> {_streamUrl}");
                 
-                System.Diagnostics.Debug.WriteLine($"NOMAD Video: Stream changed to {displayName} -> {_streamUrl}");
-                
-                // Restart stream with new URL if currently playing
                 if (_isPlaying)
                 {
                     // SAFETY: Full stop with cleanup before starting new stream
                     StopStreamSafe();
                     
                     // SAFETY: Allow time for GStreamer to fully release resources
-                    // This prevents "attempted to read or write protected memory" errors
                     System.Threading.Thread.Sleep(300);
                     
-                    // Force garbage collection to release GStreamer resources
+                    // Force garbage collection
                     GC.Collect();
                     GC.WaitForPendingFinalizers();
                     
