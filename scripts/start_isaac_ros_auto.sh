@@ -15,8 +15,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ISAAC_WS="${HOME}/ros2/isaac_ros_ws"
-CONTAINER_NAME="nomad_isaac_ros"
+ISAAC_WS="${HOME}/ros2/isaac_ros_32_ws"
+CONTAINER_NAME="nomad_isaac_ros_32"
 IMAGE_NAME="isaac_ros_dev-aarch64:latest"
 EDGE_CORE_HOST="172.17.0.1"  # Docker host from inside container
 EDGE_CORE_PORT="8000"
@@ -231,7 +231,7 @@ source /opt/ros/humble/setup.bash
 source /workspaces/isaac_ros-dev/install/setup.bash
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 export LD_LIBRARY_PATH=/opt/ros/humble/lib:/usr/local/zed/lib:/workspaces/isaac_ros-dev/install/zed_components/lib:\$LD_LIBRARY_PATH
-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2i
+ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2i od_enabled:=true
 LAUNCH_SCRIPT
             chmod +x /tmp/launch_zed_only.sh
         "
@@ -252,6 +252,7 @@ LAUNCH_SCRIPT
 source /opt/ros/humble/setup.bash
 source /workspaces/isaac_ros-dev/install/setup.bash
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+# Use zed2 for ZED 2i camera as per NVIDIA docs
 ros2 launch nvblox_examples_bringup zed_example.launch.py camera:=zed2
 LAUNCH_SCRIPT
         chmod +x /tmp/launch_zed_nvblox.sh

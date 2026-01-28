@@ -154,12 +154,19 @@ start_edge_core() {
     EDGE_PID=$!
     sleep 3
     
-    if curl -s http://localhost:$API_PORT/health > /dev/null; then
-        log_ok "Edge Core running at http://localhost:$API_PORT (PID: $EDGE_PID)"
-    else
-        log_fail "Edge Core failed to start!"
-        tail -20 $LOG_DIR/edge_core.log
-    fi
+    # Wait for Edge Core to be ready (max 30 seconds)
+    log_info "Waiting for Edge Core API to be ready..."
+    for i in {1..30}; do
+        if curl -s http://localhost:$API_PORT/health > /dev/null; then
+            log_ok "Edge Core running at http://localhost:$API_PORT (PID: $EDGE_PID)"
+            return 0
+        fi
+        sleep 1
+    done
+    
+    log_fail "Edge Core failed to start!"
+    tail -20 $LOG_DIR/edge_core.log
+    return 1
 }
 
 # -----------------------------------------------------------------------------
@@ -177,64 +184,22 @@ start_isaac_ros() {
 }
 
 # -----------------------------------------------------------------------------
-# Start Multi-Stream Video
+# Start Multi-Stream Video (Dynamic API-Based)
 # -----------------------------------------------------------------------------
 
 start_multi_stream() {
-    log_info "Starting multi-stream video system..."
+    log_info "Starting multi-stream video system (API-based)..."
+    
+    # Verify Edge Core API is accessible
+    if ! curl -s http://localhost:$API_PORT/health > /dev/null; then
+        log_fail "Edge Core API not ready. Cannot start video streams."
+        return 1
+    fi
     
     if [ -f "$SCRIPT_DIR/start_multi_video.sh" ]; then
         bash "$SCRIPT_DIR/start_multi_video.sh" start
     else
         log_warn "Multi-stream video script not found"
-    fi
-}
-
-# -----------------------------------------------------------------------------
-# Start Video Stream (Task 1 Mode - direct GStreamer - DEPRECATED)
-# -----------------------------------------------------------------------------
-
-start_video_stream() {
-    log_warn "Single-stream GStreamer mode is deprecated. Use multi-stream instead."
-    # Kept for compatibility but not recommended
-    log_info "Starting ZED Video Stream..."
-    pkill -f "gst-launch" 2>/dev/null || true
-    sleep 1
-
-    # Try best resolution
-    gst-launch-1.0 -q \
-      v4l2src device=/dev/video0 do-timestamp=true ! \
-      "video/x-raw,width=2560,height=720,framerate=30/1,format=YUY2" ! \
-      videoconvert ! "video/x-raw,format=I420" ! \
-      x264enc tune=zerolatency bitrate=6000 speed-preset=ultrafast \
-        sliced-threads=true key-int-max=30 bframes=0 ! \
-      h264parse ! \
-      rtspclientsink location=rtsp://localhost:$RTSP_PORT/zed latency=0 protocols=tcp \
-      > $LOG_DIR/video.log 2>&1 &
-    VIDEO_PID=$!
-    sleep 3
-    
-    if ps -p $VIDEO_PID > /dev/null 2>&1; then
-        log_ok "Video stream running at 2560x720 (PID: $VIDEO_PID)"
-    else
-        log_warn "Video stream failed - trying lower resolution..."
-        gst-launch-1.0 -q \
-          v4l2src device=/dev/video0 do-timestamp=true ! \
-          "video/x-raw,format=YUY2" ! \
-          videoscale ! "video/x-raw,width=2560,height=720" ! \
-          videoconvert ! "video/x-raw,format=I420" ! \
-          x264enc tune=zerolatency bitrate=4000 speed-preset=ultrafast ! \
-          h264parse ! \
-          rtspclientsink location=rtsp://localhost:$RTSP_PORT/zed latency=0 protocols=tcp \
-          > $LOG_DIR/video.log 2>&1 &
-        VIDEO_PID=$!
-        sleep 3
-        
-        if ps -p $VIDEO_PID > /dev/null 2>&1; then
-            log_ok "Video stream running with auto-scaling"
-        else
-            log_fail "Video stream failed. Check $LOG_DIR/video.log"
-        fi
     fi
 }
 
@@ -280,7 +245,7 @@ except: pass
     echo "  MAVLink:    $LOG_DIR/mavlink.log"
     echo "  Edge Core:  $LOG_DIR/edge_core.log"
     echo "  Video:      $LOG_DIR/video.log"
-    echo "  Isaac ROS:  docker logs nomad_isaac_ros"
+    echo "  Isaac ROS:  docker logs nomad_isaac_ros_32"
     echo "=========================================="
 }
 
@@ -309,12 +274,12 @@ main() {
             start_multi_stream
             ;;
         all|*)
-            log_info "Starting all services (Isaac ROS + Multi-Stream)..."
+            log_info "Starting all services (Isaac ROS + Dynamic Stream)..."
             start_mavlink_router
             start_mediamtx
             start_edge_core
             start_isaac_ros
-            start_multi_stream
+            # start_multi_stream  # Disabled for dynamic switching
             ;;
     esac
     

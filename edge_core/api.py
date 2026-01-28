@@ -1279,4 +1279,111 @@ def create_app(state_manager: StateManager) -> FastAPI:
             _exclusion_map = []
             return {"success": True, "cleared": count}
 
+    # ==================== Video Manager Endpoints ====================
+    from .video_manager import get_video_manager
+    from pydantic import BaseModel, Field
+    
+    class StartStreamRequest(BaseModel):
+        stream_name: str = Field(..., description="Unique name for the stream (e.g., 'zed_left')")
+        topic: str = Field(..., description="ROS image topic to subscribe to")
+        width: int = Field(1280, description="Output video width", ge=320, le=3840)
+        height: int = Field(720, description="Output video height", ge=240, le=2160)
+        fps: int = Field(30, description="Output video FPS", ge=1, le=60)
+    
+    @app.get("/api/video/topics", tags=["Video"])
+    async def get_video_topics():
+        """
+        List available ROS image topics.
+        
+        Returns a list of all sensor_msgs/Image topics currently published in ROS.
+        Use this to discover available camera feeds before starting a stream.
+        """
+        mgr = get_video_manager()
+        return {"topics": mgr.list_topics()}
+
+    @app.get("/api/video/streams", tags=["Video"])
+    async def list_video_streams():
+        """
+        List all active video streams.
+        
+        Returns information about each stream including:
+        - Stream name and RTSP URL
+        - Source ROS topic
+        - Resolution and FPS
+        - Process IDs
+        """
+        mgr = get_video_manager()
+        return {"streams": mgr.list_streams()}
+
+    @app.get("/api/video/streams/{stream_name}", tags=["Video"])
+    async def get_video_stream(stream_name: str):
+        """Get detailed information about a specific stream."""
+        mgr = get_video_manager()
+        stream = mgr.get_stream(stream_name)
+        if not stream:
+            raise HTTPException(status_code=404, detail=f"Stream '{stream_name}' not found")
+        return stream
+
+    @app.post("/api/video/streams", tags=["Video"])
+    async def create_video_stream(request: StartStreamRequest):
+        """
+        Start a new video stream.
+        
+        Creates a new ROS-to-RTSP video pipeline:
+        1. Starts ROS video bridge subscribing to the specified topic
+        2. Starts FFmpeg encoder publishing to MediaMTX
+        3. Returns RTSP URL for viewing
+        
+        Example:
+        ```json
+        {
+            "stream_name": "zed_left",
+            "topic": "/zed/zed_node/left/image_rect_color",
+            "width": 1280,
+            "height": 720,
+            "fps": 30
+        }
+        ```
+        
+        View with: `rtsp://<jetson_ip>:8554/<stream_name>`
+        """
+        try:
+            mgr = get_video_manager()
+            stream = mgr.start_stream(
+                stream_name=request.stream_name,
+                topic=request.topic,
+                width=request.width,
+                height=request.height,
+                fps=request.fps
+            )
+            return {"success": True, "stream": stream}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.error(f"Failed to start stream: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.delete("/api/video/streams/{stream_name}", tags=["Video"])
+    async def delete_video_stream(stream_name: str):
+        """
+        Stop a specific video stream.
+        
+        Gracefully shuts down the video pipeline:
+        1. Stops FFmpeg encoder
+        2. Stops ROS video bridge
+        3. Frees allocated resources
+        """
+        mgr = get_video_manager()
+        success = mgr.stop_stream(stream_name)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Stream '{stream_name}' not found")
+        return {"success": True, "message": f"Stream '{stream_name}' stopped"}
+
+    @app.delete("/api/video/streams", tags=["Video"])
+    async def delete_all_video_streams():
+        """Stop all active video streams."""
+        mgr = get_video_manager()
+        count = mgr.stop_all_streams()
+        return {"success": True, "stopped": count}
+
     return app
