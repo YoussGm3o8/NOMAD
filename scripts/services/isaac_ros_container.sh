@@ -55,7 +55,6 @@ create_container() {
         -v /tmp/argus_socket:/tmp/argus_socket \
         -v /etc/localtime:/etc/localtime:ro \
         -v "$NOMAD_REPO_ROOT/config:/workspaces/isaac_ros-dev/config:ro" \
-        -v "$NOMAD_REPO_ROOT/edge_core:/workspaces/isaac_ros-dev/edge_core:ro" \
         -e DISPLAY="${DISPLAY:-}" \
         -e NVIDIA_VISIBLE_DEVICES=all \
         -e NVIDIA_DRIVER_CAPABILITIES=all \

@@ -9,15 +9,14 @@ close its integration or release gate.
 
 ## Current work
 
-- [~] G1 / C02: repair build, packaging, CI and simulation task wiring. Local
-  checks pass; live image/SITL/ROS validation remains open. See migration evidence.
+- [~] G1: repair remaining deleted Edge Core references in setup/provisioning,
+  then run live image/SITL/ROS and clean-boot service qualification. C02 and
+  C10-C12 source repairs are recorded in migration.
 
 ## Ordered implementation backlog
 
 - [ ] G0: reconcile full CONOPS and assign remaining decision owners. The planning
   baseline and user hardware/autonomy/MAVSDK direction are recorded.
-- [ ] G1 / C10–C12: validate retained service/profile/video entrypoints and
-  configuration; remove stale systemd/service owners and profile fields.
 - [ ] G-M Phase A: hosted Linux/Windows/ROS builds, live MAVSDK connect/status,
   transitive notices and approved dependency footprint.
 - [ ] G-M Phases B–D: MAVSDK command, telemetry, velocity/watchdog, GCS heartbeat,

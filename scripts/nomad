@@ -16,8 +16,7 @@
 # nomad profile show                 # show active profile
 #
 # Services (start order = listed order):
-# edge_core, mavlink_router, mediamtx,
-# isaac_ros_container, ros_vehicle, video_bridge
+# mavlink_router, mediamtx, isaac_ros_container, ros_vehicle, video_bridge
 #
 # `all` operates on the autostart set from config/nomad.env
 # (NOMAD_AUTOSTART_* flags).
@@ -37,7 +36,6 @@ SERVICES_DIR="$SCRIPT_DIR/services"
 # container services in dependency order. `all` follows this for `start`
 # and reverses it for `stop`.
 SERVICE_ORDER=(
-edge_core
 mavlink_router
 mediamtx
 isaac_ros_container
@@ -48,7 +46,6 @@ video_bridge
 # Map a CLI name to the autostart flag key.
 autostart_key_for() {
 case "$1" in
-edge_core) echo "EDGE_CORE" ;;
 mavlink_router) echo "MAVLINK_ROUTER" ;;
 mediamtx) echo "MEDIAMTX" ;;
 isaac_ros_container) echo "ISAAC_ROS_CONTAINER" ;;
@@ -79,12 +76,11 @@ run_one() {
 
 cmd_list() {
 printf "%-22s %-10s %s\n" "SERVICE" "AUTOSTART" "DESCRIPTION"
-printf "%-22s %-10s %s\n" "edge_core" "$NOMAD_AUTOSTART_EDGE_CORE" "Edge Core REST API (host)"
 printf "%-22s %-10s %s\n" "mavlink_router" "$NOMAD_AUTOSTART_MAVLINK_ROUTER" "MAVLink Router (host)"
 printf "%-22s %-10s %s\n" "mediamtx" "$NOMAD_AUTOSTART_MEDIAMTX" "RTSP server (host)"
 printf "%-22s %-10s %s\n" "isaac_ros_container" "$NOMAD_AUTOSTART_ISAAC_ROS_CONTAINER" "Long-running Docker container"
 printf "%-22s %-10s %s\n" "ros_vehicle" "$NOMAD_AUTOSTART_ROS_VEHICLE" "C++ ROS adapter node (in container)"
-printf "%-22s %-10s %s\n" "video_bridge" "$NOMAD_AUTOSTART_VIDEO_BRIDGE" "RTSP relay (via Edge Core API)"
+printf "%-22s %-10s %s\n" "video_bridge" "$NOMAD_AUTOSTART_VIDEO_BRIDGE" "ROS image to RTSP relay"
 }
 
 cmd_config() {
@@ -123,7 +119,7 @@ cleanup_orphans() {
         kill_pattern_in_container 'simple_video_bridge|nomad_vehicle_node|servo_tf_publisher|obstacle_distance_bridge|component_container_isolated|component_container_mt' 10
         in_container "rm -f /dev/shm/fastrtps_* /tmp/ros_vehicle.pid /tmp/video_bridge.pid 2>/dev/null || true"
     fi
-    kill_pattern_host 'edge_core\.main|mediamtx|mavlink-routerd' 5
+    kill_pattern_host 'mediamtx|mavlink-routerd' 5
 }
 
 cmd_restart_all() {

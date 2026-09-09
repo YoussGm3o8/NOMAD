@@ -7,6 +7,7 @@ from __future__ import annotations
 import http.server
 import json
 import logging
+import socket
 import subprocess
 from typing import cast
 from urllib.parse import parse_qs, urlparse
@@ -98,4 +99,6 @@ class BridgeHTTPHandler(http.server.BaseHTTPRequestHandler):
 class BridgeHTTPServer(http.server.HTTPServer):
     def __init__(self, host: str, port: int, bridge):
         self.bridge = bridge
+        if ":" in host:
+            self.address_family = socket.AF_INET6
         super().__init__((host, port), BridgeHTTPHandler)

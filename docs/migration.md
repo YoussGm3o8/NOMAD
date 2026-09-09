@@ -19,8 +19,8 @@ cutover inventory and gate evidence. [PRD](prd.md) owns requirements and decisio
 | Stop delivery | tests/zero_delivery_test.cpp; scripts/dev/core_sitl_zero_delivery.py | Live loopback wire tests exist; whole-link outage cannot guarantee delivery; current live SITL result still required |
 | Mission Planner | NomadCoreClient, OutputController, FlightModeController, GimbalController, BoundaryManager, MPFenceUploader | goto/discrete outputs use CLI; direct parameter/mode/gimbal/fence paths and UI-owned decisions remain |
 | ROS 2 | ros2/nomad_ros/src/node.cpp, translation.cpp; tests/ros | Owns a Vehicle, telemetry topics, VIO health/source gate and Trigger services; blocking callbacks, no selected estimator or navigation fusion |
-| Video | python/tools/simple_video_bridge.py, video_bridge_server.py; test_simple_video_bridge.py | ROS image to GStreamer/RTSP and media-control HTTP; no validated capture/CV/VIO product pipeline |
-| Profiles | scripts/profile.py; three new profile env files; test_deployment_profiles.py | Names/values/config sync tested; no runtime capability enforcement or hardware workload qualification |
+| Video | python/tools/simple_video_bridge.py, video_bridge_server.py; test_simple_video_bridge.py | ROS image to GStreamer/RTSP; control HTTP is loopback-only; no validated capture/CV/VIO product pipeline |
+| Profiles | scripts/profile.py; three product profile files; test_deployment_profiles.py | Canonical endpoint and stale-setting checks exist; optional workloads and hardware remain unqualified |
 | MAVSDK | CMake opt-in target; examples/mavsdk_phase_a_smoke.cpp; runner and CI wiring | Phase A scaffolding exists; production still uses current codec; command/flight parity absent |
 | Competition | No dedicated implementation found in src/include/ROS/Python/plugin scans | Web telemetry/events, traffic model/deconfliction, herd survey, tracker/path and sampling workflows are open |
 
@@ -43,9 +43,9 @@ for missing workflows.
 | C07 | Generic servo/relay paths bypass release_payload's consuming interlock; plugin has its own timers/confirmation | Reserve hazardous channels, unify authorization in core, provide independent output timeout/feedback |
 | C08 | ROS callbacks wait synchronously; receipt timestamps and mixed odometry frames can misrepresent freshness/frame | Bounded worker operations; acquisition-time/frame contract and independent axis/time tests |
 | C09 | VehicleState has validity flags but no per-field age; connection freshness is not position freshness | Add independent field timestamps; reject fresh-heartbeat/stale-position decisions |
-| C10 | groundstation profile flags imply capabilities; VIO_SOURCE_REQUIRED does not select core policy | Validate effective config and runtime readiness; minimal must not fabricate VIO |
-| C11 | Profile sync still writes retired Jetson keys; onboard endpoint lacks CLI scheme; ground profiles may retain old core endpoint | Normalize/validate endpoint and complete profile switches; prove no stale settings survive |
-| C12 | Health/time autostart flags outlive removed services; media HTTP binds broadly without auth | Inventory effective service wiring, replace necessary monitoring/time support, restrict/authenticate media control |
+| C10 | Product profiles previously autostarted unqualified optional workloads; VIO_SOURCE_REQUIRED does not select core policy | Optional autostarts now remain off; G3 must qualify providers and runtime readiness before enabling them |
+| C11 | Profile sync wrote retired Jetson keys and allowed ambiguous/stale endpoints | Product profiles now validate canonical endpoints and clear retired/stale profile-owned settings |
+| C12 | Deleted service owners remained in CLI/systemd/config; media HTTP bound broadly without auth | Effective service inventory is reconciled and unauthenticated media control is restricted to loopback |
 | C13 | Copter GUIDED=4, LAND=9, RTL=6 and demo flows are treated as board-generic support | Detect/validate vehicle class; qualify ArduPlane/QuadPlane and Copter separately before Task 1 |
 | C14 | Prior ZED/sim components were deleted; current sensor/workload path is unspecified | Preserve optional compute goals, choose supported capture/provider paths; no ZED prerequisite |
 | C15 | Scan-based failsafe and traceability tests do not prove all command surfaces are safe | Semantic parameter/output authorization and actual fault tests; retain scans as structural checks |
@@ -123,14 +123,40 @@ Daemon-free Compose resolution passed for SITL, ROS and Gazebo scaffolding, with
 expected unique SITL/ROS output destinations. The unavailable perception task
 returned exit 1 with its stated reason. Lint, format, type-check, complexity,
 strict docs and all changed-file pre-commit hooks passed. Whole-tree pre-commit
-remains blocked
-by the pre-existing missing SPDX header in scripts/hardware/servo_test.c; that
+remains blocked by the pre-existing missing SPDX header in
+scripts/hardware/servo_test.c; that
 unrelated hardware file is unchanged.
 
 Docker daemon unavailable: no image build, live SITL, ROS integration, sensor
-stream or GPU/hardware qualification was run for this repair. C10-C12 remain
-open and G1 is not closed. Python dependency pruning is deferred; the distribution
+stream or GPU/hardware qualification was run for this repair. G1 is not closed.
+Python dependency pruning is deferred; the distribution
 name `nomad-edge` remains for compatibility although its deleted CLI is removed.
+
+#### C10-C12 repair evidence - 2026-09-09
+
+The three product profiles now use explicit C++ UDP listener endpoints, contain
+no development key, and leave optional ROS/video/container workloads disabled
+until their providers are qualified. Loading and Mission Planner synchronization
+validate profile identity, endpoint scheme, host and port before mutation.
+Switching profiles preserves unrelated plugin settings, clears empty owned
+settings and removes retired Jetson fields. The shell profile command delegates
+to the validated Python implementation.
+
+The deployment CLI and systemd inventory no longer reference the deleted Edge
+Core service. The retained video service directly owns its in-container Python
+process, and the Jetson image includes that module. Its unauthenticated control
+HTTP endpoint accepts loopback binds only; wildcard and remote binds fail before
+the media pipeline starts.
+
+No image, service or hardware runtime was started. Optional compute, camera,
+estimator, RTSP output and clean-boot systemd behavior remain unqualified. Older
+setup/provisioning scripts still invoke deleted Edge Core paths and are the next
+G1 source-repair slice.
+
+Local evidence: 297 Python tests passed with 3 skipped and 96.34% coverage;
+all 9 CTest targets passed; strict documentation, lint, formatting, type checks,
+complexity limits, lock validation, changed-file pre-commit hooks and edited
+shell syntax checks passed.
 
 ### G-M — MAVSDK adoption (transport lead; early prerequisite after G1)
 

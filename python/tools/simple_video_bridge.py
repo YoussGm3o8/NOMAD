@@ -30,6 +30,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import logging
 import os
 import threading
@@ -38,7 +39,14 @@ from typing import Any
 
 from python.tools.video_bridge_server import BridgeHTTPHandler, BridgeHTTPServer, subprocess
 
-__all__ = ["BridgeHTTPHandler", "BridgeHTTPServer", "VideoBridge", "main", "subprocess"]
+__all__ = [
+    "BridgeHTTPHandler",
+    "BridgeHTTPServer",
+    "VideoBridge",
+    "main",
+    "subprocess",
+    "validate_http_host",
+]
 
 
 logging.basicConfig(
@@ -46,6 +54,21 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("simple_video_bridge")
+
+
+def validate_http_host(host: str) -> str:
+    """Allow only loopback HTTP binds for the unauthenticated local API."""
+
+    candidate = host.strip()
+    if candidate.casefold() == "localhost":
+        return candidate
+    try:
+        address = ipaddress.ip_address(candidate)
+    except ValueError as exc:
+        raise ValueError("HTTP host must be localhost or a loopback IP address") from exc
+    if not address.is_loopback:
+        raise ValueError("HTTP host must be localhost or a loopback IP address")
+    return candidate
 
 
 def _get_encoding_channels(encoding: str) -> int | None:
@@ -414,6 +437,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--height", type=int, default=360, help="Output height")
     parser.add_argument("--fps", type=int, default=15, help="Output frame rate")
     parser.add_argument("--bitrate", type=int, default=800, help="H.264 bitrate (kbps)")
+    parser.add_argument(
+        "--http-host",
+        default=os.environ.get("VIDEO_RELAY_HTTP_HOST", "127.0.0.1"),
+        help="HTTP API bind host; loopback addresses only",
+    )
     parser.add_argument("--http-port", type=int, default=9200, help="HTTP API port")
     parser.add_argument("--rtsp-path", default="stream", help="RTSP stream path")
     parser.add_argument(
@@ -426,7 +454,12 @@ def _parse_args() -> argparse.Namespace:
         default=os.environ.get("NOMAD_VIDEO_RTSP_PUBLISH_URL"),
         help="Full RTSP publish URL. Defaults to rtsp://localhost:8554/<rtsp-path>.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    try:
+        args.http_host = validate_http_host(args.http_host)
+    except ValueError as exc:
+        parser.error(str(exc))
+    return args
 
 
 def main() -> None:
@@ -446,7 +479,7 @@ def main() -> None:
         logger.error("Failed to start video bridge pipeline")
         return
 
-    server = BridgeHTTPServer("0.0.0.0", args.http_port, bridge)
+    server = BridgeHTTPServer(args.http_host, args.http_port, bridge)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     logger.info(f"HTTP API listening on port {args.http_port}")
     try:

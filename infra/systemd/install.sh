@@ -51,7 +51,6 @@ chmod 0755 "$REPO_ROOT/scripts/nomad" \
 
 UNITS=(
     nomad.target
-    nomad-edge-core.service
     nomad-mavlink-router.service
     nomad-mediamtx.service
     nomad-isaac-ros-container.service
@@ -61,9 +60,8 @@ UNITS=(
 
 # -----------------------------------------------------------------------------
 # Install sudoers fragment so the service user can drive nomad-*.service units
-# without a password prompt. This is what allows Edge Core's COMMAND_WHITELIST
-# (status_/start_/stop_/restart_*) and Mission Planner's terminal panel to
-# manage services via `sudo -n systemctl ...` without interactive auth.
+# without a password prompt. This lets the service command whitelist and
+# Mission Planner's terminal panel manage services via sudo -n systemctl.
 #
 # Scope is intentionally tight: only the nomad-* systemctl verbs, plus
 # reboot/shutdown which Mission Planner already supports.
@@ -122,7 +120,6 @@ systemctl daemon-reload
 systemctl enable nomad.target
 
 declare -A FLAG=(
-    [nomad-edge-core.service]="$NOMAD_AUTOSTART_EDGE_CORE"
     [nomad-mavlink-router.service]="$NOMAD_AUTOSTART_MAVLINK_ROUTER"
     [nomad-mediamtx.service]="$NOMAD_AUTOSTART_MEDIAMTX"
     [nomad-isaac-ros-container.service]="$NOMAD_AUTOSTART_ISAAC_ROS_CONTAINER"
@@ -140,17 +137,11 @@ for u in "${!FLAG[@]}"; do
     fi
 done
 
-# Remove the legacy single-unit setup if it lingers.
-if systemctl list-unit-files nomad.service >/dev/null 2>&1; then
-    echo "[install] disabling legacy nomad.service (replaced by per-service units)"
-    systemctl disable --now nomad.service 2>/dev/null || true
-fi
-
 cat <<EOF
 
 [install] Done. Useful commands:
     systemctl status nomad.target
     nomad start all          # start the autostart set
     nomad status             # check each service
-    journalctl -u nomad-edge-core -f
+    journalctl -u nomad-video-bridge -f
 EOF

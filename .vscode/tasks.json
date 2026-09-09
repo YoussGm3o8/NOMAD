@@ -5,9 +5,9 @@
     // These tasks appear in the VS Code status bar via "Run Task".
     // Switch between real drone and supported ground-station profiles.
     {
-      "label": "Profile: Load real drone (Jetson + ArduPilot)",
+      "label": "Profile: Load onboard companion",
       "type": "shell",
-      "command": "pixi run profile-load drone",
+      "command": "pixi run profile-load onboard_companion",
       "group": "none",
       "presentation": {
         "panel": "shared",
@@ -15,7 +15,7 @@
         "showReuseMessage": false
       },
       "problemMatcher": [],
-      "detail": "Production Jetson Orin Nano + ArduPilot. Perception services remain disabled."
+      "detail": "Onboard companion placement; optional compute services remain disabled until qualified."
     },
     {
       "label": "Profile: Show active",

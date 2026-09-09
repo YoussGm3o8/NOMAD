@@ -37,6 +37,10 @@ COPY src/ /ws/src/nomad/src/
 COPY scripts/dev/generate_mavlink.py /ws/src/nomad/scripts/dev/generate_mavlink.py
 COPY third_party/ardupilot-mavlink/ /ws/src/nomad/third_party/ardupilot-mavlink/
 COPY ros2/nomad_ros/ /ws/src/nomad/ros2/nomad_ros/
+# Retained ground-side video tools are imported as python.tools inside the
+# container by the optional video bridge service.
+COPY python/__init__.py /opt/nomad/python/__init__.py
+COPY python/tools/ /opt/nomad/python/tools/
 
 SHELL ["/bin/bash", "-c"]
 RUN . /opt/ros/humble/setup.bash && cd /ws/src/nomad/ros2/nomad_ros && \

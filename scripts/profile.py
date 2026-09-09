@@ -23,7 +23,9 @@ Usage:
 
 from __future__ import annotations
 
+import ipaddress
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -38,9 +40,69 @@ PROFILES = {
     "onboard_companion": "Onboard companion: Jetson/SBC runs ROS 2, VIO, and video workloads",
     "groundstation_gpu": "Ground station GPU: Workstation runs ROS 2, VIO, camera, and perception locally",
     "groundstation_minimal": "Ground station minimal: Direct MAVLink & C++ core only, no companion or GPU perception",
-    "drone": "Real Jetson + ArduPilot flight controller (legacy baseline)",
-    "dev": "Minimal development environment (API dev / CI)",
 }
+
+_ENDPOINT_PATTERN = re.compile(
+    r"^(?:(?P<scheme>udp|udpin|udpout):)?(?P<host>[^:/\s]+):(?P<port>[0-9]+)$",
+    re.IGNORECASE,
+)
+_RETIRED_MP_FIELDS = ("JetsonApiKey", "JetsonIP", "JetsonPort")
+_UNSAVED_SECRET_KEYS = {"NOMAD_API_KEY"}
+_HOST_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+
+
+def _validate_endpoint_host(host: str) -> None:
+    try:
+        ipaddress.ip_address(host)
+        return
+    except ValueError:
+        pass
+
+    if re.fullmatch(r"[0-9.]+", host):
+        raise ValueError("MAVLink endpoint host must be a valid IPv4 address or hostname")
+    if len(host) > 253 or any(not _HOST_LABEL_PATTERN.fullmatch(label) for label in host.split(".")):
+        raise ValueError("MAVLink endpoint host must be a valid IPv4 address or hostname")
+
+
+def _parse_mavlink_endpoint(endpoint: str) -> tuple[str, str, int]:
+    if not isinstance(endpoint, str):
+        raise ValueError("MAVLink endpoint must be a string")
+
+    match = _ENDPOINT_PATTERN.fullmatch(endpoint.strip())
+    if match is None:
+        raise ValueError("MAVLink endpoint must be [scheme:]host:port")
+
+    host = match.group("host")
+    port = int(match.group("port"))
+    if not host or port < 1 or port > 65535:
+        raise ValueError("MAVLink endpoint requires a host and port 1..65535")
+    _validate_endpoint_host(host)
+
+    scheme = (match.group("scheme") or "udpin").lower()
+    if scheme == "udp":
+        scheme = "udpin"
+    return scheme, host, port
+
+
+def validate_mavlink_endpoint(endpoint: str) -> None:
+    """Raise ValueError unless endpoint is a supported MAVLink UDP address."""
+    _parse_mavlink_endpoint(endpoint)
+
+
+def normalize_mavlink_endpoint(endpoint: str) -> str:
+    """Return an endpoint in canonical ``scheme:host:port`` form."""
+    scheme, host, port = _parse_mavlink_endpoint(endpoint)
+    return f"{scheme}:{host}:{port}"
+
+
+def _validated_profile_env(name: str, env: dict[str, str]) -> dict[str, str]:
+    if name not in PROFILES:
+        raise ValueError(f"Unsupported product profile: {name}")
+    if env.get("NOMAD_PROFILE") != name:
+        raise ValueError(f"NOMAD_PROFILE must equal {name}")
+    normalized = dict(env)
+    normalized["NOMAD_MAVLINK_ENDPOINT"] = normalize_mavlink_endpoint(env.get("NOMAD_MAVLINK_ENDPOINT", ""))
+    return normalized
 
 
 def _key_settings(path: Path) -> dict[str, str]:
@@ -49,7 +111,6 @@ def _key_settings(path: Path) -> dict[str, str]:
         "NOMAD_PROFILE_DESCRIPTION",
         "NOMAD_SIM_MODE",
         "NOMAD_ENABLE_SERVOS",
-        "NOMAD_ALLOW_INSECURE_REMOTE",
     ]
     result: dict[str, str] = {}
     if not path.exists():
@@ -96,27 +157,17 @@ def _mp_config_path() -> Path | None:
     return Path(local) / "Mission Planner" / "plugins" / "nomad_config.json"
 
 
-def _host_from_url(url: str | None) -> str | None:
-    if not url:
-        return None
-    host = url.split("://")[-1].split("/")[0].split(":")[0]
-    return host or None
-
-
 def _apply_env_to_mp_config(cfg: dict[str, object], name: str, env: dict[str, str]) -> None:
-    if "NOMAD_API_KEY" in env:
-        cfg["JetsonApiKey"] = env["NOMAD_API_KEY"]
-        cfg["CoreApiKey"] = env["NOMAD_API_KEY"]
-    if "NOMAD_MAVLINK_ENDPOINT" in env:
-        cfg["CoreMavlinkEndpoint"] = env["NOMAD_MAVLINK_ENDPOINT"]
-    if "NOMAD_VIDEO_RTSP_URL" in env:
-        cfg["VideoUrl"] = env["NOMAD_VIDEO_RTSP_URL"]
-    port = env.get("NOMAD_API_PORT", "")
-    if port.isdigit():
-        cfg["JetsonPort"] = int(port)
-    host = _host_from_url(env.get("NOMAD_API_URL"))
-    if host and host != "0.0.0.0":
-        cfg["JetsonIP"] = "127.0.0.1" if host == "localhost" else host
+    for field in _RETIRED_MP_FIELDS:
+        cfg.pop(field, None)
+
+    cfg["CoreMavlinkEndpoint"] = normalize_mavlink_endpoint(env.get("NOMAD_MAVLINK_ENDPOINT", ""))
+    for env_key, config_key in (("NOMAD_API_KEY", "CoreApiKey"), ("NOMAD_VIDEO_RTSP_URL", "VideoUrl")):
+        value = env.get(env_key, "").strip()
+        if value:
+            cfg[config_key] = value
+        else:
+            cfg.pop(config_key, None)
     cfg["ActiveProfile"] = name
 
 
@@ -124,6 +175,7 @@ def sync_mission_planner(name: str, env: dict[str, str]) -> None:
     """Merge profile-controlled settings into the Mission Planner plugin config."""
     import json
 
+    env = _validated_profile_env(name, env)
     path = _mp_config_path()
     if path is None:
         print("[INFO] Mission Planner config path unknown (set NOMAD_MP_CONFIG to sync); skipped MP sync")
@@ -132,9 +184,14 @@ def sync_mission_planner(name: str, env: dict[str, str]) -> None:
     cfg: dict[str, object] = {}
     if path.exists():
         try:
-            cfg = json.loads(path.read_text(encoding="utf-8")) or {}
-        except Exception:
-            cfg = {}
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"[WARN] Mission Planner config is unreadable; left unchanged: {exc}")
+            return
+        if not isinstance(loaded, dict):
+            print("[WARN] Mission Planner config is not a JSON object; left unchanged")
+            return
+        cfg = loaded
 
     _apply_env_to_mp_config(cfg, name, env)
     try:
@@ -151,8 +208,10 @@ def cmd_list() -> None:
     print("Available profiles:")
     print(f"{'PROFILE':<20} {'SIM MODE':<12} {'DESCRIPTION'}")
     print(f"{'-------':<20} {'--------':<12} {'-----------'}")
-    for f in sorted(PROFILES_DIR.glob("*.env")):
-        name = f.stem
+    for name in sorted(PROFILES):
+        f = PROFILES_DIR / f"{name}.env"
+        if not f.exists():
+            continue
         settings = _key_settings(f)
         desc = settings.get("NOMAD_PROFILE_DESCRIPTION", PROFILES.get(name, ""))
         sim = settings.get("NOMAD_SIM_MODE", "false")
@@ -198,11 +257,18 @@ def _print_next_steps(settings: dict) -> None:
 
 def cmd_load(name: str) -> None:
     src = PROFILES_DIR / f"{name}.env"
-    if not src.exists():
+    if name not in PROFILES or not src.exists():
         print(f"[FAIL] Profile not found: {src}")
         print("Available profiles:")
-        for f in sorted(PROFILES_DIR.glob("*.env")):
-            print(f"  {f.stem}")
+        for profile_name in sorted(PROFILES):
+            if (PROFILES_DIR / f"{profile_name}.env").exists():
+                print(f"  {profile_name}")
+        sys.exit(1)
+
+    try:
+        profile_env = _validated_profile_env(name, _parse_env(src))
+    except ValueError as exc:
+        print(f"[FAIL] Invalid profile {name}: {exc}")
         sys.exit(1)
 
     if ENV_FILE.exists():
@@ -211,16 +277,40 @@ def cmd_load(name: str) -> None:
         shutil.copy2(ENV_FILE, backup)
         print(f"[INFO] Backed up current config to {backup.name}")
 
-    shutil.copy2(src, ENV_FILE)
+    content = src.read_text(encoding="utf-8")
+    canonical = profile_env["NOMAD_MAVLINK_ENDPOINT"]
+    content = re.sub(r"^NOMAD_MAVLINK_ENDPOINT=.*$", f"NOMAD_MAVLINK_ENDPOINT={canonical}", content, flags=re.MULTILINE)
+    ENV_FILE.write_text(content, encoding="utf-8")
     print(f"[OK] Loaded profile: {name}")
 
     # Keep the Mission Planner plugin in sync (API key, endpoint, indicator).
-    sync_mission_planner(name, _parse_env(ENV_FILE))
+    sync_mission_planner(name, profile_env)
 
     settings = _key_settings(src)
     _print_load_summary(settings)
     _warn_user_placeholder()
     _print_next_steps(settings)
+
+
+def _format_env_value(value: str) -> str:
+    if not value or re.search(r"\s|#", value):
+        return f'"{value}"'
+    return value
+
+
+def _format_saved_profile(name: str, profile_env: dict[str, str], template: Path) -> str:
+    allowed = set(_parse_env(template))
+    values = {key: value for key, value in profile_env.items() if key in allowed and key not in _UNSAVED_SECRET_KEYS}
+    values["NOMAD_PROFILE"] = name
+
+    result: list[str] = []
+    for line in template.read_text(encoding="utf-8").splitlines():
+        key = line.partition("=")[0].strip()
+        if key in values and not line.lstrip().startswith("#"):
+            result.append(f"{key}={_format_env_value(values[key])}")
+        else:
+            result.append(line)
+    return "\n".join(result) + "\n"
 
 
 def cmd_save(name: str) -> None:
@@ -229,27 +319,26 @@ def cmd_save(name: str) -> None:
         print("Load a profile first: python scripts/profile.py load <name>")
         sys.exit(1)
 
+    if name not in PROFILES:
+        print(f"[FAIL] Unsupported product profile: {name}")
+        sys.exit(1)
+
+    try:
+        profile_env = _validated_profile_env(name, _parse_env(ENV_FILE))
+    except ValueError as exc:
+        print(f"[FAIL] Current config is invalid: {exc}")
+        sys.exit(1)
+
     dest = PROFILES_DIR / f"{name}.env"
-    if dest.exists():
-        answer = input(f"Profile '{name}' already exists. Overwrite? [y/N] ").strip().lower()
-        if answer != "y":
-            print("[INFO] Aborted")
-            return
+    if not dest.exists():
+        print(f"[FAIL] Product profile template is missing: {dest}")
+        sys.exit(1)
+    answer = input(f"Profile '{name}' already exists. Overwrite? [y/N] ").strip().lower()
+    if answer != "y":
+        print("[INFO] Aborted")
+        return
 
-    lines = ENV_FILE.read_text(encoding="utf-8").splitlines()
-    filtered = [
-        line
-        for line in lines
-        if not line.startswith("NOMAD_PROFILE=") and not line.startswith("NOMAD_PROFILE_DESCRIPTION=")
-    ]
-
-    header = [
-        f"# Saved by nomad-profile on {datetime.now().isoformat()}",
-        f"NOMAD_PROFILE={name}",
-        f'NOMAD_PROFILE_DESCRIPTION="Saved from current config on {datetime.now():%Y-%m-%d}"',
-        "",
-    ]
-    dest.write_text("\n".join(header + filtered) + "\n", encoding="utf-8")
+    dest.write_text(_format_saved_profile(name, profile_env, dest), encoding="utf-8")
     print(f"[OK] Saved current config as profile: {name}")
     print(f"     -> {dest}")
 
@@ -273,7 +362,7 @@ def cmd_show() -> None:
 
 def cmd_diff(name: str) -> None:
     src = PROFILES_DIR / f"{name}.env"
-    if not src.exists():
+    if name not in PROFILES or not src.exists():
         print(f"[FAIL] Profile not found: {src}")
         sys.exit(1)
     if not ENV_FILE.exists():
@@ -299,50 +388,62 @@ def cmd_diff(name: str) -> None:
 
 def cmd_edit() -> None:
     if not ENV_FILE.exists():
-        print("[WARN] No active config. Loading 'dev' profile first.")
-        cmd_load("dev")
+        print("[FAIL] No active config. Load one of the supported product profiles first.")
+        sys.exit(1)
 
     editor = os.environ.get("EDITOR", "notepad" if sys.platform == "win32" else "nano")
     print(f"[INFO] Opening {ENV_FILE} with {editor}")
     subprocess.run([editor, str(ENV_FILE)])
 
 
+def cmd_which() -> None:
+    if not ENV_FILE.exists():
+        print("[WARN] No active config file found")
+        sys.exit(1)
+    print(ENV_FILE)
+
+
+def _print_usage() -> None:
+    print("Usage: python scripts/profile.py <load|save|list|show|diff|edit|which> [name]")
+    print()
+    print("Commands:")
+    print("  load <name>  Load a supported product profile")
+    print("  save <name>  Update a supported product profile from current config")
+    print("  list         List available profiles")
+    print("  show         Show the active profile")
+    print("  diff <name>  Diff a profile against current config")
+    print("  edit         Open the current config in $EDITOR")
+    print("  which        Print the active config path")
+
+
+def _require_profile_name(action: str) -> str:
+    if len(sys.argv) < 3:
+        print(f"[FAIL] Usage: python scripts/profile.py {action} <name>")
+        sys.exit(1)
+    return sys.argv[2]
+
+
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python scripts/profile.py <load|save|list|show|diff|edit> [name]")
-        print()
-        print("Commands:")
-        print("  load <name>  Load a profile (sim, drone, dev, or custom)")
-        print("  save <name>  Save current config as a new profile")
-        print("  list         List available profiles")
-        print("  show         Show the active profile")
-        print("  diff <name>  Diff a profile against current config")
-        print("  edit         Open the current config in $EDITOR")
-        sys.exit(0)
+        _print_usage()
+        return
 
     action = sys.argv[1]
 
     if action == "list":
         cmd_list()
     elif action == "load":
-        if len(sys.argv) < 3:
-            print("[FAIL] Usage: python scripts/profile.py load <name>")
-            sys.exit(1)
-        cmd_load(sys.argv[2])
+        cmd_load(_require_profile_name(action))
     elif action == "save":
-        if len(sys.argv) < 3:
-            print("[FAIL] Usage: python scripts/profile.py save <name>")
-            sys.exit(1)
-        cmd_save(sys.argv[2])
+        cmd_save(_require_profile_name(action))
     elif action == "show":
         cmd_show()
     elif action == "diff":
-        if len(sys.argv) < 3:
-            print("[FAIL] Usage: python scripts/profile.py diff <name>")
-            sys.exit(1)
-        cmd_diff(sys.argv[2])
+        cmd_diff(_require_profile_name(action))
     elif action == "edit":
         cmd_edit()
+    elif action == "which":
+        cmd_which()
     else:
         print(f"[FAIL] Unknown command: {action}")
         sys.exit(1)

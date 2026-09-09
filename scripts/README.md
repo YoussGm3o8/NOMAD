@@ -5,8 +5,8 @@ vehicle core. scripts/dev contains C++ SITL runners and quality checks;
 scripts/build contains plugin/image helpers; scripts/services manages retained
 adapters. scripts/nomad is a deployment dispatcher, distinct from the C++ CLI.
 
-Some tasks still reference deleted Edge Core files; see G1 in
-[migration](../docs/migration.md). Retained Python may configure or observe tests,
+Some setup/provisioning scripts still reference deleted Edge Core files; see G1
+in [migration](../docs/migration.md). Retained Python may configure or observe tests,
 but production vehicle decisions belong in C++.
 Use [development](../docs/development.md) and [operations](../docs/operations.md)
 for the canonical workflow.

@@ -33,11 +33,13 @@ architectures. Run profile-list to inspect template names; profile-load writes
 ignored runtime configuration and also changes Mission Planner configuration.
 Do not load a profile just to read it.
 
-The templates are not deployment-ready: retired keys, development credentials,
-endpoint inconsistencies and unused autostart/capability flags remain (C10–C12).
-NOMAD_VIO_SOURCE_REQUIRED=false does not bypass the C++ VIO-conditioned velocity
-gate. A ready checkbox or true environment value does not establish a healthy
-sensor. G1/G3 must validate effective configuration end to end.
+The templates use explicit C++ UDP endpoints and contain no deployment key.
+Invalid endpoints and mismatched profile identity fail before activation; profile
+switches clear stale owned Mission Planner settings. Optional ROS, video and
+container services remain disabled until their image, camera and estimator are
+qualified. NOMAD_VIO_SOURCE_REQUIRED=false does not bypass the C++
+VIO-conditioned velocity gate. A capability flag does not establish a healthy
+sensor. G3 must validate effective configuration end to end.
 
 Target activation: choose profile, aircraft/firmware identity, single core host,
 command transport, navigation capability, video source, payload mapping and
@@ -140,9 +142,9 @@ exposed ROS command surface; no such protection is implied by ROS domain naming.
 
 Separate competition credentials from local command credentials. Validate TLS
 and server identity for the selected official protocol. Restrict media HTTP,
-RTSP, SSH and MAVLink endpoints to intended peers; the retained media HTTP server
-currently lacks authentication. Never ship development credentials as production
-configuration or commit real hosts/keys.
+RTSP, SSH and MAVLink endpoints to intended peers. The retained media HTTP server
+lacks authentication and therefore rejects non-loopback binds. Never ship
+development credentials as production configuration or commit real hosts/keys.
 
 Release packages contain the tested core/plugin/adapters, dependency notices,
 configuration templates and procedures. Qualify OS/architecture/GPU drivers and

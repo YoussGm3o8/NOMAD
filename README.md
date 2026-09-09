@@ -8,7 +8,8 @@ stabilization, EKF, navigation execution and failsafes.
 
 The working migration tree contains a tested C++ core, UDP MAVLink implementation,
 basic Copter operations, safety/watchdog/fence/payload primitives and adapters.
-Edge Core source has been removed; deployment/CI leftovers still need repair.
+Edge Core source has been removed. Build and profile/service wiring repairs are
+recorded in the migration gates; older setup/provisioning paths still need repair.
 MAVSDK is an early competition prerequisite but currently only has an optional
 smoke target. QuadPlane, competition telemetry/traffic and task workflows remain
 implementation work.
@@ -33,9 +34,9 @@ pixi run test-python
 pixi run docs-build
 ~~~
 
-These checks do not start hardware. Old Edge Core dev commands and Compose/CI
-startup need the G1 repair described in migration; do not use them as a current
-quickstart. Real configuration stays in ignored local storage.
+These checks do not start hardware. Core and daemon-free configuration checks are
+current; live Docker/SITL/ROS startup remains an open G1 qualification gate. Real
+configuration stays in ignored local storage.
 
 ## Layout
 

@@ -45,6 +45,11 @@ image builds, GPU adapters and the Python video bridge remain available for
 integration work. Raw Gazebo Compose services are scaffolding, not a working
 simulator or perception demonstration.
 
+On a configured companion host, `nomad start video_bridge` directly manages the
+retained bridge inside the adapter container; it no longer calls a vehicle REST
+service. The control endpoint is loopback-only. Product profiles keep this and
+other optional compute services disabled until G3 qualification.
+
 ## Test layers
 
 | Layer | Current checks | Required expansion |

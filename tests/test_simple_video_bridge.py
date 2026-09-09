@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 The NOMAD Authors
-"""Tests for edge_core.services.ros.simple_video_bridge."""
+"""Tests for the retained ROS simple video bridge."""
 
 from __future__ import annotations
 
@@ -234,6 +234,17 @@ def test_getters_and_status_defaults():
 
     b.set_overlay(True)
     assert b.get_overlay_status() == {"enabled": True, "detection_count": 0}
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "127.42.0.9", "::1", "localhost"])
+def test_validate_http_host_accepts_loopback(host):
+    assert svb.validate_http_host(host) == host
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "192.0.2.1", "bridge.example"])
+def test_validate_http_host_rejects_non_loopback(host):
+    with pytest.raises(ValueError, match="loopback"):
+        svb.validate_http_host(host)
 
 
 def test_status_reports_positive_frame_age():
@@ -589,6 +600,7 @@ def test_main_serves_then_shuts_down(monkeypatch):
     class _FakeServer:
         def __init__(self, host, port, bridge):
             self.bridge = bridge
+            seen["host"] = host
 
         def serve_forever(self):
             seen["served"] = True
@@ -603,6 +615,7 @@ def test_main_serves_then_shuts_down(monkeypatch):
     svb.main()
     assert seen["stopped"] is True
     assert seen["shutdown"] is True
+    assert seen["host"] == "127.0.0.1"
 
 
 def test_main_handles_keyboard_interrupt(monkeypatch):

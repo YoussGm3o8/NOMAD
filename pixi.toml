@@ -215,7 +215,7 @@ test-plugin-duallink = "powershell -ExecutionPolicy Bypass -File scripts/build/t
 # specific deployment target (real drone, minimal dev).
 #
 # Quick start:
-#   pixi run profile-load drone     # Real Jetson + core; perception opt-in
+#   pixi run profile-load onboard_companion  # Optional onboard compute placement
 #   pixi run profile-load groundstation_minimal  # Direct MAVLink + C++ core
 #   pixi run profile-show           # Show active profile
 #   pixi run profile-list           # List available profiles
