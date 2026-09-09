@@ -103,13 +103,15 @@ velocity command.
 
 Read [development](development.md) before running tasks. Current known-good local
 checks include core/Python tests, retained-package checks and daemon-free Compose
-resolution. `dev` and `dev-build` build the C++ core; the deleted API task is no
-longer exposed. Live image, SITL and ROS runs still require G1 qualification
+resolution. `dev` and `dev-build` build the C++ core; bootstrap and Jetson setup
+use the product profile manager and retained systemd inventory. Remote setup
+requires a pre-trusted SSH host key and does not open an HTTP API port. Live image,
+SITL and ROS runs still require G1 qualification
 before `dev-up` or `sitl` can be treated as verified quickstarts.
 
 SITL runners already exist for status, command-flow, mission, watchdog, fence,
 payload, link loss/recovery, GCS-heartbeat and zero-delivery. Run them serially
-against an isolated identified simulation once its startup is repaired. Verify
+against an isolated identified simulation to qualify the repaired startup. Verify
 disarmed/known state between scenarios. Fault injection must never target a
 real aircraft by accidental endpoint reuse. A passive Mission Planner observer
 may use the configured simulator TCP observer link; it must not issue commands.

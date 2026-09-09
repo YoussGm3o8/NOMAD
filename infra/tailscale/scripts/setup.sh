@@ -154,12 +154,8 @@ configure_firewall() {
         return 0
     fi
 
-    # Allow Tailscale interface
-    ufw allow in on tailscale0 2>/dev/null || true
-
     # Allow necessary ports from Tailscale network (100.0.0.0/8)
     ufw allow from 100.0.0.0/8 to any port 22 proto tcp 2>/dev/null || true    # SSH
-    ufw allow from 100.0.0.0/8 to any port 8000 proto tcp 2>/dev/null || true  # API
     ufw allow from 100.0.0.0/8 to any port 8554 proto tcp 2>/dev/null || true  # RTSP
     ufw allow from 100.0.0.0/8 to any port 14560 proto udp 2>/dev/null || true # MAVLink LTE
 
@@ -240,20 +236,19 @@ print_next_steps() {
     echo "   Windows: https://tailscale.com/download/windows"
     echo "   Linux: curl -fsSL https://tailscale.com/install.sh | sh"
     echo ""
-    echo "2. Update MAVLink router config with Ground Station IP:"
-    echo "   sudo nano /etc/mavlink-router/main.conf"
-    echo "   # Change Address= in [UdpEndpoint groundstation]"
+    echo "2. Set GCS_IP in the active NOMAD product profile:"
+    echo "   python3 scripts/profile.py edit"
+    echo "   python3 scripts/profile.py validate"
     echo ""
     echo "3. Test connectivity from Ground Station:"
     echo "   ping $ip"
-    echo "   curl http://$ip:8000/health"
+    echo "   Confirm MAVLink telemetry arrives on UDP port 14560"
     echo ""
     echo "4. Configure Mission Planner:"
     echo "   Jetson IP: $ip"
     echo "   Main MAVLink connection: UDP port 14600"
     echo "   NOMAD plugin LTE input: UDP port 14560"
     echo "   NOMAD plugin RadioMaster input: UDP port 14550"
-    echo "   API: http://$ip:8000"
     echo ""
     echo "============================================================"
 }

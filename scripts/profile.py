@@ -360,6 +360,21 @@ def cmd_show() -> None:
     print(f"Config file:      {ENV_FILE}")
 
 
+def cmd_validate() -> None:
+    if not ENV_FILE.exists():
+        print(f"[FAIL] No current config found at {ENV_FILE}")
+        sys.exit(1)
+
+    env = _parse_env(ENV_FILE)
+    name = env.get("NOMAD_PROFILE", "")
+    try:
+        _validated_profile_env(name, env)
+    except ValueError as exc:
+        print(f"[FAIL] Current config is invalid: {exc}")
+        sys.exit(1)
+    print(f"[OK] Active product profile is valid: {name}")
+
+
 def cmd_diff(name: str) -> None:
     src = PROFILES_DIR / f"{name}.env"
     if name not in PROFILES or not src.exists():
@@ -404,13 +419,14 @@ def cmd_which() -> None:
 
 
 def _print_usage() -> None:
-    print("Usage: python scripts/profile.py <load|save|list|show|diff|edit|which> [name]")
+    print("Usage: python scripts/profile.py <load|save|list|show|validate|diff|edit|which> [name]")
     print()
     print("Commands:")
     print("  load <name>  Load a supported product profile")
     print("  save <name>  Update a supported product profile from current config")
     print("  list         List available profiles")
     print("  show         Show the active profile")
+    print("  validate     Validate the active product profile")
     print("  diff <name>  Diff a profile against current config")
     print("  edit         Open the current config in $EDITOR")
     print("  which        Print the active config path")
@@ -438,6 +454,8 @@ def main() -> None:
         cmd_save(_require_profile_name(action))
     elif action == "show":
         cmd_show()
+    elif action == "validate":
+        cmd_validate()
     elif action == "diff":
         cmd_diff(_require_profile_name(action))
     elif action == "edit":

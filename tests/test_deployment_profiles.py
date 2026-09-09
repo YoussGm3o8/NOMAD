@@ -191,6 +191,18 @@ def test_load_writes_canonical_endpoint(tmp_path: Path, monkeypatch) -> None:
     assert "NOMAD_MAVLINK_ENDPOINT=udpin:127.0.0.1:14550" in active.read_text(encoding="utf-8")
 
 
+def test_validate_rejects_invalid_active_profile(tmp_path: Path, monkeypatch) -> None:
+    active = tmp_path / "nomad.env"
+    active.write_text(
+        "NOMAD_PROFILE=groundstation_minimal\nNOMAD_MAVLINK_ENDPOINT=999.999.999.999:14550\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(profile, "ENV_FILE", active)
+
+    with pytest.raises(SystemExit):
+        profile.cmd_validate()
+
+
 def test_save_uses_template_schema_and_preserves_secret_placeholder(tmp_path: Path, monkeypatch) -> None:
     profiles = tmp_path / "profiles"
     profiles.mkdir()

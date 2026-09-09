@@ -9,7 +9,7 @@ stabilization, EKF, navigation execution and failsafes.
 The working migration tree contains a tested C++ core, UDP MAVLink implementation,
 basic Copter operations, safety/watchdog/fence/payload primitives and adapters.
 Edge Core source has been removed. Build and profile/service wiring repairs are
-recorded in the migration gates; older setup/provisioning paths still need repair.
+recorded in the migration gates, and setup/provisioning now targets the C++ core.
 MAVSDK is an early competition prerequisite but currently only has an optional
 smoke target. QuadPlane, competition telemetry/traffic and task workflows remain
 implementation work.

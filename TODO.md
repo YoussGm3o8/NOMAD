@@ -9,9 +9,9 @@ close its integration or release gate.
 
 ## Current work
 
-- [~] G1: repair remaining deleted Edge Core references in setup/provisioning,
-  then run live image/SITL/ROS and clean-boot service qualification. C02 and
-  C10-C12 source repairs are recorded in migration.
+- [~] G1: run live image/SITL/ROS and clean-boot service qualification on the
+  repaired build, profile, service and setup paths. C02 and C10-C12 source
+  repairs are recorded in migration.
 
 ## Ordered implementation backlog
 

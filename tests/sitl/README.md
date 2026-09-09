@@ -3,7 +3,7 @@
 These tests drive isolated ArduPilot SITL and observe authoritative vehicle state.
 Normal pytest skips live scenarios without an explicitly configured simulation.
 Nightly/on-demand SITL CI is configured, but a workflow file is not passed-run
-evidence; current startup still needs the G1 Edge Core reference repair.
+evidence; the repaired startup path still needs a current live G1 run.
 
 ## Local test responsibilities
 

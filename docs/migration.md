@@ -149,14 +149,27 @@ HTTP endpoint accepts loopback binds only; wildcard and remote binds fail before
 the media pipeline starts.
 
 No image, service or hardware runtime was started. Optional compute, camera,
-estimator, RTSP output and clean-boot systemd behavior remain unqualified. Older
-setup/provisioning scripts still invoke deleted Edge Core paths and are the next
-G1 source-repair slice.
+estimator, RTSP output and clean-boot systemd behavior remain unqualified.
 
 Local evidence: 297 Python tests passed with 3 skipped and 96.34% coverage;
 all 9 CTest targets passed; strict documentation, lint, formatting, type checks,
 complexity limits, lock validation, changed-file pre-commit hooks and edited
 shell syntax checks passed.
+
+#### Setup and provisioning repair evidence - 2026-09-09
+
+Development bootstrap now builds the C++ core and checks the product profile
+manager. Local and remote Jetson setup load or validate a supported product
+profile, build the core, install the retained service inventory and reject
+unqualified optional autostarts. Tailscale and Jetson firewall setup no longer
+opens the deleted HTTP API or grants blanket access on the Tailscale interface.
+Remote setup uses the existing SSH known-hosts trust store and rejects unknown
+host keys. No remote command, package installation, firewall mutation, service
+start or hardware check was run; these paths have structural and mocked-command
+evidence only. Local evidence after integration: 313 Python tests passed with
+3 skipped and 96.34% retained-module coverage; all 9 CTest targets passed; lint,
+formatting, type checks, strict documentation, complexity, lock, shell syntax,
+PowerShell parsing and changed-file pre-commit checks passed.
 
 ### G-M — MAVSDK adoption (transport lead; early prerequisite after G1)
 

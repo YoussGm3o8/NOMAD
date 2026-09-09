@@ -1,8 +1,9 @@
 # Development
 
 The current tree builds a C++20 library and CLI with optional ROS 2 and Mission
-Planner adapters. Edge Core source is deleted; some task/CI/deployment references
-still need G1 repair. Source status and evidence belong in [migration](migration.md).
+Planner adapters. Edge Core source is deleted and active build, deployment and
+setup entrypoints target the C++ core. Source status and evidence belong in
+[migration](migration.md).
 
 ## Prerequisites and verified local checks
 
@@ -76,8 +77,9 @@ mode is not a completed landing.
 Existing tasks: core-sitl-status, core-sitl-command-flow, core-sitl-mission,
 core-sitl-velocity-watchdog, core-sitl-geofence, core-sitl-payload,
 core-sitl-link-loss, core-sitl-link-recovery, core-sitl-zero-delivery,
-core-sitl-gcs-heartbeat and sitl-fence. Once G1 startup is repaired, use them
-against the configured isolated endpoint with no hardware path attached.
+core-sitl-gcs-heartbeat and sitl-fence. Use them against a configured isolated
+endpoint with no hardware path attached; a live passing run is still required
+before G1 closes.
 
 Add a pinned ArduPlane/QuadPlane SITL path for Task 1. Copter mode numbers and
 velocity-stop behavior cannot stand in for transition, cruise and VTOL landing
