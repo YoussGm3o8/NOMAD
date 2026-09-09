@@ -24,10 +24,26 @@ format-check is read-only with respect to source; format rewrites source and is
 not appropriate for a documentation-only review of unrelated migration work.
 docs-build is the strict ProperDocs site check.
 
-Do not use dev, dev-build, test-api or the old test coverage task as current
-quickstarts: they reference deleted Edge Core files. Compose and CI still carry
-deleted-image references. dev-up/sitl startup must be repaired and verified at
-G1; a task name existing in pixi.toml is not evidence that it works.
+`pixi run dev` and `dev-build` now build the C++ core. `pixi run test` measures
+coverage of retained Python tools and Tailscale helpers. The deleted API server,
+API smoke task and gimbal SITL task are removed.
+
+`dev-up` starts isolated ArduPilot SITL plus the passive Mission Planner bridge;
+it requires Docker and the `nomad-sitl:copter-4.7.1` image (build instructions are
+in docker/docker-compose.dev.yml). `sitl` builds the core first, then starts that
+stack and runs its scenario. `sim-ros-up` additionally forwards MAVLink to the
+ROS adapter. Direct Compose ROS use must set `NOMAD_SITL_ROS_OUTPUT` to
+`--out udp:nomad_vehicle_node:14552`. The simulator always emits the normal host
+stream on 14570 and a private relay copy on 14572; scenario tasks choose which
+stream to read through `NOMAD_CORE_SITL_PORT`.
+These paths have local configuration checks, but current live image/SITL/ROS
+qualification remains open at G1.
+
+`sim-ros-perception-up` and the three `sim-gazebo-up*` tasks fail with an explicit
+unavailable message: no current sensor/launch provider is configured. Optional
+image builds, GPU adapters and the Python video bridge remain available for
+integration work. Raw Gazebo Compose services are scaffolding, not a working
+simulator or perception demonstration.
 
 ## Test layers
 

@@ -8,6 +8,7 @@ import http.server
 import json
 import logging
 import subprocess
+from typing import cast
 from urllib.parse import parse_qs, urlparse
 
 logger = logging.getLogger("nomad.video_bridge.server")
@@ -16,18 +17,21 @@ logger = logging.getLogger("nomad.video_bridge.server")
 class BridgeHTTPHandler(http.server.BaseHTTPRequestHandler):
     """HTTP API for the video bridge."""
 
+    def _bridge(self):
+        return cast("BridgeHTTPServer", self.server).bridge
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
 
         if path == "/health":
-            self._json_response(self.server.bridge.get_health())
+            self._json_response(self._bridge().get_health())
         elif path == "/status":
-            self._json_response(self.server.bridge.get_status())
+            self._json_response(self._bridge().get_status())
         elif path == "/topics":
             self._json_response(self._list_topics())
         elif path == "/overlay/status":
-            self._json_response(self.server.bridge.get_overlay_status())
+            self._json_response(self._bridge().get_overlay_status())
         else:
             self._json_response({"error": "not found"}, status=404)
 
@@ -39,13 +43,13 @@ class BridgeHTTPHandler(http.server.BaseHTTPRequestHandler):
         if path == "/switch":
             self._handle_switch(params)
         elif path == "/restart":
-            ok = self.server.bridge.restart()
+            ok = self._bridge().restart()
             self._json_response({"success": ok})
         elif path == "/overlay/enable":
-            self.server.bridge.set_overlay(True)
+            self._bridge().set_overlay(True)
             self._json_response({"success": True, "message": "Overlay enabled"})
         elif path == "/overlay/disable":
-            self.server.bridge.set_overlay(False)
+            self._bridge().set_overlay(False)
             self._json_response({"success": True, "message": "Overlay disabled"})
         else:
             self._json_response({"error": "not found"}, status=404)
@@ -55,7 +59,7 @@ class BridgeHTTPHandler(http.server.BaseHTTPRequestHandler):
         if not topic:
             self._json_response({"success": False, "message": "missing topic param"}, 400)
             return
-        ok = self.server.bridge.switch_topic(topic)
+        ok = self._bridge().switch_topic(topic)
         self._json_response(
             {
                 "success": ok,

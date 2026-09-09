@@ -34,6 +34,7 @@ import logging
 import os
 import threading
 import time
+from typing import Any
 
 from python.tools.video_bridge_server import BridgeHTTPHandler, BridgeHTTPServer, subprocess
 
@@ -109,12 +110,12 @@ class VideoBridge:
         self._rtsp_url = rtsp_url
         self._flip_method = flip_method
         self._rtsp_path = rtsp_path
-        self._pipeline = None
-        self._appsrc = None
-        self._gst = None
-        self._ros_node = None
+        self._pipeline: Any = None
+        self._appsrc: Any = None
+        self._gst: Any = None
+        self._ros_node: Any = None
         self._ros_subscription = None
-        self._ros_executor = None
+        self._ros_executor: Any = None
         self._ros_thread: threading.Thread | None = None
         self._ros_started = False
         self._lock = threading.Lock()

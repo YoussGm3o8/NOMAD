@@ -3,7 +3,7 @@
   "tasks": [
     // ==================== Configuration Profiles ====================
     // These tasks appear in the VS Code status bar via "Run Task".
-    // Switch between real drone and minimal dev with one click.
+    // Switch between real drone and supported ground-station profiles.
     {
       "label": "Profile: Load real drone (Jetson + ArduPilot)",
       "type": "shell",
@@ -16,19 +16,6 @@
       },
       "problemMatcher": [],
       "detail": "Production Jetson Orin Nano + ArduPilot. Perception services remain disabled."
-    },
-    {
-      "label": "Profile: Load minimal dev (Edge Core only)",
-      "type": "shell",
-      "command": "pixi run profile-load dev",
-      "group": "none",
-      "presentation": {
-        "panel": "shared",
-        "clear": true,
-        "showReuseMessage": false
-      },
-      "problemMatcher": [],
-      "detail": "Minimal: Edge Core in sim mode, no vision, no containers. Good for API dev."
     },
     {
       "label": "Profile: Show active",
@@ -82,22 +69,9 @@
       "problemMatcher": [],
       "detail": "Snapshot the current config/nomad.env into config/profiles/<name>.env"
     },
-    // ==================== Edge Core (Python) ====================
+    // ==================== Python tools ====================
     {
-      "label": "Edge Core: Dev server (sim)",
-      "type": "shell",
-      "command": "pixi run dev",
-      "group": { "kind": "build", "isDefault": false },
-      "presentation": {
-        "panel": "dedicated",
-        "showReuseMessage": false,
-        "clear": true
-      },
-      "problemMatcher": [],
-      "detail": "Run Edge Core in hardware-free sim mode on http://localhost:8000"
-    },
-    {
-      "label": "Edge Core: Run tests",
+      "label": "Python: Run tests",
       "type": "shell",
       "command": "pixi run test",
       "group": { "kind": "test", "isDefault": true },
@@ -106,7 +80,7 @@
       "detail": "Run pytest"
     },
     {
-      "label": "Edge Core: Lint (ruff check)",
+      "label": "Python: Lint (ruff check)",
       "type": "shell",
       "command": "pixi run lint",
       "group": { "kind": "build", "isDefault": true },
@@ -115,7 +89,7 @@
       "detail": "Run ruff check on the entire codebase"
     },
     {
-      "label": "Edge Core: Format (ruff format)",
+      "label": "Python: Format (ruff format)",
       "type": "shell",
       "command": "pixi run fmt",
       "group": "build",
@@ -124,7 +98,7 @@
       "detail": "Auto-format all Python files with ruff"
     },
     {
-      "label": "Edge Core: Type check (mypy)",
+      "label": "Python: Type check (mypy)",
       "type": "shell",
       "command": "pixi run typecheck",
       "group": "build",
@@ -264,13 +238,13 @@
     // These call the pixi `dev-*` tasks (see pixi.toml) so the compose flags are
     // defined in one place.
     {
-      "label": "Docker: Build dev image",
+      "label": "Core: Build",
       "type": "shell",
       "command": "pixi run dev-build",
       "group": "build",
       "presentation": { "panel": "dedicated", "clear": true },
       "problemMatcher": [],
-      "detail": "Build the x86 dev Docker image (docker/Dockerfile.dev)"
+      "detail": "Build the C++ core"
     },
     {
       "label": "Docker: Build + start dev stack (SITL)",
@@ -279,7 +253,7 @@
       "group": "build",
       "presentation": { "panel": "dedicated", "clear": true, "showReuseMessage": false },
       "problemMatcher": [],
-      "detail": "Build and start Edge Core + ArduPilot SITL (detached)"
+      "detail": "Build and start the ArduPilot SITL stack (detached)"
     },
     {
       "label": "Docker: Stop dev stack",

@@ -18,7 +18,7 @@ Monitoring preview; it does not approve flight, hardware changes, or deployment.
 Each subject has one canonical owner above. Component READMEs explain local
 interfaces. [MAVSDK adoption](docs/mavsdk-adoption.md) is a subordinate transport
 decision record, not another product roadmap. Historical CHANGELOG entries are
-history, not evidence that this uncommitted tree is ready.
+history, not current release evidence.
 
 ## Recommended system
 
@@ -87,10 +87,10 @@ promised dates. Team owners and capacity remain D10.
 
 ## Working discipline
 
-This planning change edits documentation only. Existing staged/unstaged migration
-and profile work is preserved; code defects are recorded for focused follow-up.
-Do not reset, stash, stage, commit, push, deploy, or remove further code as part
-of accepting this plan.
+The planning/migration baseline is recorded in commit `d31b0aa`. Focused
+implementation follows the single active item in TODO; build/task repair is
+underway with runtime limitations recorded in migration. Preserve unrelated work
+and follow AGENTS for publication and deployment authorization.
 
 Gate closure requires a recorded artifact/configuration and independent observed
 outcome. A source file, a configured CI job, a mock response, or an old pass count

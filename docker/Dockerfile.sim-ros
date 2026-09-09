@@ -8,8 +8,8 @@
 # (tests/ros/test_nomad_ros_integration.py).
 #
 # Relationship to the other images:
-#   - Complements Dockerfile.dev (bare Edge Core, no ROS2) by adding a
-#     full ROS2 Humble runtime for adapter integration testing.
+#   - Provides the full ROS2 Humble runtime needed for adapter integration
+#     testing.
 #   - Mirrors Dockerfile.jetson minus the GPU/colcon layers:
 #     same COPY layout, same PYTHONPATH convention, same entrypoint.
 #   - Does NOT build on aarch64/Jetson — use Dockerfile.jetson for the device.
@@ -71,10 +71,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ==============================================================
 # Python deps. numpy<2 keeps compatibility with the prebuilt ROS message
 # packages (mirrors Dockerfile.jetson). pytest runs the tests/ros/ suite inside
-# the image. pydantic is the only third-party import in edge_core/__init__.py's
-# import chain (services.models) — required for the edge_core video bridge to
-# import (the Isaac ROS base provides it on the Jetson; the lean ROS base here
-# does not, so install it explicitly).
+# the image. pydantic is retained for the Python tooling environment; the video
+# bridge itself lives under python/tools and is optional at runtime.
 # ==============================================================
 RUN pip3 install --no-cache-dir \
     pymavlink \
@@ -91,8 +89,8 @@ RUN pip3 install --no-cache-dir \
 # at run time so the image stays small and the test suite is always fresh).
 # ==============================================================
 COPY pyproject.toml README.md /opt/nomad/
-COPY edge_core/ /opt/nomad/edge_core/
 COPY infra/ /opt/nomad/infra/
+COPY python/ /opt/nomad/python/
 COPY tools/ /opt/nomad/tools/
 
 # ==============================================================

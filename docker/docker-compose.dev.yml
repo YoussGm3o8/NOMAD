@@ -1,61 +1,30 @@
 # NOMAD hardware-free dev/sim stack.
 #
-#   docker compose -f docker/docker-compose.dev.yml up --build
-#   # Edge Core API:  http://localhost:8000/docs
+#   docker compose -f docker/docker-compose.dev.yml --profile sitl up --build
 #
 # Optional ArduPilot SITL (realistic MAVLink without a flight controller):
 #   docker compose -f docker/docker-compose.dev.yml --profile sitl up --build
 #
 # Optional ROS2 simulation (Tier 1 CPU — no GPU or Jetson required):
-#   docker compose -f docker/docker-compose.dev.yml --profile ros up --build
-#   # Runs the real C++ nomad_vehicle_node against SITL. Perception simulation
-#   # is a separate opt-in profile.
+#   pixi run sim-ros-up  # also enables the ROS MAVLink output
+#   # Runs the real C++ nomad_vehicle_node against SITL. No sensor provider is configured.
 #
 # Optional Gazebo SITL simulation (Tier 3 — visible GUI, no GPU required):
 #   docker compose -f docker/docker-compose.dev.yml --profile gazebo up --build
-#   # Open http://localhost:6080/vnc.html to view Gazebo.
+#   # Scaffolding only: no active Gazebo launch or sensor provider is configured.
 #
 # Optional GPU/Isaac ROS simulation (Tier 2 — requires NVIDIA GPU + WSL2 +
 #   nvidia-container-toolkit + isaac_ros_dev-x86_64 base image built locally):
 #   docker compose -f docker/docker-compose.dev.yml --profile ros-gpu up --build
 #
-# This is the contributor's default "run it" path and what CI builds.
+# Live image builds and simulator qualification are separate from Compose validation.
 name: nomad-dev
 
 services:
-  edge_core:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.dev
-    image: nomad-edge-dev:latest
-    ports:
-      - "8000:8000"
-    environment:
-      NOMAD_SIM_MODE: "true"
-      # Let the Mission Planner plugin reach the API over the LAN without a key.
-      # Keep this false anywhere other than local development.
-      NOMAD_ALLOW_INSECURE_REMOTE: "true"
-      # DEV-ONLY credentials, committed so the dev stack + GCS plugin work out of
-      # the box. NEVER use these on a real drone — production sets its own
-      # NOMAD_API_KEY / NOMAD_INTERNAL_TOKEN locally (untracked).
-      NOMAD_API_KEY: "nomad-dev-key"
-      NOMAD_INTERNAL_TOKEN: "nomad-dev-internal-token-0123456789ab"
-      NOMAD_SIM_PERCEPTION_RUNTIME: "${NOMAD_SIM_PERCEPTION_RUNTIME:-none}"
-      NOMAD_RTSP_URL: "${NOMAD_RTSP_URL:-rtsp://localhost:8554/stream}"
-      VIDEO_RELAY_HTTP_HOST: "${VIDEO_RELAY_HTTP_HOST:-localhost}"
-      NOMAD_VIDEO_EXTERNAL_BRIDGE: "${NOMAD_VIDEO_EXTERNAL_BRIDGE:-0}"
-      # Listen for the SITL MAVLink stream (see the sitl service below). With no
-      # SITL running this simply waits with no telemetry — harmless.
-      NOMAD_MAVLINK_ENDPOINT: "udpin:0.0.0.0:14550"
-    restart: unless-stopped
-    # Mount your own runtime config if you want to override sim defaults:
-    # volumes:
-    #   - ../config/nomad.env:/app/config/nomad.env:ro
-
   # Optional: ArduPilot SITL (Copter-4.7.1 stable).
   # Exposes MAVLink on TCP :5760 (connect Mission Planner, mavproxy, etc.).
-  # Edge Core receives the stream on its internal UDP port. The C++ smoke test
-  # receives a second copy on the host UDP port configured below.
+  # The C++ smoke tests receive a host UDP copy. The ROS adapter destination is
+  # opt-in so the SITL-only profile does not depend on a missing ROS container.
   sitl:
     # ArduPilot Copter 4.7.1, built from source once with:
     #   docker build -t nomad-sitl:copter-4.7.1 \
@@ -86,23 +55,23 @@ services:
       LON: "-71.1476"
       ALT: "14"
       DIR: "270"
-      # Stream MAVLink to the Edge Core container so telemetry actually flows.
-      # The second --out (injected via the image's unquoted entrypoint var)
-      # feeds the NOMAD dual-link LTE leg on the host: 14560 is the plugin's
-      # default LTE MAVLink port (leave LTE remote host empty). The router
+      # The first --out feeds the NOMAD dual-link LTE leg on the host: 14560 is
+      # the plugin's default LTE MAVLink port (leave LTE remote host empty). The
+      # router
       # then serves the merged stream to Mission Planner on UDP 14600
       # (RouterLocalPort) — no TCP bridge involved.
       # 14570 feeds the C++ core smoke tests; the always-on 14572 copy feeds
       # the link-recovery scenario's UDP relay (it binds 14572 as its
       # upstream, so the stack must forward there regardless of
       # NOMAD_CORE_SITL_PORT).
-      SITL_UDP_OUTPUT_ADDRESS: "udp:edge_core:14550 --out udp:nomad_vehicle_node:14552 --out udp:host.docker.internal:14560 --out udp:host.docker.internal:${NOMAD_CORE_SITL_PORT:-14570} --out udp:host.docker.internal:14572"
+      SITL_UDP_OUTPUT_ADDRESS: >-
+        udp:host.docker.internal:14560 --out
+        udp:host.docker.internal:14570 --out
+        udp:host.docker.internal:14572 ${NOMAD_SITL_ROS_OUTPUT:-}
     ports:
       - "5760:5760"   # TCP MAVLink (single-client; held by in-container MAVProxy)
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      - edge_core
     restart: unless-stopped
 
   # Relay SITL's extra serial port to the host for Mission Planner. Port 5760
@@ -125,8 +94,7 @@ services:
   # Runs the REAL C++ nomad_vehicle_node adapter against the sitl service and
   # an optional synthetic scene publisher so ROS2 telemetry can be exercised
   # without a Jetson, camera, or GPU. The node owns the MAVLink UDP link
-  # (udpin:0.0.0.0:14552) and the core velocity path; edge_core is not in the
-  # loop (the retired Python ROS-HTTP bridge was the last HTTP hop).
+  # (udpin:0.0.0.0:14552) and the core velocity path.
   # ---------------------------------------------------------------------------
 
   # C++ ROS vehicle adapter node (replaces the retired ROS-HTTP bridge). It
@@ -149,8 +117,8 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
-  # Video pipeline (profile: ros-perception). The optional scene publisher
-  # provides a synthetic RGB image topic for this legacy video path.
+  # Video transport scaffolding. No scene publisher currently provides images;
+  # starting MediaMTX alone does not establish perception availability.
   # ---------------------------------------------------------------------------
 
   # MediaMTX RTSP server — serves the video stream to Mission Planner / VLC.
@@ -164,7 +132,7 @@ services:
     restart: unless-stopped
 
   # Gazebo video bridge: consumes the optional simulation Image topic and pushes
-  # RTSP to MediaMTX. Edge Core reaches its HTTP API over compose DNS.
+  # RTSP to MediaMTX.
   video_bridge_gazebo:
     image: nomad-sim-ros:latest
     profiles: ["gazebo"]
@@ -172,7 +140,7 @@ services:
       - mediamtx
       - gazebo
     command: >
-      python3 edge_core/services/ros/simple_video_bridge.py
+      python3 -m python.tools.simple_video_bridge
       --source-topic /nomad/camera/image
       --width ${NOMAD_GAZEBO_CAMERA_WIDTH:-640}
       --height ${NOMAD_GAZEBO_CAMERA_HEIGHT:-360}
@@ -253,10 +221,9 @@ services:
     depends_on:
       - nomad_vehicle_node
     environment:
-      # Feed MAVLink telemetry to Edge Core and to the C++ adapter node's
-      # velocity-control socket. The ArduPilot launch passes this through to
-      # MAVProxy as --out arguments.
-      NOMAD_GAZEBO_MAVLINK_OUT: "edge_core:14550 --out nomad_vehicle_node:14552 --out host.docker.internal:14560"
+      # Feed MAVLink telemetry to the C++ adapter node's velocity-control socket
+      # and to the host GCS. The ArduPilot launch passes this through to MAVProxy.
+      NOMAD_GAZEBO_MAVLINK_OUT: "nomad_vehicle_node:14552 --out host.docker.internal:14560"
       NOMAD_GAZEBO_HEADLESS: "${NOMAD_GAZEBO_HEADLESS:-0}"
       NOMAD_GAZEBO_CAMERA_WIDTH: "${NOMAD_GAZEBO_CAMERA_WIDTH:-640}"
       NOMAD_GAZEBO_CAMERA_HEIGHT: "${NOMAD_GAZEBO_CAMERA_HEIGHT:-360}"

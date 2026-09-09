@@ -35,7 +35,7 @@ for missing workflows.
 | ID | Finding | Required resolution |
 |---|---|---|
 | C01 | PLAN/TODO previously repeated obsolete phases and incompatible pass counts | This document owns evidence; PRD decisions and TODO tasks link here |
-| C02 | pixi dev/test-api/dev-build, Compose edge_core and test.yml dev-image reference deleted files | Repair tasks/CI/Compose in G1; do not advertise dev/dev-up/sitl as verified quickstarts yet |
+| C02 | Deleted build/task/image references repaired in the current G1 slice; package now includes retained Python tools | Local checks recorded below; live image/SITL/ROS qualification remains open |
 | C03 | Older docs said Edge Core still runs and only two deployment profiles exist | Three profiles are product scope; qualify actual entrypoints in G3 |
 | C04 | CLI key check accepts any nonempty value; CLI logs admission before outcome; library has no inherited auth/audit | OS trust boundary now; authenticated client protocol and full lifecycle audit at G2 |
 | C05 | Separate CLI invocations, ROS Vehicle and direct plugin writers can conflict | One integrated command owner, explicit manual handover and per-session cancellation |
@@ -102,6 +102,35 @@ builds and selected simulation startup with no deleted-path dependencies.
 Exit: test-core, test-python, lint, format-check, complexity-check, docs-build,
 plugin compile/helper checks and supported ROS build/tests. Check command paths
 against actual files; current runtime repairs require their own focused change.
+
+#### C02 repair evidence - 2026-09-09
+
+Baseline commit: `d31b0aa`; repair branch: `codex/repair-runtime-wiring`.
+The repair removes deleted Edge Core services, image jobs, console entrypoint and
+missing API/gimbal test tasks. `dev`/`dev-build` build the core; `sitl` builds it
+before simulator startup. Compose forwards host traffic independently of ROS,
+with the ROS destination enabled by `sim-ros-up`. The SITL CI default no longer
+duplicates the private relay output. ROS image/module paths package the retained
+video tool. Incomplete perception/Gazebo startup tasks exit unavailable before
+starting containers; optional images and media/compute source remain.
+
+Local evidence: CTest 9/9; `pixi run test` 258 passed, 3 environment skips;
+retained Python coverage 96.65% against the unchanged 85% floor. Seven runtime
+wiring cases cover packaging metadata/imports, workflow task references, Compose
+paths and absent-provider failure. A setuptools wheel was built, extracted
+outside the checkout, and imported under isolated Python; video `--help` passed.
+Daemon-free Compose resolution passed for SITL, ROS and Gazebo scaffolding, with
+expected unique SITL/ROS output destinations. The unavailable perception task
+returned exit 1 with its stated reason. Lint, format, type-check, complexity,
+strict docs and all changed-file pre-commit hooks passed. Whole-tree pre-commit
+remains blocked
+by the pre-existing missing SPDX header in scripts/hardware/servo_test.c; that
+unrelated hardware file is unchanged.
+
+Docker daemon unavailable: no image build, live SITL, ROS integration, sensor
+stream or GPU/hardware qualification was run for this repair. C10-C12 remain
+open and G1 is not closed. Python dependency pruning is deferred; the distribution
+name `nomad-edge` remains for compatibility although its deleted CLI is removed.
 
 ### G-M — MAVSDK adoption (transport lead; early prerequisite after G1)
 

@@ -11,7 +11,7 @@ authorize hardware use or prove readiness. [Migration](migration.md) owns gates;
 | Task 1 / groundstation_gpu | Proposed lightweight VTOL; Walksnail FPV camera; Pi Zero for backup LTE and possibly video; Here4 GNSS | GPU CV, video capture/display, C++ core, Mission Planner and server adapter | User direction; video capture, RF bandwidth, QuadPlane support and endurance unqualified |
 | Task 2 / onboard_companion candidate | Under-15-kg quad; optional Jetson if useful autonomy emerges; tracker/tagging/sampling payload | Mission Planner, operator approvals, competition server exchange | Jetson placement and payload mechanism TBD |
 | groundstation_minimal | ArduPilot, navigation and selected command/telemetry link | C++ core and clients; lightweight server exchange when implemented | Product requirement; no ROS/perception dependency |
-| Development | Isolated Copter and future QuadPlane SITL | Core, fake/mock services and passive observers | Existing unit suites pass; startup wiring needs G1 repair |
+| Development | Isolated Copter and future QuadPlane SITL | Core, fake/mock services and passive observers | Local build/config checks pass; live startup and profile qualification remain open |
 
 "15 kg class" does not relax the preview requirement of below 15 kg including
 payload. Weigh every battery/payload/compute configuration and budget margin.
@@ -100,9 +100,10 @@ velocity command.
 ## Simulation and test operations
 
 Read [development](development.md) before running tasks. Current known-good local
-checks are test-core and test-python. The dev/dev-build/test-api paths and
-Compose/CI Edge Core references are stale; G1 must repair startup before the
-dev-up/sitl umbrella commands are accepted as current quickstarts.
+checks include core/Python tests, retained-package checks and daemon-free Compose
+resolution. `dev` and `dev-build` build the C++ core; the deleted API task is no
+longer exposed. Live image, SITL and ROS runs still require G1 qualification
+before `dev-up` or `sitl` can be treated as verified quickstarts.
 
 SITL runners already exist for status, command-flow, mission, watchdog, fence,
 payload, link loss/recovery, GCS-heartbeat and zero-delivery. Run them serially

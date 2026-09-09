@@ -9,14 +9,15 @@ close its integration or release gate.
 
 ## Current work
 
-- [~] G0: finalize the planning baseline with CONOPS reconciliation and remaining
-  decision owners. Documentation consolidation and user hardware/autonomy/MAVSDK
-  direction are recorded; full CONOPS and remaining decisions are pending.
+- [~] G1 / C02: repair build, packaging, CI and simulation task wiring. Local
+  checks pass; live image/SITL/ROS validation remains open. See migration evidence.
 
 ## Ordered implementation backlog
 
-- [ ] G1 / C02, C10–C12: repair deleted Edge Core references in Pixi, Compose and
-  CI; validate retained service/profile/video entrypoints and configuration.
+- [ ] G0: reconcile full CONOPS and assign remaining decision owners. The planning
+  baseline and user hardware/autonomy/MAVSDK direction are recorded.
+- [ ] G1 / C10–C12: validate retained service/profile/video entrypoints and
+  configuration; remove stale systemd/service owners and profile fields.
 - [ ] G-M Phase A: hosted Linux/Windows/ROS builds, live MAVSDK connect/status,
   transitive notices and approved dependency footprint.
 - [ ] G-M Phases B–D: MAVSDK command, telemetry, velocity/watchdog, GCS heartbeat,

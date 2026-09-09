@@ -22,9 +22,17 @@ on:
       - "CMakeLists.txt"
       - ".gitmodules"
       - "third_party/MAVSDK/**"
+      - "third_party/ardupilot-mavlink/**"
       - "src/**"
       - "include/**"
       - "ros2/**"
+      - "python/**"
+      - "infra/**"
+      - "tools/**"
+      - "scripts/dev/generate_mavlink.py"
+      - "examples/mavsdk_phase_a_smoke.cpp"
+      - "pyproject.toml"
+      - "README.md"
       - "docker/Dockerfile.sim-ros"
       - "docker/ros_entrypoint.sh"
       - "tests/ros/**"
@@ -34,9 +42,17 @@ on:
       - "CMakeLists.txt"
       - ".gitmodules"
       - "third_party/MAVSDK/**"
+      - "third_party/ardupilot-mavlink/**"
       - "src/**"
       - "include/**"
       - "ros2/**"
+      - "python/**"
+      - "infra/**"
+      - "tools/**"
+      - "scripts/dev/generate_mavlink.py"
+      - "examples/mavsdk_phase_a_smoke.cpp"
+      - "pyproject.toml"
+      - "README.md"
       - "docker/Dockerfile.sim-ros"
       - "docker/ros_entrypoint.sh"
       - "tests/ros/**"
@@ -68,8 +84,7 @@ jobs:
       # Build the Tier-1 sim-ros image (compiles nomad_core + nomad_ros).
       # The Phase A flag also compiles the optional MAVSDK smoke target in the
       # same ROS image, covering the third supported build environment.
-      # Cache is scoped to "sim-ros" so it does not evict the dev-image or
-      # SITL caches.
+      # Cache is scoped to "sim-ros" so it does not evict the SITL cache.
       - name: Build nomad-sim-ros image
         uses: docker/build-push-action@v7
         with:
