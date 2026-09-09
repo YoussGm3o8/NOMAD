@@ -5,7 +5,7 @@
 # Install NOMAD systemd units.
 #
 # Reads NOMAD_AUTOSTART_* flags from config/nomad.env. Only enables the units
-# whose flag is true. nvblox is intentionally NOT enabled by default.
+# whose flag is true. Perception services are intentionally absent from this baseline.
 #
 # Run on the Jetson with sudo:
 #   sudo bash infra/systemd/install.sh
@@ -55,10 +55,8 @@ UNITS=(
     nomad-mavlink-router.service
     nomad-mediamtx.service
     nomad-isaac-ros-container.service
-    nomad-zed-wrapper.service
     nomad-ros-vehicle.service
     nomad-video-bridge.service
-    nomad-nvblox.service
 )
 
 # -----------------------------------------------------------------------------
@@ -128,7 +126,6 @@ declare -A FLAG=(
     [nomad-mavlink-router.service]="$NOMAD_AUTOSTART_MAVLINK_ROUTER"
     [nomad-mediamtx.service]="$NOMAD_AUTOSTART_MEDIAMTX"
     [nomad-isaac-ros-container.service]="$NOMAD_AUTOSTART_ISAAC_ROS_CONTAINER"
-    [nomad-zed-wrapper.service]="$NOMAD_AUTOSTART_ZED_WRAPPER"
     [nomad-ros-vehicle.service]="$NOMAD_AUTOSTART_ROS_VEHICLE"
     [nomad-video-bridge.service]="$NOMAD_AUTOSTART_VIDEO_BRIDGE"
 )
@@ -143,9 +140,6 @@ for u in "${!FLAG[@]}"; do
     fi
 done
 
-echo "[install] disable nomad-nvblox.service (manual-only; start from Mission Planner Service Control)"
-systemctl disable nomad-nvblox.service 2>/dev/null || true
-
 # Remove the legacy single-unit setup if it lingers.
 if systemctl list-unit-files nomad.service >/dev/null 2>&1; then
     echo "[install] disabling legacy nomad.service (replaced by per-service units)"
@@ -159,8 +153,4 @@ cat <<EOF
     nomad start all          # start the autostart set
     nomad status             # check each service
     journalctl -u nomad-edge-core -f
-
-To run nvblox on this host:
-    Start it from Mission Planner Service Control, or run:
-    sudo systemctl start nomad-nvblox.service
 EOF

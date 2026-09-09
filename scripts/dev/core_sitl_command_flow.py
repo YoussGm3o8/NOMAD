@@ -43,6 +43,19 @@ def run_cli(binary: Path, port: str, *arguments: str, attempts: int = 5) -> str:
     )
 
 
+def run_cli_rejection(binary: Path, port: str, expected_message: str, *arguments: str) -> str:
+    """Run a command that must fail and require its authoritative diagnostic."""
+    command = [str(binary), *arguments, "--endpoint", f"udpin:0.0.0.0:{port}"]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    output = "\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)
+    print(f"$ {' '.join(command)}\n{output}", flush=True)
+    if result.returncode == 0:
+        raise ScenarioError(f"expected command to fail: {' '.join(arguments)}")
+    if expected_message not in output:
+        raise ScenarioError(f"expected rejection {expected_message!r}; got: {output!r}")
+    return output
+
+
 def parse_status(output: str) -> dict[str, str]:
     fields: dict[str, str] = {}
     for line in output.splitlines():

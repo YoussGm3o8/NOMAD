@@ -1,8 +1,9 @@
 # NOMAD Mission Planner Plugin
 
 A drop-in plugin for [Mission Planner](https://ardupilot.org/planner/) that adds
-the NOMAD ground-control integration, linking Mission Planner to the NOMAD Edge
-Core companion-computer service.
+the NOMAD ground-control integration. The working source uses a local C++ core
+client and direct media playback; it does not require the removed Edge Core API.
+An existing packaged DLL may predate that migration; verify its build identity.
 
 ## Install
 
@@ -28,5 +29,7 @@ Planner.
 - Windows with Mission Planner installed (built against **1.3.83**).
 - .NET Framework 4.8 (ships with current Mission Planner / Windows).
 
-The plugin references only Mission Planner's own assemblies and the .NET
-Framework, so no extra files are needed beyond `NOMADPlugin.dll`.
+Core-backed operations also need a compatible configured NOMAD C++ executable.
+Video needs its selected playback/runtime dependencies. Qualify the complete
+package at G8; a DLL-only install does not establish task readiness. Installation
+changes the local Mission Planner deployment and requires operator authorization.

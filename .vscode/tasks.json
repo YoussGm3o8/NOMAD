@@ -5,7 +5,7 @@
     // These tasks appear in the VS Code status bar via "Run Task".
     // Switch between real drone and minimal dev with one click.
     {
-      "label": "Profile: Load real drone (Jetson + ZED2i)",
+      "label": "Profile: Load real drone (Jetson + ArduPilot)",
       "type": "shell",
       "command": "pixi run profile-load drone",
       "group": "none",
@@ -15,7 +15,7 @@
         "showReuseMessage": false
       },
       "problemMatcher": [],
-      "detail": "Production Jetson Orin Nano + ZED2i + CubePilot. All hardware services enabled."
+      "detail": "Production Jetson Orin Nano + ArduPilot. Perception services remain disabled."
     },
     {
       "label": "Profile: Load minimal dev (Edge Core only)",
@@ -149,7 +149,7 @@
       "group": "build",
       "presentation": { "panel": "dedicated", "clear": true, "showReuseMessage": false },
       "problemMatcher": [],
-      "detail": "Start Edge Core, ROS bridge, and synthetic ZED publisher"
+      "detail": "Start the C++ ROS adapter and SITL stack"
     },
     {
       "label": "Sim ROS: Stop stack",
@@ -194,7 +194,7 @@
       "group": "build",
       "presentation": { "panel": "dedicated", "clear": true, "showReuseMessage": false },
       "problemMatcher": [],
-      "detail": "Start Edge Core, ROS bridge, and Gazebo GUI at http://localhost:6080/vnc.html"
+      "detail": "Start the optional Gazebo SITL GUI at http://localhost:6080/vnc.html"
     },
     {
       "label": "Sim Gazebo: Open GUI",

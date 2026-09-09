@@ -1,7 +1,7 @@
 # NOMAD developer / simulation environment.
 #
 # Pixi (https://pixi.sh) provides a reproducible, cross-platform dev environment
-# that does NOT require the Jetson, CUDA, ZED SDK, or ROS2 — those are device-only
+# that does NOT require the Jetson, CUDA, or ROS2 — those are device-only
 # and are installed separately on hardware. The dev Docker image lives in
 # docker/Dockerfile.dev (hardware-free Edge Core + ArduPilot SITL stack).
 #
@@ -51,10 +51,12 @@ build-core = "cmake -S . -B build/core -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_C
 generate-mavlink = "python scripts/dev/generate_mavlink.py"
 test-core = "cmake -S . -B build/core -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && cmake --build build/core && ctest --test-dir build/core -C Debug --output-on-failure"
 sitl = "pixi run dev-up && pixi run sitl-scenario"
-# C++ Phase 2 smoke test: build the core and read typed telemetry from the
-# host-side UDP copy emitted by the ArduPilot SITL container.
+# Optional MAVSDK Phase A build. The default `build-core` remains the legacy
+# codec until the MAVSDK parity and deletion gates close.
+build-core-mavsdk = "cmake -S . -B build/mavsdk-phase-a -DCMAKE_BUILD_TYPE=Release -DNOMAD_ENABLE_MAVSDK=ON -DBUILD_TESTING=OFF && cmake --build build/mavsdk-phase-a --config Release --target nomad_mavsdk_phase_a_smoke"
+mavsdk-phase-a-smoke = "pixi run build-core-mavsdk && python scripts/dev/mavsdk_phase_a_smoke.py"
 
-# Transitional Python path.
+# Phase A's SITL task is opt-in and never changes the default core path.
 # Edge Core
 dev = "python -m edge_core.main --sim --host 0.0.0.0 --port 8000"
 # Coverage floor is a ratchet set just below the current level so coverage can
@@ -91,12 +93,12 @@ sitl-fence = "python scripts/dev/core_sitl_containment.py"
 # the mount points where commanded. Reboots the vehicle to apply MNT1_TYPE, so it
 # runs LAST in the nightly sequence. Only needs the operator link.
 sitl-gimbal = """docker run --rm --network nomad-dev_default -v $PWD:/work -w /work -e PYTHONPATH=/work -e NOMAD_SITL_OPERATOR=tcp:nomad-dev-sitl-1:5762 --entrypoint python nomad-edge-dev:latest tests/sitl/gimbal_mount_control.py"""
-# ROS2 simulation stack (Tier 1 — CPU, no GPU/ZED/Jetson required).
+# ROS2 simulation stack (Tier 1 — CPU, no GPU/Jetson required).
 #   pixi run sim-ros-build   # build the nomad-sim-ros:latest image (run once)
-#   pixi run sim-ros-up      # start SITL + nomad_vehicle_node + zed_sim (detached)
+#   pixi run sim-ros-up      # start SITL + nomad_vehicle_node only (detached)
 #   pixi run sim-ros-down    # stop and remove the ros-profile containers
 #   pixi run sim-ros-logs    # tail logs from all ros-profile services
-#   pixi run test-ros-integration  # end-to-end bridge integration test (needs sim-ros-build first)
+#   pixi run test-ros-integration  # end-to-end adapter test (needs sim-ros-build first)
 sim-ros-build = "docker build -f docker/Dockerfile.sim-ros -t nomad-sim-ros:latest ."
 sim-ros-down = "docker compose -p nomad-ros -f docker/docker-compose.dev.yml --profile ros down"
 sim-ros-logs = "docker compose -p nomad-ros -f docker/docker-compose.dev.yml --profile ros logs -f"
@@ -104,17 +106,16 @@ sim-ros-logs = "docker compose -p nomad-ros -f docker/docker-compose.dev.yml --p
 # the image; nomad_core + nomad_ros compiled into a colcon workspace).
 # Volume-mounts tests/ so the test suite is always current code. Exercises the
 # REAL nomad_vehicle_node (C++) against an in-process MAVLink responder with
-# VIO + cmd_vel publishers. Requires: pixi run sim-ros-build
+# generic test-VIO + cmd_vel publishers. Requires: pixi run sim-ros-build
 test-ros-integration = """
 docker run --rm -v $PWD/tests:/opt/nomad/tests nomad-sim-ros:latest python3 -m pytest tests/ros/ -v
 """
-# ROS2 simulation stack (Tier 3 — ArduPilot SITL + visible Gazebo ZED-2i).
-#   Visible by default: gz sim runs with its GUI on a virtual X display exposed
-#   through noVNC at http://localhost:6080/vnc.html. No GPU is required; llvmpipe
-#   software GL is used unless you attach an NVIDIA GPU. A ZED-2i-tuned Gazebo
-#   camera publishes ZED-style ROS2 topics so the REAL C++ adapter node is driven
-#   by 3D physics simulation instead of synthetic math. Gazebo odometry drives
-#   /zed/zed_node/odom; Edge Core's /api/vio/status reflects that odometry.
+# Optional flight simulation (Tier 3 — ArduPilot SITL + visible Gazebo).
+# This is deliberately separate from the default ROS adapter path and does not
+# constitute VIO or obstacle-avoidance evidence.
+# Visible by default: gz sim runs with its GUI on a virtual X display exposed
+# through noVNC at http://localhost:6080/vnc.html. No GPU is required; llvmpipe
+# software GL is used unless you attach an NVIDIA GPU.
 #
 #   pixi run sim-gazebo-build  # build the nomad-sim-gazebo:latest image (run once)
 #   pixi run sim-gazebo-up     # start edge_core + nomad_vehicle_node + visible gazebo
@@ -124,8 +125,8 @@ docker run --rm -v $PWD/tests:/opt/nomad/tests nomad-sim-ros:latest python3 -m p
 #   pixi run sim-gazebo-down   # stop and remove the gazebo-profile containers
 #   pixi run sim-gazebo-logs   # tail logs from all gazebo-profile services
 #
-# Depth: the gz depth camera publishes /zed/zed_node/depth/depth_registered +
-# /zed/zed_node/point_cloud/cloud_registered (ground truth, no GPU required).
+# Depth topics are simulation-only and are not connected to the vehicle adapter
+# unless a future estimator explicitly consumes them.
 sim-gazebo-build = "docker build -f docker/Dockerfile.sim-gazebo -t nomad-sim-gazebo:latest ."
 sim-gazebo-open = "python -m webbrowser http://localhost:6080/vnc.html"
 sim-gazebo-down = "docker compose -p nomad-gazebo -f docker/docker-compose.dev.yml --profile gazebo down"
@@ -137,9 +138,11 @@ sim-gazebo-ps = "docker compose -p nomad-gazebo -f docker/docker-compose.dev.yml
 # what selects the profile; Gazebo/SITL tuning (verbosity, rate, synthetic
 # clock, RTSP URL, default headless) already defaults to these values in compose.
 "sim-ros-up".cmd = "docker compose -p nomad-ros -f docker/docker-compose.dev.yml --profile ros up -d --build"
-"sim-ros-up".env.NOMAD_SIM_PERCEPTION_RUNTIME = "ros_sim"
-"sim-ros-up".env.VIDEO_RELAY_HTTP_HOST = "video_bridge"
-"sim-ros-up".env.NOMAD_VIDEO_EXTERNAL_BRIDGE = "1"
+"sim-ros-perception-up".cmd = "docker compose -p nomad-ros -f docker/docker-compose.dev.yml --profile ros --profile ros-perception up -d --build"
+"sim-ros-perception-up".env.NOMAD_SIM_PERCEPTION_RUNTIME = "ros_sim"
+"sim-ros-perception-up".env.VIDEO_RELAY_HTTP_HOST = "video_bridge"
+"sim-ros-perception-up".env.NOMAD_VIDEO_EXTERNAL_BRIDGE = "1"
+"sim-ros-up".env.NOMAD_SIM_PERCEPTION_RUNTIME = "none"
 
 "sim-gazebo-up".cmd = "docker compose -p nomad-gazebo -f docker/docker-compose.dev.yml --profile gazebo up -d --build"
 "sim-gazebo-up".env.NOMAD_SIM_PERCEPTION_RUNTIME = "gazebo"
@@ -248,7 +251,7 @@ test-plugin-duallink = "powershell -ExecutionPolicy Bypass -File scripts/build/t
 # specific deployment target (real drone, minimal dev).
 #
 # Quick start:
-#   pixi run profile-load drone     # Real Jetson + ZED2i
+#   pixi run profile-load drone     # Real Jetson + core; perception opt-in
 #   pixi run profile-load dev       # Minimal Edge Core only
 #   pixi run profile-show           # Show active profile
 #   pixi run profile-list           # List available profiles
@@ -299,6 +302,12 @@ env = { NOMAD_API_KEY = "nomad-dev-sitl-key" }
 [tasks.core-sitl-link-loss]
 cmd = "pixi run build-core && python scripts/dev/core_sitl_link_loss.py"
 env = { NOMAD_API_KEY = "nomad-dev-sitl-key" }
+
+[tasks.core-sitl-zero-delivery]
+# Observes the CLI's wire setpoints through a tee relay (the relay binds the
+# always-on 14572 copy as its upstream, like the link-recovery scenario).
+cmd = "pixi run build-core && python scripts/dev/core_sitl_zero_delivery.py"
+env = { NOMAD_API_KEY = "nomad-dev-sitl-key", NOMAD_CORE_SITL_PORT = "14572" }
 
 [tasks.core-sitl-gcs-heartbeat]
 # The relay binds the always-on 14572 copy as its upstream (see

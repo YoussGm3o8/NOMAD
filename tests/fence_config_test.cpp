@@ -8,7 +8,7 @@
 #undef NDEBUG
 #endif
 
-#include <cassert>
+#include <limits>
 #include <string>
 #include <stdexcept>
 #include <cstdio>
@@ -77,6 +77,20 @@ void test_polygon_with_too_few_vertices_fails_closed() {
     CHECK(rejects_everything(policy));
 }
 
+void test_local_polygon_with_nonfinite_vertex_fails_closed() {
+    const std::vector<nomad::safety::Point2d> polygon{
+        {-1.0, -1.0},
+        {1.0, -1.0},
+        {std::numeric_limits<double>::quiet_NaN(), 1.0},
+        {-1.0, 1.0},
+    };
+
+    const auto decision = nomad::safety::evaluate_position({polygon, 0.0}, {0.0, 0.0});
+
+    CHECK(!decision.allowed);
+    CHECK(decision.reason == "fence");
+}
+
 void test_empty_polygon_is_treated_as_unconfigured() {
     const auto policy = nomad::safety::load_fence_policy("", "2.0");
 
@@ -93,6 +107,7 @@ int main() {
     test_malformed_margin_fails_closed();
     test_malformed_polygon_fails_closed();
     test_polygon_with_too_few_vertices_fails_closed();
+    test_local_polygon_with_nonfinite_vertex_fails_closed();
     test_empty_polygon_is_treated_as_unconfigured();
     } catch (const std::exception &error) {
         std::fprintf(stderr, "FAILED: %s\n", error.what());

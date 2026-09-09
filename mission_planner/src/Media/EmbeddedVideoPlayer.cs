@@ -5,22 +5,16 @@ extern alias MPDrawing;
 // ============================================================
 // NOMAD Embedded Video Player - GStreamer Implementation
 // ============================================================
-// Uses Mission Planner's built-in GStreamer for RTSP/UDP video streaming.
-// Features: Topic switching via API, fullscreen mode, latency control.
-// Falls back to external VLC/FFplay if GStreamer is unavailable.
+// Uses Mission Planner's built-in GStreamer for direct RTSP/UDP video.
+// Topic and overlay controls belonged to the removed Python REST service and
+// are intentionally not part of this player.
 // ============================================================
 
 using System;
-using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Imaging;
-using System.IO;
-using System.Net.Http;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using MissionPlanner.Utilities;
-using Newtonsoft.Json.Linq;
 using MPBitmap = MPDrawing::System.Drawing.Bitmap;
 
 namespace NOMAD.MissionPlanner
@@ -31,7 +25,6 @@ namespace NOMAD.MissionPlanner
     public partial class EmbeddedVideoPlayer : UserControl
     {
         private string _streamUrl;
-        private string _apiBaseUrl;
         private int _latencyMs = 100;
         private bool _isPlaying;
 
@@ -40,23 +33,12 @@ namespace NOMAD.MissionPlanner
         private Label _lblStatus;
         private TrackBar _trkLatency;
         private Label _lblLatencyValue;
-        private ComboBox _cmbTopic;
         private Form _fullscreenForm;
         private PictureBox _fullscreenBox;
-        private List<(string Name, string Display)> _topics = new List<(string, string)>();
-
-        private CheckBox _chkDetections;
-        private bool _overlayEnabled;
-        private bool _syncingOverlayState;
-
-        private System.Windows.Forms.Timer _depthPollTimer;
-        private double? _centerDepthM;
-        private DateTime _centerDepthStamp;
 
         private readonly SemaphoreSlim _lifecycleLock = new SemaphoreSlim(1, 1);
         private int _streamGeneration;
         private volatile bool _stopping;
-        private bool _suppressTopicChange;
 
         private const int FrameBufferCount = 3;
         private readonly object _frameBufferLock = new object();
@@ -71,68 +53,39 @@ namespace NOMAD.MissionPlanner
         private readonly bool _showControls;
 
         /// <summary>
-        /// Creates an embedded video player. With showControls=false the player
-        /// is chrome-less (no buttons/topic/latency bar) and auto-plays the
-        /// default topic — used for the dashboard mini preview.
+        /// Creates an embedded player for a direct RTSP or UDP stream.
         /// </summary>
-        public EmbeddedVideoPlayer(string title, string streamUrl, bool showControls = true, JetsonConnectionManager jetsonConnectionManager = null)
+        public EmbeddedVideoPlayer(string title, string streamUrl, bool showControls = true)
         {
-            _streamUrl = streamUrl;
+            _streamUrl = streamUrl ?? "";
             _showControls = showControls;
-            ParseApiUrl(streamUrl);
             InitializeUI();
 
             this.HandleCreated += (s, e) => UiAsync.Run(this, async () =>
             {
-                if (_topics.Count == 0)
-                {
-                    await RefreshTopicsAsync(autoSelectRgb: true);
-                }
-
-                await SyncOverlayStatusAsync();
-
                 if (!_showControls && !_isPlaying && !IsDisposed)
                 {
                     StartStream();
                 }
+                await System.Threading.Tasks.Task.CompletedTask;
             }, "EmbeddedVideoHandleCreated");
-        }
-
-
-        private void ParseApiUrl(string rtspUrl)
-        {
-            try
-            {
-                var uri = new Uri(rtspUrl);
-                _apiBaseUrl = $"http://{uri.Host}:8000";
-            }
-            catch
-            {
-                _apiBaseUrl = NOMADConfig.Load().EffectiveBaseUrl;
-            }
         }
 
         private int ExtractUdpPort(string url)
         {
-            var cleaned = url.Replace("udp://", "").Replace("@", "").TrimStart(':');
+            if (string.IsNullOrEmpty(url)) return 5600;
+            string cleaned = url;
+            if (cleaned.StartsWith("udp://", StringComparison.OrdinalIgnoreCase))
+                cleaned = cleaned.Substring(6);
+            cleaned = cleaned.Replace("@", "").TrimStart(':');
             return int.TryParse(cleaned, out int port) ? port : 5600;
         }
+
 
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                if (_overlayEnabled)
-                {
-                    try
-                    {
-                        JetsonApiService.ApiClient.PostAsync(
-                            $"{_apiBaseUrl}/api/video/overlay/disable", null)
-                            .ConfigureAwait(false);
-                    }
-                    catch { }
-                }
-                try { _depthPollTimer?.Stop(); _depthPollTimer?.Dispose(); } catch { }
                 StopStream();
                 _lifecycleLock.Dispose();
                 if (_fullscreenForm != null && !_fullscreenForm.IsDisposed)

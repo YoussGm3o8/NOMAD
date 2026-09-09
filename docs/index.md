@@ -1,19 +1,20 @@
 # NOMAD documentation
 
-NOMAD is migrating to a standalone C++20 vehicle core with independent CLI, ROS 2,
-Python, and Mission Planner clients. The current Python edge service is
-transitional; the target and migration status are explicit in these documents.
+One C++ core, independent clients, optional onboard or ground compute. The working
+tree removes Python Edge Core but has not completed deployment or competition
+qualification.
 
-| Topic | Document |
+| Subject owner | Document |
 |---|---|
-| Product requirements | [Product Requirements](prd.md) |
-| Target architecture | [Architecture](architecture.md) |
-| Build and tests | [Development](development.md) |
-| Agent and engineering guidance | [Agent Guidance](agent-guidance.md) |
-| Runtime and deployment | [Operations](operations.md) |
-| C++ migration | [Migration Plan](migration.md) |
-| Safety case | [Safety Case](safety.md) |
+| Requirements, provenance and user decisions | [PRD](prd.md) |
+| Target ownership and data flow | [Architecture](architecture.md) |
+| Source inventory, contradictions and objective gates | [Migration](migration.md) |
+| Build, tests and contribution workflow | [Development](development.md) |
+| Profiles, runtime procedures and evidence handling | [Operations](operations.md) |
+| Hazards and stable requirement/test mappings | [Safety](safety.md) |
+| Subordinate transport decision and parity gates | [MAVSDK adoption](mavsdk-adoption.md) |
+| Agent practices | [Agent guidance](agent-guidance.md) |
 
-Start with the [Product Requirements](prd.md), then read the
-[Migration Plan](migration.md) before changing system ownership. Component
-README files contain only local details and point back here.
+Root PLAN.md is the delivery summary; TODO.md is the only actionable ledger.
+Component READMEs describe local interfaces. Historical CHANGELOG entries are
+not current qualification evidence. Start with PRD, then architecture and migration.

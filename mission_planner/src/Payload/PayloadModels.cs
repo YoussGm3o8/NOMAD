@@ -16,7 +16,7 @@
 //   Reel    - a strap-reel servo: hold-to-reel with a safety cut-off, plus
 //             three-click-armed full-spool in/out with a configurable duration.
 //   CamTilt - the camera tilt servo: live slider with down/level/up presets,
-//             also driven by the ZED-tilt joystick channel.
+//             also driven by the camera-tilt joystick channel.
 // ============================================================
 
 using System.Collections.Generic;
@@ -98,7 +98,7 @@ namespace NOMAD.MissionPlanner
         /// <summary>Reel only: full-spool run duration in seconds for the armed "In Full" / "Out Full" buttons.</summary>
         public int FullDurationS { get; set; } = 80;
 
-        /// <summary>CamTilt only: physical tilt range in degrees each way from level (pushed to the Jetson for angle conversion).</summary>
+        /// <summary>CamTilt only: physical tilt range in degrees each way from level.</summary>
         public int AngleRangeDeg { get; set; } = 45;
 
         public PayloadControl Clone() => (PayloadControl)MemberwiseClone();
@@ -114,7 +114,7 @@ namespace NOMAD.MissionPlanner
             PwmNeutral = 1500, // stop
         };
 
-        /// <summary>The ZED camera tilt servo with the standard NOMAD calibration (700 down / 1250 level / 1450 up).</summary>
+        /// <summary>The camera tilt servo with the standard NOMAD calibration (700 down / 1250 level / 1450 up).</summary>
         public static PayloadControl NewCamTilt(string name = "Cam Tilt", int channel = 14) => new PayloadControl
         {
             Name = name,

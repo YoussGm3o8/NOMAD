@@ -1,102 +1,48 @@
 # NOMAD
 
-NOMAD is a standalone system for interacting with, monitoring, and controlling
-ArduPilot-based vehicles. The long-term product is a small C++20 core that owns
-vehicle behavior and MAVLink communication while clients use it through simple
-interfaces.
-
-```text
-CLI / Mission Planner / ROS 2 / Python tools
-                    |
-              NOMAD C++ core
-                    |
-              MAVLink transport
-                    |
-                 ArduPilot
-```
-
-ArduPilot remains responsible for stabilization, motor control, sensor fusion,
-EKF, low-level navigation, and failsafes. NOMAD operates at the higher level:
-connect, inspect state, issue a verified command, and report the result.
+NOMAD is a C++20 vehicle-control core with CLI, Mission Planner and ROS 2 clients,
+prepared for the AEAC SUAS 2027 Wildlife Monitoring preview. ArduPilot owns
+stabilization, EKF, navigation execution and failsafes.
 
 ## Current status
 
-The repository is in the C++ migration phase. The existing Python FastAPI edge
-service, ROS HTTP bridge, and Mission Planner plugin are transitional. They remain
-available for current simulation and hardware workflows while the C++ core is
-built, but they are not the target architecture and should not receive new
-frameworks or duplicated vehicle logic.
+The working migration tree contains a tested C++ core, UDP MAVLink implementation,
+basic Copter operations, safety/watchdog/fence/payload primitives and adapters.
+Edge Core source has been removed; deployment/CI leftovers still need repair.
+MAVSDK is an early competition prerequisite but currently only has an optional
+smoke target. QuadPlane, competition telemetry/traffic and task workflows remain
+implementation work.
 
-See [the migration plan](docs/migration.md) for the phase gates and deletion rules.
+Task 1 targets a lightweight VTOL with ground GPU vision. Task 2 targets a quad
+below 15 kg with optional onboard compute. All three product profiles remain:
+onboard_companion, groundstation_gpu and groundstation_minimal. See the canonical
+documents for confirmed directions, provisional requirements and unresolved choices.
 
-## Target API
+## Start here
 
-The intended core API stays deliberately boring:
-
-```cpp
-Vehicle vehicle(connection);
-vehicle.arm();
-vehicle.takeoff(10.0);
-vehicle.goto_location(target);
-vehicle.set_velocity({1.0F, 0.0F, 0.0F, 0.0F});
-vehicle.stop_velocity();
-vehicle.land();
-```
-
-The CLI is a thin client. For example, `nomad arm` parses its arguments, creates a
-connection, calls `Vehicle::arm()`, waits for acknowledgement or a state change,
-prints the result, and exits. It does not contain MAVLink packet logic.
-
-## Repository layout
-
-```text
-NOMAD/
-├── include/nomad/       # C++ public headers
-├── src/                 # C++ core, transport, and CLI
-├── tests/               # Unit, integration, and SITL tests
-├── ros2/                # ROS 2 adapters, outside the core
-├── python/              # CV, ML, simulation, analysis, and utilities
-├── mission_planner/     # Ground-station integration client
-├── docs/                # Product and engineering documents
-├── docker/              # Reproducible development and SITL images
-└── infra/               # Deployment and network support
-```
-
-## Documentation
-
-- [Product requirements](docs/prd.md)
+- [Delivery plan](PLAN.md) and [working ledger](TODO.md)
+- [Requirements and user decisions](docs/prd.md)
 - [Architecture](docs/architecture.md)
-- [Development workflow](docs/development.md)
-- [Operations](docs/operations.md)
-- [Migration plan](docs/migration.md)
-- [Safety case](docs/safety.md)
+- [Migration status and evidence gates](docs/migration.md)
+- [Development](docs/development.md), [operations](docs/operations.md)
+  and [safety case](docs/safety.md)
 
-## Transitional development
-
-Until the C++ MVP is accepted, the existing hardware-free Python environment can
-still be used:
-
-```bash
-pixi run dev
-pixi run test-fast
-pixi run lint
-```
-
-The C++ target workflow will become:
-
-```bash
-pixi run build-core
+~~~sh
 pixi run test-core
-pixi run sitl
-# With the SITL stack running:
-pixi run core-sitl-status
-pixi run core-sitl-command-flow
-pixi run core-sitl-mission
-```
+pixi run test-python
+pixi run docs-build
+~~~
 
-Use [operations](docs/operations.md) for deployment placeholders and [development](docs/development.md)
-for the full verification workflow. Never commit `config/nomad.env` or real
-connection details.
+These checks do not start hardware. Old Edge Core dev commands and Compose/CI
+startup need the G1 repair described in migration; do not use them as a current
+quickstart. Real configuration stays in ignored local storage.
+
+## Layout
+
+C++ headers and implementation live in include/nomad and src; tests in tests.
+ros2 contains adapters, python contains retained tools/perception work,
+mission_planner contains the client, and config/docker/infra contain deployment
+support. Public core headers do not depend on clients, ROS, Python or GPU SDKs.
 
 ## License
 

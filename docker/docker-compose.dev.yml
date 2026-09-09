@@ -6,16 +6,14 @@
 # Optional ArduPilot SITL (realistic MAVLink without a flight controller):
 #   docker compose -f docker/docker-compose.dev.yml --profile sitl up --build
 #
-# Optional ROS2 simulation (Tier 1 CPU — no GPU/ZED/Jetson required):
+# Optional ROS2 simulation (Tier 1 CPU — no GPU or Jetson required):
 #   docker compose -f docker/docker-compose.dev.yml --profile ros up --build
-#   # Runs the real C++ nomad_vehicle_node against SITL + a synthetic ZED
-#   # publisher (zed_sim). pixi run sim-ros-up is the convenience wrapper.
+#   # Runs the real C++ nomad_vehicle_node against SITL. Perception simulation
+#   # is a separate opt-in profile.
 #
-# Optional Gazebo ZED-2i simulation (Tier 3 — visible GUI, no GPU required):
+# Optional Gazebo SITL simulation (Tier 3 — visible GUI, no GPU required):
 #   docker compose -f docker/docker-compose.dev.yml --profile gazebo up --build
-#   # Runs Gazebo Harmonic with noVNC GUI, SITL, and ZED-style topics.
 #   # Open http://localhost:6080/vnc.html to view Gazebo.
-#   # pixi run sim-gazebo-up   # convenience wrapper for the above.
 #
 # Optional GPU/Isaac ROS simulation (Tier 2 — requires NVIDIA GPU + WSL2 +
 #   nvidia-container-toolkit + isaac_ros_dev-x86_64 base image built locally):
@@ -125,8 +123,8 @@ services:
   # ROS2 simulation stack — Tier 1 (CPU, no GPU).  Profile: ros
   #
   # Runs the REAL C++ nomad_vehicle_node adapter against the sitl service and
-  # the synthetic zed_sim_publisher so ROS2 integration can be exercised
-  # without a Jetson, ZED camera, or GPU. The node owns the MAVLink UDP link
+  # an optional synthetic scene publisher so ROS2 telemetry can be exercised
+  # without a Jetson, camera, or GPU. The node owns the MAVLink UDP link
   # (udpin:0.0.0.0:14552) and the core velocity path; edge_core is not in the
   # loop (the retired Python ROS-HTTP bridge was the last HTTP hop).
   # ---------------------------------------------------------------------------
@@ -150,57 +148,22 @@ services:
       -p endpoint:=udpin:0.0.0.0:14552
     restart: unless-stopped
 
-  # Synthetic ZED 2i + nvblox + nav2 topic publisher. Publishes the ZED-style
-  # topics plus the adapter node's /nomad/cmd_vel + VIO health/confidence
-  # topics so the full ROS2 pipeline runs without hardware.
-  zed_sim:
-    image: nomad-sim-ros:latest
-    profiles: ["ros"]
-    depends_on:
-      - nomad_vehicle_node
-    command: >
-      python3 -m tools.sim.zed_sim_publisher --rate 30 --enable-image --node-topics
-    environment:
-      ROS_DOMAIN_ID: "0"
-      ROS_LOCALHOST_ONLY: "0"
-      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
-    restart: unless-stopped
-
   # ---------------------------------------------------------------------------
-  # Video pipeline (profile: ros). zed_sim publishes a synthetic RGB image topic
-  # by default so this service has frames to encode.
+  # Video pipeline (profile: ros-perception). The optional scene publisher
+  # provides a synthetic RGB image topic for this legacy video path.
   # ---------------------------------------------------------------------------
 
   # MediaMTX RTSP server — serves the video stream to Mission Planner / VLC.
   mediamtx:
     image: bluenviron/mediamtx:latest
-    profiles: ["ros", "gazebo"]
+    profiles: ["ros-perception", "gazebo"]
     volumes:
       - ../infra/mediamtx.yml:/mediamtx.yml:ro
     ports:
       - "8554:8554"   # RTSP
     restart: unless-stopped
 
-  # Video bridge: consumes the synthetic ROS Image topic and pushes RTSP to
-  # MediaMTX so the stream appears at rtsp://localhost:8554/stream.
-  video_bridge:
-    image: nomad-sim-ros:latest
-    profiles: ["ros"]
-    depends_on:
-      - mediamtx
-      - zed_sim
-    command: >
-      python3 edge_core/services/ros/simple_video_bridge.py
-      --source-topic /zed/zed_node/rgb/color/rect/image
-      --http-port 9200
-      --rtsp-url rtsp://mediamtx:8554/stream
-    environment:
-      ROS_DOMAIN_ID: "0"
-      ROS_LOCALHOST_ONLY: "0"
-      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
-    restart: unless-stopped
-
-  # Gazebo video bridge: consumes the Gazebo ZED-style Image topic and pushes
+  # Gazebo video bridge: consumes the optional simulation Image topic and pushes
   # RTSP to MediaMTX. Edge Core reaches its HTTP API over compose DNS.
   video_bridge_gazebo:
     image: nomad-sim-ros:latest
@@ -210,7 +173,7 @@ services:
       - gazebo
     command: >
       python3 edge_core/services/ros/simple_video_bridge.py
-      --source-topic /zed/zed_node/rgb/color/rect/image
+      --source-topic /nomad/camera/image
       --width ${NOMAD_GAZEBO_CAMERA_WIDTH:-640}
       --height ${NOMAD_GAZEBO_CAMERA_HEIGHT:-360}
       --fps ${NOMAD_GAZEBO_CAMERA_FPS:-10}
@@ -233,7 +196,7 @@ services:
   #   - An NVIDIA GPU exposed to the Docker daemon
   # ---------------------------------------------------------------------------
 
-  # GPU-tier C++ adapter node (Isaac ROS / ZED SDK runtime image). Same node
+  # GPU-tier C++ adapter node (Isaac ROS runtime image). Same node
   # as nomad_vehicle_node, built from the sim-isaac image. Feed it a MAVLink
   # stream on UDP :14552 (e.g. a real vehicle through mavlink-router, or the
   # sitl service) for the core to connect.
@@ -243,7 +206,7 @@ services:
       dockerfile: docker/Dockerfile.sim-isaac
       args:
         BASE_IMAGE: isaac_ros_dev-x86_64
-    profiles: ["ros-gpu"]
+    profiles: ["ros-gpu", "ros-gpu-perception"]
     environment:
       ROS_DOMAIN_ID: "0"
       ROS_LOCALHOST_ONLY: "0"
@@ -260,33 +223,15 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
 
-  # GPU-tier synthetic publisher (mirrors zed_sim but under ros-gpu so the
-  # whole GPU stack is self-contained; uses the same sim-ros image since the
-  # publisher itself needs no GPU).
-  zed_sim_gpu:
-    image: nomad-sim-ros:latest
-    profiles: ["ros-gpu"]
-    depends_on:
-      - nomad_vehicle_node_gpu
-    command: >
-      python3 -m tools.sim.zed_sim_publisher --rate 30 --node-topics
-    environment:
-      ROS_DOMAIN_ID: "0"
-      ROS_LOCALHOST_ONLY: "0"
-      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
-    restart: unless-stopped
-
   # ---------------------------------------------------------------------------
-  # ROS2 simulation stack — Tier 3 (Gazebo Harmonic ZED-2i).  Profile: gazebo
+  # ROS2 simulation stack — Tier 3 (Gazebo Harmonic perception).  Profile: gazebo
   #
   # Runs gz sim with the Gazebo GUI exposed through noVNC — no GPU required.
-  # A ZED-2i-tuned Gazebo model publishes the same ROS2 topics the ZED ROS2
-  # wrapper would, so the REAL C++ nomad_vehicle_node (service above, included
-  # in the gazebo profile) is driven by a 3D physics/sensor simulation instead
-  # of pure synthetic math.
-  #
-  # The ZED SDK is BYPASSED entirely — Gazebo cannot feed it. The Iris odometry
-  # publisher is bridged to /zed/zed_node/odom for VIO updates.
+  # The REAL C++ nomad_vehicle_node remains a separate adapter and receives no
+  # VIO source by default.
+  #  # No sensor topics are connected to the adapter by default; this profile is
+  # not VIO or obstacle-avoidance evidence.
+
   #
   # To attach a real NVIDIA GPU for faster GL rendering, add to this service:
   #   deploy:
@@ -337,6 +282,6 @@ services:
       - "${NOMAD_GAZEBO_GCS_PORT:-5764}:5762"  # Mission Planner direct TCP MAVLink
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # Default CMD in the image runs:
-    #   ros2 launch /opt/nomad/tools/sim/gazebo/launch/nomad_iris_zed.launch.py
+    # The image starts an inert shell; use an explicit future estimator launch
+    # when this optional simulation is revisited.
     restart: unless-stopped

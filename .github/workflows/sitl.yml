@@ -73,6 +73,9 @@ jobs:
       - name: C++ core telemetry smoke test (Phase 2)
         run: pixi run core-sitl-status
 
+      - name: MAVSDK Phase A connect/status smoke
+        run: pixi run mavsdk-phase-a-smoke
+
       - name: C++ core command flow (Phase 3/4)
         run: pixi run core-sitl-command-flow
 
@@ -92,6 +95,13 @@ jobs:
 
       - name: C++ link-loss injection scenario (H-03, SR-LNK-01/03)
         run: pixi run core-sitl-link-loss
+
+      # SR-LNK-03 transport-level zero-delivery proof: a pymavlink observer
+      # watches the CLI's actual wire setpoints through a tee relay and the
+      # vehicle must stop after the zero. Runs on the stack's 14572 copy like
+      # the link-recovery scenario (the relay binds it as upstream).
+      - name: C++ zero-delivery proof (SR-LNK-03, H-03)
+        run: pixi run core-sitl-zero-delivery
 
       - name: C++ link-recovery scenario (degraded-link semantics)
         run: pixi run core-sitl-link-recovery

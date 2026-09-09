@@ -35,8 +35,11 @@ PROFILES_DIR = REPO_ROOT / "config" / "profiles"
 ENV_FILE = REPO_ROOT / "config" / "nomad.env"
 
 PROFILES = {
-    "drone": "Real Jetson + ZED2i + ArduPilot flight controller (production)",
-    "dev": "Minimal Edge Core only (API dev / CI)",
+    "onboard_companion": "Onboard companion: Jetson/SBC runs ROS 2, VIO, and video workloads",
+    "groundstation_gpu": "Ground station GPU: Workstation runs ROS 2, VIO, camera, and perception locally",
+    "groundstation_minimal": "Ground station minimal: Direct MAVLink & C++ core only, no companion or GPU perception",
+    "drone": "Real Jetson + ArduPilot flight controller (legacy baseline)",
+    "dev": "Minimal development environment (API dev / CI)",
 }
 
 
@@ -100,10 +103,25 @@ def _host_from_url(url: str | None) -> str | None:
     return host or None
 
 
+def _apply_env_to_mp_config(cfg: dict[str, object], name: str, env: dict[str, str]) -> None:
+    if "NOMAD_API_KEY" in env:
+        cfg["JetsonApiKey"] = env["NOMAD_API_KEY"]
+        cfg["CoreApiKey"] = env["NOMAD_API_KEY"]
+    if "NOMAD_MAVLINK_ENDPOINT" in env:
+        cfg["CoreMavlinkEndpoint"] = env["NOMAD_MAVLINK_ENDPOINT"]
+    if "NOMAD_VIDEO_RTSP_URL" in env:
+        cfg["VideoUrl"] = env["NOMAD_VIDEO_RTSP_URL"]
+    port = env.get("NOMAD_API_PORT", "")
+    if port.isdigit():
+        cfg["JetsonPort"] = int(port)
+    host = _host_from_url(env.get("NOMAD_API_URL"))
+    if host and host != "0.0.0.0":
+        cfg["JetsonIP"] = "127.0.0.1" if host == "localhost" else host
+    cfg["ActiveProfile"] = name
+
+
 def sync_mission_planner(name: str, env: dict[str, str]) -> None:
-    """Merge profile-controlled settings into the Mission Planner plugin config
-    so switching a profile also switches the GCS API key / endpoint and the
-    active-profile indicator. Other plugin settings are preserved."""
+    """Merge profile-controlled settings into the Mission Planner plugin config."""
     import json
 
     path = _mp_config_path()
@@ -118,16 +136,7 @@ def sync_mission_planner(name: str, env: dict[str, str]) -> None:
         except Exception:
             cfg = {}
 
-    if "NOMAD_API_KEY" in env:
-        cfg["JetsonApiKey"] = env["NOMAD_API_KEY"]
-    port = env.get("NOMAD_API_PORT", "")
-    if port.isdigit():
-        cfg["JetsonPort"] = int(port)
-    host = _host_from_url(env.get("NOMAD_API_URL"))
-    if host and host != "0.0.0.0":
-        cfg["JetsonIP"] = "127.0.0.1" if host == "localhost" else host
-    cfg["ActiveProfile"] = name
-
+    _apply_env_to_mp_config(cfg, name, env)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".json.tmp")

@@ -4,17 +4,11 @@
 #
 # The official, integrated flight+perception sim (https://ardupilot.org/dev/docs/
 # ros2-gazebo.html): ArduPilot SITL flies a multicopter inside Gazebo Harmonic
-# via the ardupilot_gazebo plugin, AP_DDS publishes the vehicle state to ROS 2,
-# and a ZED-2i camera model rides on the drone. The NOMAD C++ ROS adapter node
-# consumes the ZED-style topics, exactly as on the Jetson — but here the drone is
-# flown by a REAL flight controller (SITL) responding to MAVLink, so the node's
-# velocity/cmd_vel path is exercised end-to-end (unlike the synthetic sim-ros
-# tier, where there is no FC in the loop).
-#
-# ARCHITECTURAL NOTE — why not the ZED SDK:
-#   The ZED SDK cannot ingest Gazebo frames (only physical ZED / .svo / network
-#   stream / Isaac Sim). So Gazebo publishes ZED-style ROS topics directly via the
-#   gz camera/IMU sensors + ros_gz_bridge, using a ZED-2i-accurate model.
+# via the ardupilot_gazebo plugin and AP_DDS publishes vehicle state to ROS 2.
+# The NOMAD C++ ROS adapter node consumes MAVLink and generic ROS topics; no
+# camera, estimator, mapping, or obstacle-avoidance stack is enabled here.
+# The drone is flown by a REAL flight controller (SITL) responding to MAVLink,
+# so the node's velocity/cmd_vel path is exercised end-to-end.
 #
 # GPU / rendering:
 #   Gazebo Harmonic camera sensors need OpenGL. With an NVIDIA GPU exposed to the
@@ -39,7 +33,7 @@ ENV GZ_VERSION=harmonic
 SHELL ["/bin/bash", "-c"]
 
 LABEL maintainer="The NOMAD Authors"
-LABEL description="NOMAD ArduPilot SITL + Gazebo Harmonic ZED-2i simulation image"
+LABEL description="NOMAD ArduPilot SITL + Gazebo Harmonic simulation image"
 
 # ==============================================================
 # Base tooling + the Gazebo Harmonic apt repository, then gz-harmonic itself.
@@ -139,9 +133,9 @@ RUN sudo apt-get update \
     && sudo rm -rf /var/lib/apt/lists/*
 
 # ==============================================================
-# NOMAD Gazebo assets (the integrated launch and ros_gz bridge config). Copied
-# LAST so iterating on them does not invalidate the long ArduPilot/gz build
-# layers above. Added to GZ_SIM_RESOURCE_PATH by the entrypoint.
+# NOMAD Gazebo assets. Copied LAST so iterating on them does not invalidate the
+# long ArduPilot/gz build layers above. Added to GZ_SIM_RESOURCE_PATH by the
+# entrypoint.
 # ==============================================================
 COPY --chown=${USER_NAME}:${USER_NAME} tools/ /opt/nomad/tools/
 ENV PYTHONPATH="/opt/nomad"
@@ -170,8 +164,8 @@ RUN sudo chmod +x /gazebo_entrypoint.sh
 ENTRYPOINT ["/gazebo_entrypoint.sh"]
 EXPOSE 6080 5900
 
-# Default: NOMAD integrated launch (iris flown by SITL + ZED-style topics). The
-# launch starts the Gazebo GUI unless NOMAD_GAZEBO_HEADLESS=1 is set. Override the
+# Default: start an inert shell. The launch starts the Gazebo GUI unless
+# NOMAD_GAZEBO_HEADLESS=1 is set. Override the
 # command to run the upstream examples, e.g.
 #   ros2 launch ardupilot_gz_bringup iris_runway.launch.py
-CMD ["ros2", "launch", "/opt/nomad/tools/sim/gazebo/launch/nomad_iris_zed.launch.py"]
+CMD ["bash"]

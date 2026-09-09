@@ -6,17 +6,14 @@ extern alias MPDrawing;
 // NOMAD Embedded Video Player - Frame buffer partial
 // ============================================================
 // Double-buffered frame handling for the GStreamer callback:
-// buffer allocation/recycling, the new-image handler, center
-// depth polling, and pushing frames to the PictureBox.
+// buffer allocation/recycling, the new-image handler, and pushing
+// frames to the PictureBox.
 // ============================================================
 
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.Net.Http;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-using Newtonsoft.Json.Linq;
 using MPBitmap = MPDrawing::System.Drawing.Bitmap;
 
 namespace NOMAD.MissionPlanner
@@ -204,33 +201,6 @@ namespace NOMAD.MissionPlanner
             var height = frame.Height;
 
             UiAsync.RunSync(this, () => UpdateVideoDisplay(bufferIndex, width, height, generation), "OnGstNewImage");
-        }
-
-        private async Task PollCenterDepthAsync()
-        {
-            if (IsDisposed || _stopping) return;
-            try
-            {
-                var resp = await JetsonApiService.ApiClient.GetAsync(
-                    $"{_apiBaseUrl}/api/video/depth/center");
-                if (!resp.IsSuccessStatusCode) return;
-                var body = await resp.Content.ReadAsStringAsync();
-                var json = JObject.Parse(body);
-                var token = json["range_m"];
-                if (token == null || token.Type == JTokenType.Null)
-                {
-                    _centerDepthM = null;
-                }
-                else
-                {
-                    double v = token.Value<double>();
-                    _centerDepthM = (v > 0.0 && !double.IsNaN(v) && !double.IsInfinity(v)) ? (double?)v : null;
-                }
-                _centerDepthStamp = DateTime.UtcNow;
-                if (!IsDisposed && _videoBox != null && _videoBox.IsHandleCreated)
-                    _videoBox.Invalidate();
-            }
-            catch { }
         }
 
         private void UpdateVideoDisplay(int bufferIndex, int width, int height, int generation)

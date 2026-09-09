@@ -7,7 +7,7 @@
 # Convenience script to run NOMAD Edge Core in simulation mode for development.
 #
 # This enables testing the full system (Web UI, Telemetry, Vision) on a laptop
-# without requiring actual hardware (ZED camera, Jetson, ArduPilot).
+# without requiring actual hardware (camera, Jetson, ArduPilot).
 #
 # Usage:
 #   ./scripts/dev/run_dev.sh           # Run with default settings
@@ -61,7 +61,7 @@ export NOMAD_SIM_MODE="true"
 echo -e "${YELLOW}NOMAD_SIM_MODE=true (mock hardware enabled)${NC}"
 
 # Additional environment variables for development
-export VISION_VIDEO_SOURCE="zed"
+export VISION_VIDEO_SOURCE="none"
 export ENABLE_VIO="true"
 export VISION_CONFIDENCE="0.5"
 

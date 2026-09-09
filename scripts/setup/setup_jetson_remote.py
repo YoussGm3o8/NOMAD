@@ -75,7 +75,6 @@ def configure_nomad_env(ssh) -> None:
         "MAVLINK_UART_DEV": "/dev/ttyTHS1",
         "MAVLINK_UART_BAUD": "921600",
         "NOMAD_AUTOSTART_ISAAC_ROS_CONTAINER": "false",
-        "NOMAD_ENABLE_NVBLOX_MESH": "false",
     }
 
     for key, value in values.items():

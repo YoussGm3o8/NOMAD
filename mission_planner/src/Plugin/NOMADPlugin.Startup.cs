@@ -202,12 +202,11 @@ namespace NOMAD.MissionPlanner
                     $"McGill Aerial Design — AEAC 2026\n\n" +
                     $"Hover the NOMAD menu for tools; click it to open the\n" +
                     $"NOMAD screen (dashboard, flight boundaries, video,\n" +
-                    $"terminal, health, motor music, dual-link status,\n" +
-                    $"ZED calibration).\n\n" +
+                    $"local log analysis, motor music, and dual-link status).\n\n" +
                     $"Geofence monitoring with enforced violation actions,\n" +
                     $"plugin-wide alerts with toast overlays, MAVLink dual-link\n" +
                     $"failover routing, and configurable payload controls.\n\n" +
-                    $"Jetson: {_config.EffectiveIP}:{_config.JetsonPort}\n" +
+                    $"Video: {_config.VideoUrl}\n" +
                     $"Dual Link: {(_config.DualLinkEnabled ? "Enabled" : "Disabled")}\n" +
                     $"Log: %LOCALAPPDATA%\\Mission Planner\\plugins\\NOMAD\\nomad.log",
                     "About NOMAD"

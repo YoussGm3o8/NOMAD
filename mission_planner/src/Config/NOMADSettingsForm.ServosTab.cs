@@ -4,10 +4,7 @@
 using System;
 using System.Drawing;
 using System.Linq;
-using System.Net.Http;
-using System.Text;
 using System.Windows.Forms;
-using Newtonsoft.Json.Linq;
 
 namespace NOMAD.MissionPlanner
 {
@@ -123,10 +120,5 @@ namespace NOMAD.MissionPlanner
             return false;
         }
 
-        // The spray calibration used to be pushed to the Jetson's Python REST
-        // surface; that surface was removed in the C++ cutover. All spray
-        // settings are GCS-local, and the pump relay itself is driven through
-        // the C++ core boundary (NomadCoreClient.SetRelay) using the channel
-        // configured on the Payloads tab.
     }
 }

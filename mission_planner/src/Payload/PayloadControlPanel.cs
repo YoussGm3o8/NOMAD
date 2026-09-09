@@ -4,10 +4,9 @@
 // NOMAD Payload Control Panel - Reusable Component
 // ============================================================
 // Renders the configurable payloads from NOMADConfig.Payloads (drop servos,
-// slider servos, relay/GPIO outputs) plus the dedicated strap-reel and ZED
-// camera-tilt sections. Everything is driven through standard ArduPilot
+// slider servos, relay/GPIO outputs) plus the dedicated strap-reel and camera-tilt sections. Everything is driven through standard ArduPilot
 // servo/relay outputs (any flight controller) via MAVLink DO_SET_SERVO /
-// DO_SET_RELAY (primary), with Edge Core HTTP as fallback.
+// DO_SET_RELAY through the C++ core boundary.
 // ============================================================
 
 using System;
@@ -22,8 +21,8 @@ namespace NOMAD.MissionPlanner
 {
     /// <summary>
     /// Payload controls: a configurable list of drop / slider / relay payloads,
-    /// plus strap reels (hold-to-reel) and the ZED camera-tilt slider.
-    /// MAVLink is tried first; Edge Core's output command API is the fallback.
+    /// plus strap reels (hold-to-reel) and the camera-tilt slider.
+    /// Commands are validated and acknowledged by the C++ core boundary.
     /// </summary>
     public partial class PayloadControlPanel : UserControl
     {
@@ -173,7 +172,7 @@ namespace NOMAD.MissionPlanner
             for (int i = 0; i < reelCount; i++)
                 BuildReelRow(i, ref y);
 
-            // ZED camera-tilt row (only when a CamTilt payload is configured).
+            // Camera-tilt row (only when a CamTilt payload is configured).
             if (_tiltPayload != null)
                 BuildTiltRow(ref y);
 

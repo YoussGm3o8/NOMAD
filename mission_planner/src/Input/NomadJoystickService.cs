@@ -3,7 +3,7 @@
 // ============================================================
 // NOMAD Joystick Service
 // ============================================================
-// Drives the camera gimbal and the ZED tilt servo from up to two
+// Drives the camera gimbal and camera tilt servo from up to two
 // physical DirectInput joysticks. Reuses Mission Planner's
 // MissionPlanner.Joystick.JoystickBase device wrapper so we don't
 // duplicate device enumeration / state polling, but DELIBERATELY
@@ -14,7 +14,7 @@
 // Routing:
 //   * Gimbal: stick (X,Y) → integrated pitch/roll target via
 //     GimbalController.ApplyStick → MAV_CMD_DO_MOUNT_CONTROL.
-//   * ZED tilt: stick axis → integrated PWM target via
+//   * Camera tilt: stick axis → integrated PWM target via
 //     OutputController.SendServoPwmAsync (core-mediated; drag streams go
 //     through the same boundary).
 // ============================================================
@@ -33,7 +33,7 @@ namespace NOMAD.MissionPlanner
 {
     /// <summary>
     /// Polls one or two DirectInput devices at 20 Hz and routes their stick
-    /// values to the gimbal target integrator and the ZED tilt servo.
+    /// values to the gimbal target integrator and the camera tilt servo.
     /// </summary>
     public sealed partial class NomadJoystickService : IDisposable
     {
@@ -47,20 +47,20 @@ namespace NOMAD.MissionPlanner
         // AcquireJoystick call internally locks an opened device handle.
         // We dedupe at acquire-time by sharing one base when device names match.
         private JoystickBase _gimbalJoy;
-        private JoystickBase _zedJoy;
-        // Dedicated button-source device. May alias _gimbalJoy / _zedJoy when
+        private JoystickBase _cameraTiltJoy;
+        // Dedicated button-source device. May alias _gimbalJoy / _cameraTiltJoy when
         // the configured switch device matches one of the axis devices, so we
         // only Acquire() once per physical handle.
         private JoystickBase _switchJoy;
-        private bool _switchJoyOwned; // true if we created it (vs. aliased gimbal/zed)
+        private bool _switchJoyOwned; // true if we created it (vs. aliased gimbal/camera-tilt)
 
         // Cached property accessors on IMyJoystickState (X, Y, …) so we read
         // by axis-name string from config without per-tick reflection cost.
         private static readonly Dictionary<string, PropertyInfo> AxisProps = BuildAxisMap();
 
-        // Current ZED tilt PWM target (μs). Initialised from PayloadControlPanel
+        // Current camera tilt PWM target (μs). Initialised from PayloadControlPanel
         // so a session that has already moved the slider doesn't snap on start.
-        private float _zedTiltUs;
+        private float _cameraTiltUs;
 
         public NomadJoystickService(NOMADConfig config)
         {
@@ -86,7 +86,7 @@ namespace NOMAD.MissionPlanner
             var tilt = _config.CameraTilt();
             int tiltMin = tilt?.PwmMin ?? 700;
             int tiltMax = tilt?.PwmMax ?? 1450;
-            _zedTiltUs = Math.Max(tiltMin, Math.Min(tiltMax, PayloadControlPanel.LastTiltPulseUs));
+            _cameraTiltUs = Math.Max(tiltMin, Math.Min(tiltMax, PayloadControlPanel.LastTiltPulseUs));
 
             // The mount only honors DO_MOUNT_CONTROL absolute-angle commands
             // when it's in MAVLink targeting mode. Without this ping the mount may
@@ -108,7 +108,7 @@ namespace NOMAD.MissionPlanner
             _timer.Start();
 
             Log.Debug($"started (gimbal={_config.JoystickGimbalEnabled} dev='{_config.JoystickGimbalDevice}', " +
-                              $"zed={_config.JoystickZedEnabled} dev='{_config.JoystickZedDevice}')");
+                              $"camera_tilt={_config.JoystickCameraTiltEnabled} dev='{_config.JoystickCameraTiltDevice}')");
         }
 
         public void Stop()
@@ -117,13 +117,13 @@ namespace NOMAD.MissionPlanner
             _timer = null;
 
             // Release the dedicated switch device first if we own it; otherwise
-            // just drop the alias so ReleaseJoy on gimbal/zed below frees it.
+            // just drop the alias so ReleaseJoy on gimbal/camera-tilt below frees it.
             if (_switchJoyOwned) ReleaseJoy(ref _switchJoy);
             else _switchJoy = null;
             _switchJoyOwned = false;
 
             ReleaseJoy(ref _gimbalJoy);
-            ReleaseJoy(ref _zedJoy);
+            ReleaseJoy(ref _cameraTiltJoy);
         }
 
         public void RestartWithConfig()
@@ -135,11 +135,11 @@ namespace NOMAD.MissionPlanner
         /// <summary>
         /// True when the service has something to do — either an axis channel
         /// is enabled, or at least one switch slot is mapped to a real action
-        /// (so payload switches keep working even with no gimbal/ZED routing).
+        /// (so payload switches keep working even with no gimbal/camera-tilt routing).
         /// </summary>
         public bool NeedsToRun()
         {
-            if (_config.JoystickGimbalEnabled || _config.JoystickZedEnabled) return true;
+            if (_config.JoystickGimbalEnabled || _config.JoystickCameraTiltEnabled) return true;
             if (_config.JoystickKillSwitchEnabled) return true;
             return AnySwitchMapped();
         }
@@ -217,15 +217,15 @@ namespace NOMAD.MissionPlanner
                 if (dev != null) _gimbalJoy = CreateAndAcquire(dev);
             }
 
-            if (_config.JoystickZedEnabled && _zedJoy == null)
+            if (_config.JoystickCameraTiltEnabled && _cameraTiltJoy == null)
             {
-                var dev = ResolveDeviceName(_config.JoystickZedDevice, available);
+                var dev = ResolveDeviceName(_config.JoystickCameraTiltDevice, available);
                 if (dev != null)
                 {
                     if (_gimbalJoy != null && string.Equals(dev, _config.JoystickGimbalDevice, StringComparison.OrdinalIgnoreCase))
-                        _zedJoy = _gimbalJoy;
+                        _cameraTiltJoy = _gimbalJoy;
                     else
-                        _zedJoy = CreateAndAcquire(dev);
+                        _cameraTiltJoy = CreateAndAcquire(dev);
                 }
             }
 
@@ -237,7 +237,7 @@ namespace NOMAD.MissionPlanner
             string switchDev = ResolveDeviceName(_config.JoystickSwitchDevice, available);
             if (switchDev == null)
             {
-                _switchJoy = _gimbalJoy ?? _zedJoy;
+                _switchJoy = _gimbalJoy ?? _cameraTiltJoy;
                 _switchJoyOwned = false;
             }
             else if (_gimbalJoy != null && string.Equals(switchDev, _config.JoystickGimbalDevice, StringComparison.OrdinalIgnoreCase))
@@ -245,12 +245,12 @@ namespace NOMAD.MissionPlanner
                 _switchJoy = _gimbalJoy;
                 _switchJoyOwned = false;
             }
-            else if (_zedJoy != null && string.Equals(switchDev, _config.JoystickZedDevice, StringComparison.OrdinalIgnoreCase))
+            else if (_cameraTiltJoy != null && string.Equals(switchDev, _config.JoystickCameraTiltDevice, StringComparison.OrdinalIgnoreCase))
             {
-                _switchJoy = _zedJoy;
+                _switchJoy = _cameraTiltJoy;
                 _switchJoyOwned = false;
             }
-            else if (_gimbalJoy == null && _zedJoy == null && _config.JoystickAutoSelectDevice)
+            else if (_gimbalJoy == null && _cameraTiltJoy == null && _config.JoystickAutoSelectDevice)
             {
                 // Auto-select with no axis devices acquired — open switchDev directly.
                 _switchJoy = CreateAndAcquire(switchDev);
@@ -318,7 +318,7 @@ namespace NOMAD.MissionPlanner
             // the plugin. Skip when nothing needs a device.
             bool needSwitches = AnySwitchMapped() || _config.JoystickKillSwitchEnabled;
             bool missingAxis = (_config.JoystickGimbalEnabled && _gimbalJoy == null)
-                            || (_config.JoystickZedEnabled    && _zedJoy    == null);
+                            || (_config.JoystickCameraTiltEnabled    && _cameraTiltJoy    == null);
             bool missingSwitch = needSwitches && _switchJoy == null;
             if ((missingAxis || missingSwitch) && (now - _lastReacquireAttempt).TotalSeconds >= REACQUIRE_INTERVAL_SEC)
             {
@@ -330,15 +330,15 @@ namespace NOMAD.MissionPlanner
             try { DriveGimbal(dt); }
             catch (Exception ex) { Log.Error($"gimbal: {ex.Message}"); }
 
-            try { DriveZed(dt); }
-            catch (Exception ex) { Log.Error($"zed: {ex.Message}"); }
+            try { DriveCameraTilt(dt); }
+            catch (Exception ex) { Log.Error($"camera tilt: {ex.Message}"); }
 
             // Payload switch buttons emitted by joystick.py — read from whichever
-            // device is acquired (gimbal preferred, then zed). Runs every tick so
+            // device is acquired (gimbal preferred, then camera tilt). Runs every tick so
             // edge detection doesn't depend on stick motion or DriveGimbal early-returning.
             try
             {
-                var btnDev = _switchJoy ?? _gimbalJoy ?? _zedJoy;
+                var btnDev = _switchJoy ?? _gimbalJoy ?? _cameraTiltJoy;
                 if (btnDev != null)
                 {
                     var st = SafeGetState(btnDev);
@@ -364,13 +364,13 @@ namespace NOMAD.MissionPlanner
             GimbalController.ApplyStick(roll, pitch, dt, send: true);
         }
 
-        private void DriveZed(float dt)
+        private void DriveCameraTilt(float dt)
         {
-            if (_zedJoy == null || !_config.JoystickZedEnabled) return;
-            var st = SafeGetState(_zedJoy);
+            if (_cameraTiltJoy == null || !_config.JoystickCameraTiltEnabled) return;
+            var st = SafeGetState(_cameraTiltJoy);
             if (st == null) return;
 
-            float v = ReadAxisNorm(st, _config.JoystickZedTiltAxis, _config.JoystickZedTiltInvert, _config.JoystickZedDeadzone);
+            float v = ReadAxisNorm(st, _config.JoystickCameraTiltAxis, _config.JoystickCameraTiltInvert, _config.JoystickCameraTiltDeadzone);
             if (v == 0f) return;
 
             var tilt = _config.CameraTilt();
@@ -378,14 +378,14 @@ namespace NOMAD.MissionPlanner
 
             int pwmMin = tilt.PwmMin;
             int pwmMax = tilt.PwmMax;
-            float target = _zedTiltUs + v * _config.JoystickZedMaxRateUsPerSec * dt;
+            float target = _cameraTiltUs + v * _config.JoystickCameraTiltMaxRateUsPerSec * dt;
             if (target < pwmMin) target = pwmMin;
             if (target > pwmMax) target = pwmMax;
 
             // Skip the send entirely if the integrated change is sub-microsecond — DO_SET_SERVO is a 16-bit value.
             int newUs = (int)Math.Round(target);
-            int oldUs = (int)Math.Round(_zedTiltUs);
-            _zedTiltUs = target;
+            int oldUs = (int)Math.Round(_cameraTiltUs);
+            _cameraTiltUs = target;
             if (newUs == oldUs) return;
 
             int channel = tilt.Channel;

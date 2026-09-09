@@ -17,11 +17,10 @@
 #
 # Services (start order = listed order):
 # edge_core, mavlink_router, mediamtx,
-# isaac_ros_container, ros_vehicle, zed_wrapper,
-# video_bridge, nvblox
+# isaac_ros_container, ros_vehicle, video_bridge
 #
 # `all` operates on the autostart set from config/nomad.env
-# (NOMAD_AUTOSTART_* flags). nvblox is manual-only and is never part of `all`.
+# (NOMAD_AUTOSTART_* flags).
 # `restart all` performs a hard reset: stop services, kill stale launch
 # children, then start the autostart set again.
 # =============================================================================
@@ -43,9 +42,7 @@ mavlink_router
 mediamtx
 isaac_ros_container
 ros_vehicle
-zed_wrapper
 video_bridge
-nvblox
 )
 
 # Map a CLI name to the autostart flag key.
@@ -55,10 +52,8 @@ edge_core) echo "EDGE_CORE" ;;
 mavlink_router) echo "MAVLINK_ROUTER" ;;
 mediamtx) echo "MEDIAMTX" ;;
 isaac_ros_container) echo "ISAAC_ROS_CONTAINER" ;;
-zed_wrapper) echo "ZED_WRAPPER" ;;
 ros_vehicle) echo "ROS_VEHICLE" ;;
 video_bridge) echo "VIDEO_BRIDGE" ;;
-nvblox) echo "NVBLOX" ;;
 *) return 1 ;;
 esac
 }
@@ -89,9 +84,7 @@ printf "%-22s %-10s %s\n" "mavlink_router" "$NOMAD_AUTOSTART_MAVLINK_ROUTER" "MA
 printf "%-22s %-10s %s\n" "mediamtx" "$NOMAD_AUTOSTART_MEDIAMTX" "RTSP server (host)"
 printf "%-22s %-10s %s\n" "isaac_ros_container" "$NOMAD_AUTOSTART_ISAAC_ROS_CONTAINER" "Long-running Docker container"
 printf "%-22s %-10s %s\n" "ros_vehicle" "$NOMAD_AUTOSTART_ROS_VEHICLE" "C++ ROS adapter node (in container)"
-printf "%-22s %-10s %s\n" "zed_wrapper" "$NOMAD_AUTOSTART_ZED_WRAPPER" "ZED camera node (in container)"
 printf "%-22s %-10s %s\n" "video_bridge" "$NOMAD_AUTOSTART_VIDEO_BRIDGE" "RTSP relay (via Edge Core API)"
-printf "%-22s %-10s %s\n" "nvblox" "manual" "nvblox mapping (Mission Planner start only)"
 }
 
 cmd_config() {
@@ -101,10 +94,6 @@ cmd_config() {
 cmd_start_all() {
     local s rc=0
     for s in "${SERVICE_ORDER[@]}"; do
-        if [ "$s" = "nvblox" ]; then
-            echo "[nomad] skip nvblox (manual-only; start from Mission Planner Service Control)"
-            continue
-        fi
         local key
         key="$(autostart_key_for "$s")"
         local var="NOMAD_AUTOSTART_$key"
@@ -131,8 +120,8 @@ cmd_stop_all() {
 
 cleanup_orphans() {
     if container_running; then
-        kill_pattern_in_container 'simple_video_bridge|nomad_vehicle_node|nomad_zed_nvblox\.launch\.py|zed_camera\.launch\.py|servo_tf_publisher|obstacle_distance_bridge|component_container_isolated|component_container_mt' 10
-        in_container "rm -f /dev/shm/fastrtps_* /tmp/zed_nvblox.pid /tmp/ros_vehicle.pid /tmp/video_bridge.pid 2>/dev/null || true"
+        kill_pattern_in_container 'simple_video_bridge|nomad_vehicle_node|servo_tf_publisher|obstacle_distance_bridge|component_container_isolated|component_container_mt' 10
+        in_container "rm -f /dev/shm/fastrtps_* /tmp/ros_vehicle.pid /tmp/video_bridge.pid 2>/dev/null || true"
     fi
     kill_pattern_host 'edge_core\.main|mediamtx|mavlink-routerd' 5
 }

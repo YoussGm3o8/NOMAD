@@ -68,8 +68,9 @@ nav:
   - Agent and engineering guidance: agent-guidance.md
   - Operations: operations.md
   - Migration: migration.md
+  - MAVSDK adoption: mavsdk-adoption.md
   - Safety: safety.md
-  - Transitional API Reference: api_reference.md
+
 
 validation:
   links:

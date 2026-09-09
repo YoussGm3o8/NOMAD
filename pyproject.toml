@@ -61,19 +61,6 @@ Repository = "https://github.com/McGill-Aerial-Design/NOMAD"
 [project.scripts]
 nomad-edge = "edge_core.main:main"
 
-[project.entry-points."nomad.modules"]
-# Core Services
-health = "edge_core.services.health_monitor:HealthMonitorModule"
-time = "edge_core.services.time_manager:TimeSyncModule"
-video = "edge_core.services.video_module:VideoStreamModule"
-network = "edge_core.services.network_module:NetworkModule"
-
-# REST API Route Modules (general/reusable infrastructure only)
-vio = "edge_core.api_routes.vio:VioModule"
-video_slam = "edge_core.api_routes.video_slam:VideoSlamModule"
-isaac = "edge_core.api_routes.isaac:IsaacModule"
-calibration = "edge_core.api_routes.calibration:CalibrationModule"
-
 [tool.setuptools.packages.find]
 # infra.transport holds only configs (no Python), so it is not packaged.
 include = ["edge_core*", "infra.tailscale*"]

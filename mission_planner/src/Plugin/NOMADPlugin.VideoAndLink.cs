@@ -11,7 +11,6 @@
 
 using System;
 using System.Drawing;
-using System.Net.Http;
 using System.Windows.Forms;
 using MissionPlanner;
 using MissionPlanner.Utilities;
@@ -70,7 +69,7 @@ namespace NOMAD.MissionPlanner
                 // refresh the statics so the next MainSwitcher-created NOMAD
                 // screen (and its Links view) sees the live instance instead of
                 // the stale one captured at plugin load.
-                NOMADMainScreen.SetStaticConfig(_sender, _config, _connectionManager, _jetsonConnectionManager, _geofenceConfig, _boundaryMonitor);
+                NOMADMainScreen.SetStaticConfig(_config, _connectionManager, _geofenceConfig, _boundaryMonitor);
                 NOMADMainScreen.SetStaticModuleHost(BuildModuleHost());
             }
         }
@@ -80,7 +79,7 @@ namespace NOMAD.MissionPlanner
         // ============================================================
 
         /// <summary>
-        /// Starts the ZED camera video stream on Mission Planner's HUD overlay.
+        /// Starts the configured camera/video stream on Mission Planner's HUD overlay.
         /// Uses the same GStreamer pipeline format as built-in HereLink support.
         /// </summary>
         public void StartHudVideo()
@@ -198,7 +197,6 @@ namespace NOMAD.MissionPlanner
         {
             return new MAVLinkConnectionManager.ConnectionConfig
             {
-                JetsonTailscaleIP = _config.TailscaleIP,
                 LtePort = _config.LteMavlinkPort,
                 LteRemoteHost = _config.LteRemoteHost,
                 LteRemotePort = _config.LteRemotePort,

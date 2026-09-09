@@ -4,6 +4,7 @@
 using System;
 using System.IO;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace NOMAD.MissionPlanner
 {
@@ -111,7 +112,8 @@ namespace NOMAD.MissionPlanner
 
         private static NOMADConfig Deserialize(string json)
         {
-            var config = JsonConvert.DeserializeObject<NOMADConfig>(json);
+            var migratedJson = MigrateLegacyCameraTiltKeys(json);
+            var config = JsonConvert.DeserializeObject<NOMADConfig>(migratedJson);
             if (config == null)
                 throw new JsonSerializationException("The configuration file did not contain a NOMAD configuration.");
 
@@ -119,31 +121,37 @@ namespace NOMAD.MissionPlanner
             return config;
         }
 
+        private static string MigrateLegacyCameraTiltKeys(string json)
+        {
+            var document = JObject.Parse(json);
+            var mappings = new[]
+            {
+                ("JoystickZedEnabled", "JoystickCameraTiltEnabled"),
+                ("JoystickZedDevice", "JoystickCameraTiltDevice"),
+                ("JoystickZedTiltAxis", "JoystickCameraTiltAxis"),
+                ("JoystickZedTiltInvert", "JoystickCameraTiltInvert"),
+                ("JoystickZedDeadzone", "JoystickCameraTiltDeadzone"),
+                ("JoystickZedMaxRateUsPerSec", "JoystickCameraTiltMaxRateUsPerSec"),
+            };
+            foreach (var (legacyKey, currentKey) in mappings)
+            {
+                if (document[currentKey] == null && document[legacyKey] != null)
+                    document[currentKey] = document[legacyKey];
+                document.Remove(legacyKey);
+            }
+            return document.ToString(Formatting.None);
+        }
+
         /// <summary>
         /// Migrate defaults for properties that may have been added in newer versions.
         /// </summary>
         private void MigrateDefaults()
         {
-            // Migrate from old UDP format to RTSP (multiple viewers)
-            if (VideoUrl == "udp://@:5600" || string.IsNullOrEmpty(VideoUrl))
+            // Older profiles used an API-derived video URL. Keep them usable by
+            // falling back to the standalone RTSP bridge's documented local URL.
+            if (VideoUrl == "udp://@:5600" || string.IsNullOrWhiteSpace(VideoUrl))
             {
-                // New default is RTSP stream (allows multiple viewers)
-                var ip = EffectiveIP;
-                if (string.IsNullOrWhiteSpace(ip))
-                    ip = JetsonIP;
-                VideoUrl = $"rtsp://{ip}:8554/stream";
-            }
-
-            // Migrate old Jetson IP to Tailscale if using Tailscale
-            if (JetsonIP == "192.168.1.100" && UseTailscale)
-            {
-                JetsonIP = TailscaleIP;
-            }
-
-            // Migrate SSH username from 'nomad' to 'mad'
-            if (SshUsername == "nomad")
-            {
-                SshUsername = "mad";
+                VideoUrl = "rtsp://127.0.0.1:8554/stream";
             }
 
             // Bump LTE MAVLink port off the RadioMaster default (14550) so the
@@ -187,7 +195,6 @@ namespace NOMAD.MissionPlanner
                 ClampLog(LogEkfVarianceCritical, 0, 20, 1));
             if (LogMinimumSatellites < 0 || LogMinimumSatellites > 40) LogMinimumSatellites = 8;
             if (LogLiveBufferPoints < 60 || LogLiveBufferPoints > 10000) LogLiveBufferPoints = 600;
-            if (string.IsNullOrWhiteSpace(JetsonLogDirectory)) JetsonLogDirectory = "~/NOMAD/logs";
             MotorMusicMotorCount = ClampInt(MotorMusicMotorCount, 1, 12, 4);
             MotorMusicMinOutputPwm = ClampInt(MotorMusicMinOutputPwm, 1000, 2000, 1100);
             MotorMusicMaxOutputPwm = ClampInt(MotorMusicMaxOutputPwm, MotorMusicMinOutputPwm, 2000, 1800);
@@ -254,25 +261,15 @@ namespace NOMAD.MissionPlanner
         {
             var defaults = new NOMADConfig();
 
-            JetsonIP = defaults.JetsonIP;
-            JetsonPort = defaults.JetsonPort;
-            JetsonApiKey = defaults.JetsonApiKey;
-            JetsonSshUser = defaults.JetsonSshUser;
-            TailscaleIP = defaults.TailscaleIP;
-            UseTailscale = defaults.UseTailscale;
+            ActiveProfile = defaults.ActiveProfile;
+            CoreExePath = defaults.CoreExePath;
+            CoreMavlinkEndpoint = defaults.CoreMavlinkEndpoint;
+            CoreApiKey = defaults.CoreApiKey;
             VideoUrl = defaults.VideoUrl;
             VideoNetworkCaching = defaults.VideoNetworkCaching;
             PreferredVideoPlayer = defaults.PreferredVideoPlayer;
             VideoAutoStart = defaults.VideoAutoStart;
-            HttpTimeoutSeconds = defaults.HttpTimeoutSeconds;
-            AutoReconnect = defaults.AutoReconnect;
-            HealthPollInterval = defaults.HealthPollInterval;
-            VioConfidenceWarning = defaults.VioConfidenceWarning;
-            VioConfidenceCritical = defaults.VioConfidenceCritical;
-            VioAlertsEnabled = defaults.VioAlertsEnabled;
-            SshUsername = defaults.SshUsername;
-            TerminalTimeout = defaults.TerminalTimeout;
-            SaveTerminalHistory = defaults.SaveTerminalHistory;
+            AutoStartHudVideo = defaults.AutoStartHudVideo;
             DebugMode = defaults.DebugMode;
             ShowNotifications = defaults.ShowNotifications;
             DefaultTab = defaults.DefaultTab;
@@ -287,7 +284,6 @@ namespace NOMAD.MissionPlanner
             MotorMusicTranspose = defaults.MotorMusicTranspose;
             MotorMusicTempoScale = defaults.MotorMusicTempoScale;
             DefaultLogDirectory = defaults.DefaultLogDirectory;
-            JetsonLogDirectory = defaults.JetsonLogDirectory;
             LogVibrationWarning = defaults.LogVibrationWarning;
             LogVibrationCritical = defaults.LogVibrationCritical;
             LogHdopWarning = defaults.LogHdopWarning;

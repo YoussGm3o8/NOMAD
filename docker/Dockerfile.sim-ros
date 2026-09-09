@@ -4,13 +4,13 @@
 #
 # Compiles the C++ core + the nomad_ros ROS 2 adapter into a colcon workspace
 # and ships rclpy + pymavlink, so the REAL nomad_vehicle_node can be exercised
-# against an in-process MAVLink responder without a Jetson, ZED camera, or GPU
+# against an in-process MAVLink responder without a Jetson, camera, or GPU
 # (tests/ros/test_nomad_ros_integration.py).
 #
 # Relationship to the other images:
 #   - Complements Dockerfile.dev (bare Edge Core, no ROS2) by adding a
 #     full ROS2 Humble runtime for adapter integration testing.
-#   - Mirrors Dockerfile.jetson minus the GPU/ZED-SDK/nvblox/colcon layers:
+#   - Mirrors Dockerfile.jetson minus the GPU/colcon layers:
 #     same COPY layout, same PYTHONPATH convention, same entrypoint.
 #   - Does NOT build on aarch64/Jetson — use Dockerfile.jetson for the device.
 #
@@ -30,6 +30,8 @@
 FROM ros:humble-ros-base
 
 ENV DEBIAN_FRONTEND=noninteractive
+
+ARG NOMAD_ENABLE_MAVSDK=OFF
 
 LABEL maintainer="The NOMAD Authors"
 LABEL description="NOMAD Tier-1 hardware-free ROS2 sim image for adapter integration testing"
@@ -106,12 +108,17 @@ COPY CMakeLists.txt /ws/src/nomad/CMakeLists.txt
 COPY include/ /ws/src/nomad/include/
 COPY src/ /ws/src/nomad/src/
 COPY scripts/dev/generate_mavlink.py /ws/src/nomad/scripts/dev/generate_mavlink.py
+COPY examples/mavsdk_phase_a_smoke.cpp /ws/src/nomad/examples/mavsdk_phase_a_smoke.cpp
 COPY third_party/ardupilot-mavlink/ /ws/src/nomad/third_party/ardupilot-mavlink/
+COPY third_party/MAVSDK/ /ws/src/nomad/third_party/MAVSDK/
 COPY ros2/nomad_ros/ /ws/src/nomad/ros2/nomad_ros/
 SHELL ["/bin/bash", "-c"]
-RUN . /opt/ros/humble/setup.bash && cd /ws/src/nomad/ros2/nomad_ros && \
+RUN sed -i 's/\r$//' /ws/src/nomad/third_party/MAVSDK/cpp/third_party/mavlink/mavlink.patch \
+    /ws/src/nomad/third_party/MAVSDK/cpp/third_party/mavlink/mavlink_ios.patch \
+    && . /opt/ros/humble/setup.bash && cd /ws/src/nomad/ros2/nomad_ros && \
     colcon build --packages-select nomad_ros --build-base /ws/build --install-base /ws/install \
-    --event-handlers console_cohesion+ 2>&1 | tail -5
+    --cmake-args -DNOMAD_ENABLE_MAVSDK=${NOMAD_ENABLE_MAVSDK} \
+    --event-handlers console_cohesion+
 SHELL ["/bin/sh", "-c"]
 
 ENV PYTHONPATH="/opt/nomad"

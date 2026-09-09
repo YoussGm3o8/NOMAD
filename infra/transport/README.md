@@ -1,12 +1,10 @@
 # Transport configuration
 
-`mavlink_router/main.conf` is the current deployment configuration for routing
-flight-controller MAVLink between the companion computer and clients.
+mavlink_router contains deployment routing configuration. Routers may bridge
+serial/radio/TCP legs into UDP without owning vehicle decisions.
 
-It is transitional infrastructure. The C++ core will own its own connection
-boundary and support serial, UDP, and TCP without exposing router details to the
-`Vehicle` API.
-
-Use placeholders for endpoint values and keep deployment-specific addresses in
-local ignored configuration. See [operations](../../docs/operations.md) and
-[architecture](../../docs/architecture.md).
+The current C++ connection is UDP-only. MAVSDK adoption adds qualified transports
+without changing Vehicle policy; native serial/TCP support is not yet production
+behavior. Validate loop prevention, duplicate handling and link capacity at G3.
+Keep real endpoints in ignored configuration. See
+[operations](../../docs/operations.md) and [architecture](../../docs/architecture.md).

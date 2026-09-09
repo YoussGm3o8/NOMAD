@@ -56,7 +56,7 @@ jobs:
   jetson-image:
     name: build Jetson image (aarch64, self-hosted)
     # The all-in-one Jetson image is based on the NVIDIA Isaac ROS aarch64 dev
-    # base and downloads the ZED SDK — neither builds on generic hosted runners.
+    # base — it does not build on generic hosted runners.
     # It only runs on manual dispatch and requires a self-hosted ARM64 runner
     # (or build locally with `docker buildx build --platform linux/arm64`).
     if: github.event_name == 'workflow_dispatch'
@@ -75,8 +75,8 @@ jobs:
 
   sim-isaac-image:
     name: build Isaac ROS sim image (x86_64 GPU, self-hosted)
-    # The Tier-2 Isaac ROS simulation image mirrors Dockerfile.jetson on x86_64:
-    # same Isaac ROS stack, ZED SDK 5.2.3, and nvblox — but targeting a developer
+    # The Tier-2 Isaac ROS simulation image mirrors Dockerfile.jetson on x86_64,
+    # targeting a developer
     # workstation with a discrete NVIDIA GPU instead of a Jetson Orin.
     #
     # Requirements for the self-hosted runner this job targets:

@@ -8,7 +8,8 @@ namespace NOMAD.MissionPlanner
     /// <summary>
     /// Process-wide lock serializing direct MAVLink writes over Mission
     /// Planner's comPort (gimbal stick stream, motor-music script install,
-    /// EKF source switch) so concurrent writers cannot interleave frames.
+    /// gimbal mount control, motor-music script install) so concurrent writers
+    /// cannot interleave frames.
     /// Discrete output commands do not use this: they go through the C++ core
     /// boundary, which owns its own link.
     /// </summary>

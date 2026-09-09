@@ -42,6 +42,24 @@ jobs:
       - name: Build and test C++ core
         run: pixi run test-core
 
+  mavsdk-phase-a:
+    name: MAVSDK Phase A (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: prefix-dev/setup-pixi@v0.9.6
+        with:
+          cache: true
+      - name: Build optional MAVSDK smoke target
+        run: pixi run build-core-mavsdk
+
   dev-image:
     name: build dev docker image
     runs-on: ubuntu-latest

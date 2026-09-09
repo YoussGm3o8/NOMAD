@@ -5,5 +5,12 @@ nomad_vehicle_node:
     endpoint: "udpin:0.0.0.0:14570"
     publish_rate_hz: 10.0
     min_vio_confidence: 0.3
+    max_velocity_xy: 2.0
+    max_velocity_z: 1.0
+    max_yaw_rate: 1.0
     vio_timeout_ms: 1000
     command_timeout_ms: 500
+    # No estimator is selected by default. Velocity remains fail-closed until
+    # a real perception adapter supplies and configures a provider identity.
+    vio_source: ""
+    vio_source_topic: "/nomad/vio_source"

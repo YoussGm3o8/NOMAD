@@ -7,9 +7,9 @@
 # Owns: the C++ nomad_vehicle_node (ros2 run nomad_ros) inside the Isaac ROS
 # container. Depends on: isaac_ros_container.
 #
-# Does NOT require the ZED wrapper to be up — the node simply has no VIO
-# health/confidence to gate velocity commands until ZED publishes. This is
-# intentional decoupling.
+# Does NOT require a perception provider to be up — the node simply refuses
+# velocity commands until a configured estimator publishes a valid VIO sample.
+# This is intentional decoupling.
 #
 # Requires the Isaac ROS container image rebuilt with the C++ core + nomad_ros
 # adapter (docker/Dockerfile.jetson, colcon workspace /ws/install).
@@ -43,6 +43,8 @@ ARGS=(
     -p min_vio_confidence:=${NOMAD_ROS_MIN_VIO_CONFIDENCE:-0.3}
     -p vio_timeout_ms:=${NOMAD_ROS_VIO_TIMEOUT_MS:-1000}
     -p command_timeout_ms:=${NOMAD_ROS_COMMAND_TIMEOUT_MS:-500}
+    -p vio_source:=${NOMAD_ROS_VIO_SOURCE:-}
+    -p vio_source_topic:=${NOMAD_ROS_VIO_SOURCE_TOPIC:-/nomad/vio_source}
 )
 
 # Restart loop: keeps the node up through transient crashes.
@@ -80,6 +82,8 @@ svc_start() {
         "-e" "NOMAD_ROS_MIN_VIO_CONFIDENCE=${NOMAD_ROS_MIN_VIO_CONFIDENCE:-0.3}"
         "-e" "NOMAD_ROS_VIO_TIMEOUT_MS=${NOMAD_ROS_VIO_TIMEOUT_MS:-1000}"
         "-e" "NOMAD_ROS_COMMAND_TIMEOUT_MS=${NOMAD_ROS_COMMAND_TIMEOUT_MS:-500}"
+        "-e" "NOMAD_ROS_VIO_SOURCE=${NOMAD_ROS_VIO_SOURCE:-}"
+        "-e" "NOMAD_ROS_VIO_SOURCE_TOPIC=${NOMAD_ROS_VIO_SOURCE_TOPIC:-/nomad/vio_source}"
     )
 
     log_info "starting node in container"

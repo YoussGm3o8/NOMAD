@@ -5,7 +5,7 @@
 // ============================================================
 // Thin reflection wrapper around MissionPlanner's MAVLinkInterface for
 // the few mode/param operations the plugin needs to issue directly
-// (without going through the Jetson API). Reflection so the plugin
+// (without a remote service dependency). Reflection so the plugin
 // survives MP API drift across versions.
 // ============================================================
 

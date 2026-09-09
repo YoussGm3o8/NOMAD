@@ -1,279 +1,252 @@
 # Architecture
 
-**Status:** Target architecture; the Python edge tree is transitional.
+Target design, 2026-09-08. Requirements and pending decisions are in
+[PRD](prd.md); current implementation and discrepancies are in [migration](migration.md).
+The working tree already removes Edge Core. Removal is not proof of a complete
+replacement deployment.
 
-## Deployment configurations
+## Ownership and runtime boundary
 
-One core binary serves both supported configurations; the transport endpoint is
-configuration, not code. No deployment forks the product logic.
+~~~text
+Mission Planner / CLI ---- authenticated client requests ------+
+                                                               v
+ROS 2 / Python compute ---- validated observations ----> one C++ command owner
+Competition web adapter --- validated traffic ---------> mission / safety / vehicle
+                        <-- telemetry and events -------+       |
+                                                               v
+                                                    MAVLink implementation
+                                                               |
+                                                               v
+                                                            ArduPilot
+~~~
 
-### A. Jetson on the drone (existing)
+ArduPilot owns stabilization, motor control, EKF, low-level navigation and
+failsafes. The C++ core owns high-level mission behavior, command validation,
+traffic response decisions, payload authorization and authoritative outcome
+tracking. Perception produces observations; it does not directly steer vehicles.
 
-The companion computer on the drone runs the core and any adapters it needs.
-The ground station connects over a secure network (Tailscale/LTE) and runs
-Mission Planner as a client.
+The proposed persistent runtime is a thin C++ executable around the existing
+library, with one connection owner, bounded work, and an explicit shutdown order.
+It is justified by mission cancellation, continuous traffic/telemetry, multiple
+clients and payload state. It is not implemented yet. Keep ordinary value types,
+named functions and owned workers; do not add a broker, registry or general task
+framework. The current one-shot CLI remains useful for exclusive local use.
 
-### B. Ground-station hosted (no Jetson on the drone)
-
-Everything runs on the ground station computer (or a Jetson at the ground
-station) for weight reduction. The drone carries only an LTE module with a
-thin bridge (Raspberry Pi Zero or similar) running mavlink-router over
-Tailscale — configuration, not product code. A local ELRS transmitter on the
-ground station provides the second MAVLink path.
-
-```text
-Drone:  ArduPilot <-> (serial) RPi Zero mavlink-router <-> LTE/Tailscale
-        ArduPilot <-> ELRS RX (RC + telemetry radio)
-
-GCS:    Tailscale UDP <-> ground link aggregation <-> NOMAD core <-> Mission Planner
-        ELRS TX serial ^
-```
-
-Both links converge on the ground station (mavlink-router on a Linux GCS, the
-plugin's GroundLinkRouter on Windows) into the one stream the core and plugin
-consume. The system keeps working for whichever link is available: commands
-flow over the live link, and if both links are down the core fails closed
-(SR-LNK-*) and resumes normal operation when a link returns.
-
-### C. ELRS-only degraded
-
-Same ground-station layout with no LTE path. Only the controls the ELRS link
-supports are available; the core behavior is identical.
-
-Configuration profiles: `config/profiles/drone.env` (A) and
-`config/profiles/groundstation.env` (B/C). Drone-side bridge details live in
-`docs/operations.md`; nothing in the core depends on LTE, Tailscale, or ELRS.
-
-## System boundary
-
-```text
-┌──────────────────────────────────────────────────────────┐
-│ Clients and adapters                                    │
-│ CLI · Mission Planner · ROS 2 · Python tools            │
-└────────────────────────┬─────────────────────────────────┘
-                         │ calls core API
-                         v
-┌──────────────────────────────────────────────────────────┐
-│ NOMAD C++ core                                           │
-│ Vehicle · telemetry · missions · validation              │
-└────────────────────────┬─────────────────────────────────┘
-                         │ transport boundary
-                         v
-┌──────────────────────────────────────────────────────────┐
-│ MAVLink transport                                        │
-│ UDP · serial · TCP · heartbeat · acknowledgements        │
-└────────────────────────┬─────────────────────────────────┘
-                         │ MAVLink
-                         v
-                    ArduPilot
-```
-
-ArduPilot owns low-level flight control, stabilization, EKF, motor control, and
-failsafes. NOMAD owns higher-level commands, telemetry models, mission behavior,
-and verification of the commands it sends.
-
-## Dependency direction
-
-```text
-UI / CLI / ROS 2 / Python tools
-              |
-              v
-        NOMAD C++ core
-              |
-       MAVLink implementation
-              |
-           ArduPilot
-```
-
-Dependencies point inward. The core does not import UI frameworks, ROS 2, Python,
-FastAPI, Mission Planner assemblies, cloud clients, or VPN libraries.
-
-## Core ownership
-
-| Area | Owns | Does not own |
+| Layer | Responsibility | Excluded responsibility |
 |---|---|---|
-| `mavlink` | Transport, packet conversion, heartbeat, ACKs | Missions or UI decisions |
-| `vehicle` | Arm, mode, takeoff, navigation, land, RTL, state verification | Packet layout or rendering |
-| `telemetry` | Stable state and value types | Transport sockets |
-| `mission` | Small mission data and synchronous execution | UI workflows or scripting language |
-| CLI | Argument parsing, output, exit status | Flight behavior or MAVLink packing |
-| `src/mavlink` | MAVLink frame conversion and UDP peer handling | Vehicle policy |
-| ROS 2 adapter | Message translation and node lifecycle | Core decisions |
-| Mission Planner | Operator UI and client integration | Core mission or safety logic |
-| Python tools | CV, ML, simulation, analysis | Vehicle ownership |
-| ArduPilot | Stabilization, EKF, low-level control, failsafes | NOMAD application concerns |
+| C++ telemetry | Typed state, validity, source identity, per-field timestamps and age | ROS types, UI rendering |
+| C++ vehicle/safety | Command policy, limits, verification, authority and payload interlocks | Packet layout |
+| C++ mission | Survey/task progress, pause/cancel/abort, traffic responses, recovery | Perception inference |
+| MAVLink implementation | Transport, target filtering, packing, ACK matching and protocol exchanges | Mission decisions |
+| Competition adapter | External schema/auth, cadence, retries, bounded queues, traffic translation | Choosing maneuvers |
+| ROS 2 adapter | Translate data and requests, validate transport metadata, enqueue | A second Vehicle owner in integrated mode |
+| Python CV/VIO/tools | Sensor processing, tracks, candidate observations, replay and analysis | Autonomous MAVLink command path |
+| Mission Planner | Operator review, maps, video, configuration, progress and diagnostics | Independent emergency/fence/payload policy |
+| Routing/deployment | Link routing, process supervision, network access and packaging | Deciding whether a flight action is safe |
 
-## Target project layout
+Target per-field freshness and command authority are missing from the current
+library. The existing ROS node embeds its own Vehicle and the plugin spawns CLI
+processes; those are alternative standalone modes until G2 unifies ownership.
 
-```text
-NOMAD/
-├── CMakeLists.txt
-├── include/nomad/
-│   ├── mavlink/
-│   ├── vehicle/
-│   ├── telemetry/
-│   └── mission/
-├── src/
-│   ├── main.cpp
-│   ├── mavlink/
-│   ├── vehicle/
-│   ├── telemetry/
-│   └── mission/
-├── tests/
-├── examples/
-├── ros2/
-│   └── nomad_ros/
-├── python/
-│   ├── vision/
-│   ├── ml/
-│   ├── simulation/
-│   ├── analysis/
-│   └── tools/
-├── mission_planner/
-├── docs/
-├── config/
-├── docker/
-└── infra/
-```
+## Command authority and client protocol
 
-The first C++ build contains one library, one CLI, and small CTest targets. It
-intentionally has no daemon, plugin loader, service locator, message bus, generic
-command framework, or discovery system.
+R recommendation (D02): begin with one ground-hosted C++ runtime. In all profiles,
+Mission Planner and the CLI submit typed requests to that runtime. For an onboard
+core, use the same semantics through a selected authenticated remote transport;
+do not spawn a local second owner when the remote core is unreachable.
 
-## CLI flow
+Before implementation, specify a versioned request/result contract: aircraft and
+session identity, request ID, deadline, verb, units, authorization scope and
+outcome. Separate admitted, transmitted, acknowledged, state-verified, timed-out,
+cancelled and unknown outcomes. A completed LAND command means LAND mode today;
+a completed landing requires landed/disarmed evidence.
 
-```text
-nomad arm
-  -> parse arguments
-  -> open the configured connection
-  -> construct Vehicle
-  -> Vehicle::arm()
-  -> send MAVLink command
-  -> wait for ACK or armed state
-  -> print result
-  -> close connection
-```
+Use OS-restricted local IPC for local clients; select the exact Windows/Linux
+mechanism at D02. Remote transport needs mutual endpoint authentication,
+authorization, replay protection, bounded messages and revocation. VPN reachability
+alone is not application authorization. No existing remote C++ command protocol
+is claimed, and Python REST is not a fallback.
 
-The CLI is a client of the core. A future long-running process may reuse the same
-core API, but it is not required for local CLI operation.
+Maintain one active writer per aircraft. Concurrent clients may observe; requests
+are serialized or rejected while incompatible work runs. Priority is explicit:
+ArduPilot failsafes/manual takeover, abort, safety response, then mission requests.
+Stale session requests cannot rearm, resume or repeat a payload action. Reconnect
+reestablishes observation first; explicit reauthorization precedes motion.
 
-## ROS 2 boundary
+Mission Planner native controls and RC remain possible external authorities.
+Integrated operations must define handover and inhibit NOMAD until reconciled;
+software cannot claim to prevent an independent pilot/autopilot action. Migrate
+plugin boundary returns, emergency parameter changes, direct gimbal streams and
+fence writes through the core or restrict them to documented maintenance mode.
 
-ROS 2 lives in `ros2/`, outside the core. A ROS node may subscribe to a standard
-message, validate and translate it, then call the core. It must not pack MAVLink
-messages or implement a second vehicle state machine.
+## MAVLink and transport decision
 
-Callbacks remain short and non-blocking. Timers or owned workers handle heavy
-processing. Callback groups are explicit when concurrency is needed, and a
-`SingleThreadedExecutor` is the default.
+Current production path: UdpMavlinkConnection with NOMAD framing and generated
+ArduPilot dialect headers. CMake requires Python/mavgen at build time; the runtime
+core has no Python or ROS dependency. Native serial/TCP are not implemented in
+that connection. Existing routers can bridge them to UDP.
 
-ROS parameters are declared in the node and loaded from YAML through launch files.
-Standard messages are preferred. Custom interfaces, if required, live in a
-separate interface package.
+User-confirmed direction: adopt the pinned MAVSDK fork as an early competition
+prerequisite after parity, with tests and a focused merge request, as detailed in
+[MAVSDK adoption](mavsdk-adoption.md). The opt-in Phase A smoke target does not
+replace the production transport. Preserve Vehicle, safety and outcome semantics
+through adoption. Do not trust library ACKs, Offboard mode, background resends,
+GCS heartbeats, or default identity without tests against the selected firmware.
+Pin firmware/dialect/library combinations and requalify each changed combination.
 
-## Mission Planner boundary
+MAVLink ingress must distinguish ownship from GCS and traffic, reject malformed
+frames and stale state, and match acknowledgements to the pending operation.
+Transport health is separate from a fresh position or a physically successful
+payload action. Routing must prevent loops and duplicate command transmission.
+Two radios or UDP legs do not establish independent failure protection.
 
-The plugin is a ground-station client. It may render telemetry, expose commands,
-manage configuration, and provide operator workflows. It must call a client
-boundary rather than duplicate `Vehicle` or safety logic in event handlers.
+## Deployment profiles
 
-The plugin is not the foundation of NOMAD. It can eventually be replaced by
-another ground-control client without changing the core.
+Task 1 direction is a lightweight VTOL with ground GPU CV/video and a Pi Zero
+LTE backup. Task 2 is a quad below 15 kg with optional Jetson; payload and final
+autonomy are TBD. Here4/RTK and Walksnail are intended components; qualification
+and capture/correction interfaces remain open. There is no ZED prerequisite.
 
-## Python boundary
+The current core hardcodes Copter modes. Add explicit aircraft-class validation
+and tested ArduPlane/QuadPlane mission, transition and landing semantics before
+Task 1. ArduPilot's [QuadPlane mission interface](https://ardupilot.org/plane/docs/quadplane-auto-mode.html)
+distinguishes VTOL takeoff/landing and transition operations. The core should
+supervise reviewed autopilot mission execution, not emulate flight transitions.
+No Copter zero-velocity hold may be assumed safe during fixed-wing flight.
 
-Python remains useful for rapid iteration, computer vision, ML, simulation,
-analysis, testing, and ground utilities. Python code must not become a second
-source of truth for vehicle commands after the C++ cutover.
+Compute placement and core placement are separate choices. D02 ground-core
+placement below is recommended, not fixed by the user's profile definitions.
 
-The current `edge_core/` service is transitional. Its REST API, module registry,
-Python MAVLink path, and ROS HTTP bridge are migration targets rather than new
-extension points.
+| Profile | Aircraft | Ground | Core/control constraint |
+|---|---|---|---|
+| onboard_companion | ArduPilot plus Jetson/SBC sensor, ROS 2, VIO/CV and video workloads | Mission Planner; competition adapter; optional ground core | Exactly one core, ground initially or explicitly selected onboard |
+| groundstation_gpu | ArduPilot plus selected camera/IMU acquisition and transport; no Jetson | GPU laptop runs ROS 2/VIO/CV/video, Mission Planner, competition adapter and core | Ground core; sensor acquisition/transport hardware still required |
+| groundstation_minimal | ArduPilot and required command/telemetry link | C++ core, Mission Planner/CLI, lightweight competition adapter | No companion/perception dependency; optional features report unavailable |
 
-## Current-to-target mapping
+Ground GPU compute cannot infer vehicle motion from a stationary laptop camera.
+If it processes aircraft VIO, the aircraft must deliver synchronized image and
+IMU data with valid acquisition timestamps and calibrated transforms. D01/D06/D09
+must establish this acquisition path and its capacity. Compressed RTSP alone is
+not evidence of a usable camera/IMU VIO feed.
 
-| Current area | Target home | Action |
-|---|---|---|
-| `edge_core/services/mavlink/` | `include/nomad/mavlink`, `src/mavlink` | Port transport, packets, telemetry, ACKs; then delete Python path |
-| ~~`edge_core/ros_http_bridge/`~~ | `ros2/nomad_ros` (C++ adapter node) | **Deleted 2026-09-05** — the adapter node owns the MAVLink link and core velocity path; no HTTP hop |
-| `edge_core/safety/` | C++ vehicle validation and safety modules | Re-establish each requirement and test |
-| `edge_core/api_routes/` | CLI/client operations or delete | No REST route without a real client requirement |
-| `edge_core/core/` | No replacement | Delete dynamic module registry |
-| `edge_core/services/video*` | Python tools or deployment adapter | Keep only if a real product workflow needs it |
-| `edge_core/services/health*` | Client/adapter telemetry | Keep behavior, move ownership |
-| `scripts/nomad` | C++ `nomad` CLI | Replace service dispatcher with core client |
-| `infra/systemd/` | One core unit plus required adapters | One unit per deployment host; ground-station profile disables drone-side services |
-| Mission Planner controls | Plugin client | Remove duplicate core and safety decisions |
-| Removed Python module example | None | Do not recreate the registry pattern |
+Select profiles explicitly. Runtime capabilities include command link,
+navigation source, camera, VIO, perception, video, tracker, sampler and
+competition exchange. For each expose state, reason, age and configuration
+version. A mission declares prerequisites; missing perception blocks only
+dependent actions, not telemetry or eligible GNSS missions.
 
-## What is deliberately absent
+The current velocity path requires VIO. The minimal profile does not bypass this
+gate, and NOMAD_VIO_SOURCE_REQUIRED=false is not wired into that C++ policy.
+Use supported non-VIO operations; a future GNSS velocity mode needs an explicit
+reviewed policy and fault tests. Never synthesize healthy VIO for product use.
 
-The target does not contain:
+## ROS, VIO, perception and video
 
-- a generic module registry;
-- a service locator;
-- a route-driven vehicle API;
-- a second Python MAVLink implementation;
-- an HTTP hop for local core operations;
-- a mission scripting language before a use case exists;
-- a cloud or VPN dependency in the core;
-- a broad fallback chain for transports or runtimes.
+Keep ROS outside public C++ headers. Callbacks validate, translate and enqueue.
+Owned workers handle blocking operations; short services return acceptance,
+while long goals use actions only when a client needs cancellation/progress.
+Prefer a single-threaded executor with explicit callback groups if concurrency
+is introduced. The present node blocks in services and telemetry callbacks;
+G2 must correct this before claiming bounded response.
 
-Link selection is not a fallback chain: the ground station aggregates the
-available links into one stream, and the core simply uses that stream. It never
-switches transports itself based on availability.
+Proposed observation contract: acquisition timestamp, receive timestamp, clock
+domain/uncertainty, sensor identity, frame and units, calibration version,
+sequence/reset counter, confidence/covariance and quality. Reject delayed,
+future-dated, out-of-order, wrong-source and invalid values. Current VIO health/
+confidence/source topics are not actual estimator pose or EKF fusion evidence.
 
-Each new abstraction must have more than one real caller and remove complexity.
+For flight external navigation, translate a selected estimator into reviewed
+MAVLink data through the core's MAVLink boundary. ArduPilot's
+[external-navigation interface](https://ardupilot.org/dev/docs/mavlink-nongps-position-estimation.html)
+documents ODOMETRY, timestamp, frame and covariance fields. Choose and qualify
+those semantics for the pinned firmware, including reset, delay and origin.
+No parameter recipe or estimator-source switch is approved by this plan.
+Mapping-only VIO and navigation VIO are separate capabilities.
 
-## MAVLink library decision
+Perception returns detections and track candidates with image/time evidence,
+classification confidence, association uncertainty and geolocation uncertainty.
+C++ mission logic accepts/rejects candidate task actions. Survey counting
+deduplicates overlapping views, records occlusion/unknown identities and permits
+operator correction with provenance. Tracker radio identity and visual identity
+must not be silently equated.
 
-Status: decided (2026-09-05, evidence below).
+Video remains outside the control loop: selected camera/ROS source, encoder,
+MediaMTX/RTSP or another justified transport, then Mission Planner playback.
+The retained Python bridge moves images; it is not the removed vehicle service.
+Preserve acquisition timestamps separately from presentation time, show frozen/
+stale video, bound buffers, and prioritize control/traffic over video bandwidth.
+Its current HTTP control endpoint lacks authentication; constrain it at G1 and
+qualify it at G3/G8. Overlay switches are not evidence of working detection.
 
-NOMAD frames MAVLink 2 itself and owns the verification semantics; the dialect
-facts come from generated code, never hand-maintained tables. The C++ core
-pins `third_party/ardupilot-mavlink` as a submodule at the exact commit the
-ArduPilot firmware release compiles against, and
-`scripts/dev/generate_mavlink.py` runs that submodule's own mavgen into the
-gitignored build dir (`build/generated/mavlink`). `src/mavlink/protocol.cpp`
-and `fence.cpp` use the generated message ids, crc_extras, lengths, and
-per-message pack/decode functions; only the framing, CRC check, sequence, and
-payload round-trip helpers are NOMAD's own code (~1,000 lines including tests).
-Golden unit tests (generated with pymavlink) pin the wire bytes, and every
-message NOMAD emits has been accepted live by ArduPilot Copter 4.7.1 (fence
-upload, commands, reposition). Because the tables come from the pinned
-submodule, future ArduPilot version bumps cannot silently drift dialect facts
-(crc_extras, field layouts): updating the pin and regenerating is the whole
-upgrade. The safety-critical part of the core is not the codec: it is the
-verification semantics (send -> ack -> authoritative state check -> fail
-closed), which remains NOMAD's code regardless of library.
+## Competition telemetry and traffic
 
-A MAVSDK evaluation was carried out in parallel and recorded here for the
-revisit triggers:
+Use one ground-side competition adapter, initially C++ as an application adapter
+outside the reusable core. The wire protocol, library, authentication and schema
+remain D07. A mock server can use Python because it is a test fixture.
 
-- MAVSDK is pinned as a submodule at `third_party/MAVSDK` (v3 main,
-  commit `v3.15.0-441-g34b417d4` at evaluation time).
-- It builds cleanly on Windows with CMake `-A x64` and
-  `-DBUILD_WITHOUT_CURL=ON` (the default superbuild fails at the openssl
-  step on Windows; curl is only needed by the camera/http_loader plugins).
-- A smoke client using `add_any_connection("udpin://0.0.0.0:14570")`
-  discovered the autopilot and streamed telemetry from the live SITL stack
-  (ArduPilot Copter 4.7.0).
-- Two ArduPilot quirks surfaced in the smoke test, both worth knowing before
-  adopting MAVSDK: `Telemetry::FlightMode` reports `Offboard` for an
-  ArduPilot `GUIDED` vehicle (PX4-oriented enum mapping; the
-  `ardupilot_custom_mode` support in the core exists for this), and
-  `Battery.remaining_percent` came back as `100.0` from ArduPilot's percent
-  field (treated as a fraction), so ArduPilot clients must rescale.
+Outbound periodic telemetry samples the latest valid ownship snapshot at 1 Hz.
+Track scheduled, sent and server-received time separately. Event data has unique
+IDs, occurrence time, type, task context and evidence references as allowed by
+the official schema. Keep periodic snapshots and events in separate bounded
+queues so retries do not delay current telemetry. Use bounded retry/backoff and
+explicit expiry; do not relabel historical telemetry as live after an outage.
+Event deduplication/reconciliation must match server capabilities, not assume
+exactly-once delivery.
 
-Revisit MAVSDK when a measurable trigger fires, then re-evaluate adoption:
+Inbound traffic is separate from ownship. Validate schema, vehicle identity,
+timestamp, coordinates, datum, velocity, validity and sequence where supplied.
+Record receive age and uncertainty; handle duplicates, gaps, reordering, stale
+tracks, server errors and reconnects. Event exchange with simulated UAVs goes
+through documented server/cooperation interfaces, never through ownship command
+ACK handling.
 
-- a PX4 product appears; or
-- the core must speak MAVLink directly over serial/TCP without
-  mavlink-router as a sidecar; or
-- the ArduPilot quirks above get fixed upstream and a release is cut.
+C++ deconfliction starts as deterministic advisory logic (initial D05 scope confirmed): compare
+ownship plan/state with traffic trajectories over a configurable horizon, account
+for age/uncertainty, and report conflict interval, source and reason. A stale feed
+means traffic unknown, not clear. Separation/lookahead and loss-of-feed response
+are D07/D08. Automatic reroute/hold/RTL/land needs feasibility, fence, terrain,
+energy and command-authority checks plus separate evidence. A zero velocity
+command or RTL is not universally collision-safe. Simulated traffic is not
+real-world detect-and-avoid certification.
 
-If adoption happens, use the pinned fork-and-patch model (this submodule) and
-contribute the ArduPilot fixes upstream. Contributing the wire-semantics
-findings (golden frames, `MAV_CMD_DO_REPOSITION` command_long rejection,
-fence import vertex-count quirk) to pymavlink/ArduPilot test suites is a
-cheaper open-source contribution path that does not require adoption.
+## Tracker and sampling payloads
+
+Split tracker device firmware/hardware, tracker data adapter, C++ task state and
+operator presentation. Select the actual radio/GNSS/protocol at D04; receive
+positions independently of the vehicle link, track sequence/age/battery and
+identity, map gaps, and preserve task association across battery swaps.
+
+C++ payload operations bind authorization to task, target, output and expiry.
+Proposed states: safe, authorized, executing, verified, failed/unknown. Cancel,
+restart or takeover invalidates permission. Require observed attachment/sample
+feedback or explicit operator confirmation; an ACK only establishes command
+acceptance. Never automatically retry an uncertain irreversible action.
+
+Generic servo/relay/user-command paths currently bypass the dedicated
+release_payload interlock. G2/G6 must reserve hazardous channels and route all
+their access through the same policy. Hardware pulse timeout and safe power-loss
+behavior are required evidence; a ground-side timer cannot guarantee relay-off
+over a broken link. Do not grow Python payload decision logic.
+
+## Observability, security and scope ceilings
+
+Record bounded structured events: command/request/session, source, safety reason,
+state transition, telemetry age, traffic age, capability loss, payload outcome,
+dropped frames/queues, process restart and server receipt. Keep per-field units
+and clock provenance. Rotate logs, surface disk-full, protect credentials and
+animal location data, and retain sanitized replay artifacts for release gates.
+
+Security implementation gaps are explicit in [safety](safety.md) and
+[operations](operations.md). No authentication or audit guarantee is inherited
+merely by linking the library.
+
+debt: one aircraft command owner per task; revisit when CONOPS requires control
+of multiple real aircraft; then define per-aircraft ownership before adding
+fleet coordination.
+
+debt: advisory traffic baseline; revisit when CONOPS or approved autonomy
+requires maneuvers; then qualify bounded response logic with independent traffic
+and fault evidence.
+
+debt: one-command CLI for isolated operation; concurrency already triggers the
+ceiling; then add the G2 persistent runtime without replacing the core API.

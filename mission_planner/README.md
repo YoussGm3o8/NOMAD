@@ -22,6 +22,12 @@ reference assemblies:
 pixi run build-plugin
 ```
 
+This task can install/overwrite the local plugin; it is a deployment operation.
+Use `lint-plugin` and focused `test-plugin-*` tasks for non-deploying checks.
+The current core client spawns a local CLI. Direct gimbal, mode/parameter and
+fence paths remain; the integrated target needs one active command owner and
+explicit handover (G2). A remote core protocol is not implemented yet.
+
 Pure helper checks are available through the `test-plugin-*` Pixi tasks. See
 [the canonical architecture](../docs/architecture.md) and
 [development workflow](../docs/development.md) for ownership and verification.

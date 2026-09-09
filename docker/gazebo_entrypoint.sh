@@ -30,7 +30,7 @@ done
 export GZ_VERSION="${GZ_VERSION:-harmonic}"
 export PATH="${HOME}/.local/bin:/home/nomad/.local/bin:${PATH}"
 
-# Make the NOMAD ZED-2i model + worlds discoverable by gz sim alongside the
+# Make the NOMAD Gazebo models and worlds discoverable alongside the
 # ardupilot_gazebo resources (which the workspace install already exports).
 export GZ_SIM_RESOURCE_PATH="/opt/nomad/tools/sim/gazebo/models:/opt/nomad/tools/sim/gazebo/worlds:${GZ_SIM_RESOURCE_PATH}"
 

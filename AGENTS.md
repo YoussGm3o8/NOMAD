@@ -2,7 +2,8 @@
 
 NOMAD is a standalone system for monitoring and controlling ArduPilot vehicles.
 The target product is a small C++20 core with independent clients and adapters.
-The current Python edge service is transitional and must not grow new architecture.
+The working migration tree removes the Python edge service; remaining deployment
+references must be reconciled without recreating Python-owned vehicle decisions.
 Verify the source before trusting this document.
 
 ## Agent operating rules
@@ -58,10 +59,10 @@ NOMAD/
 └── infra/               # Deployment and network support
 ```
 
-Until the migration completes, `edge_core/`, `scripts/`, and the existing plugin
-remain transitional. Do not add new modules, service registries, REST layers, or
-parallel vehicle logic there. Put new core behavior in the C++ migration plan and
-keep legacy changes limited to safety, correctness, and necessary migration work.
+Until the migration completes, scripts and remaining plugin-owned vehicle paths
+need reconciliation. Do not recreate `edge_core/`, service registries, vehicle
+REST layers, or parallel vehicle logic. Put new core behavior in the C++ migration
+plan and keep legacy changes limited to safety, correctness, and migration work.
 
 ## Code rules
 

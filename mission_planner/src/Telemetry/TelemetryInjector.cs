@@ -10,7 +10,7 @@ namespace NOMAD.MissionPlanner
     /// <summary>
     /// Telemetry Injection for NOMAD Mission Planner Plugin.
     ///
-    /// Injects status updates from the Jetson into the Mission Planner HUD
+    /// Injects local NOMAD status updates into the Mission Planner HUD
     /// using MAVLink STATUSTEXT messages.
     ///
     /// Example messages:

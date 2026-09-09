@@ -28,11 +28,15 @@ float clamp(float value, float limit) {
 
 }  // namespace
 
+bool is_valid_velocity_limits(const VelocityLimits& limits) {
+    return has_valid_limits(limits);
+}
+
 VelocityDecision evaluate_velocity(
     const VelocityLimits& limits,
     const FlightConditions& conditions,
     const VelocityCommand& command) {
-    if (!has_valid_limits(limits)) {
+    if (!is_valid_velocity_limits(limits)) {
         return {false, RejectReason::invalid_limits, "velocity limits are invalid", std::nullopt};
     }
     if (!conditions.connected || !conditions.heartbeat_fresh) {

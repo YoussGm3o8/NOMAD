@@ -5,13 +5,13 @@
 # self-contained ROS2 Humble image (docker/Dockerfile.sim-ros) that compiles
 # the C++ nomad_core + nomad_ros adapter into a colcon workspace and ships
 # rclpy + pymavlink, then runs the real nomad_vehicle_node inside it against
-# an in-process MAVLink responder with VIO + cmd_vel publishers
+# an in-process MAVLink responder with generic test-VIO + cmd_vel publishers
 # (tests/ros/test_nomad_ros_integration.py).
 #
 # Runs on every PR and push that touches the C++ core, the ROS adapter, the
 # sim-ros image, or the integration test — CPU-only, no GPU needed. The
-# Tier-2 GPU image (docker/Dockerfile.sim-isaac, full Isaac ROS + ZED SDK +
-# nvblox) cannot run on hosted runners and is validated separately via a
+# Tier-2 GPU image (docker/Dockerfile.sim-isaac, Isaac ROS base) cannot run on
+# hosted runners and is validated separately via a
 # manual workflow_dispatch job in docker.yml (requires a self-hosted GPU runner).
 
 name: ros-sim
@@ -20,6 +20,8 @@ on:
   push:
     paths:
       - "CMakeLists.txt"
+      - ".gitmodules"
+      - "third_party/MAVSDK/**"
       - "src/**"
       - "include/**"
       - "ros2/**"
@@ -30,6 +32,8 @@ on:
   pull_request:
     paths:
       - "CMakeLists.txt"
+      - ".gitmodules"
+      - "third_party/MAVSDK/**"
       - "src/**"
       - "include/**"
       - "ros2/**"
@@ -62,6 +66,8 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       # Build the Tier-1 sim-ros image (compiles nomad_core + nomad_ros).
+      # The Phase A flag also compiles the optional MAVSDK smoke target in the
+      # same ROS image, covering the third supported build environment.
       # Cache is scoped to "sim-ros" so it does not evict the dev-image or
       # SITL caches.
       - name: Build nomad-sim-ros image
@@ -72,6 +78,8 @@ jobs:
           push: false
           load: true
           tags: nomad-sim-ros:latest
+          build-args: |
+            NOMAD_ENABLE_MAVSDK=ON
           cache-from: type=gha,scope=sim-ros
           cache-to: type=gha,mode=max,scope=sim-ros
 

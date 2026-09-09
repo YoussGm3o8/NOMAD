@@ -76,8 +76,8 @@ namespace NOMAD.MissionPlanner
             public bool DedupEnabled = true;
 
             // LTE
-            public int LteBindPort = 14560;          // we listen here for Jetson uplink (14560 to avoid RC default 14550)
-            public string LteRemoteHost = "";        // outbound to Jetson (empty = reply to LastRemote)
+            public int LteBindPort = 14560;          // LTE-side uplink (14560 avoids the RC default 14550)
+            public string LteRemoteHost = "";        // outbound LTE host (empty = reply to LastRemote)
             public int LteRemotePort = 0;
 
             // RadioMaster

@@ -53,8 +53,11 @@ float get_monotonic_seconds() {
 } // namespace
 
 Vehicle::Vehicle(mavlink::MavlinkConnection &connection, safety::WatchdogPolicy watchdog_policy,
-                 safety::GlobalFencePolicy fence_policy)
-    : connection_(connection), watchdog_policy_(watchdog_policy), fence_policy_(std::move(fence_policy)) {}
+                 safety::GlobalFencePolicy fence_policy, safety::VelocityLimits velocity_limits)
+    : connection_(connection),
+      watchdog_policy_(watchdog_policy),
+      fence_policy_(std::move(fence_policy)),
+      velocity_limits_(velocity_limits) {}
 
 Vehicle::~Vehicle() {
     {
@@ -136,7 +139,7 @@ CommandResult Vehicle::set_velocity(const safety::VelocityCommand &command) {
     const auto now = std::chrono::steady_clock::now();
     const auto state = connection_.get_state();
     const auto conditions = get_flight_conditions(state, now);
-    const auto decision = safety::evaluate_velocity({}, conditions, command);
+    const auto decision = safety::evaluate_velocity(velocity_limits_, conditions, command);
     if (!decision.allowed || !decision.setpoint.has_value()) {
         return {false, decision.message};
     }

@@ -8,9 +8,8 @@
 // Features:
 // - Full-page NOMAD control interface with tabs
 // - Embedded video streaming
-// - Jetson terminal access
-// - System health monitoring
-// - Dual-link MAVLink routing
+// - C++ core command boundary
+// - Direct MAVLink dual-link routing
 // - Configurable payload controls
 // ============================================================
 
@@ -40,10 +39,8 @@ namespace NOMAD.MissionPlanner
         private NotificationService _notificationService;
         private GeofenceConfig _geofenceConfig;               // Plugin-owned: survives NOMAD screen disposal
         private BoundaryMonitor _boundaryMonitor;             // Plugin-owned: alerts fire on every MP page
-        private DualLinkSender _sender;
         private MAVLinkConnectionManager _connectionManager;  // Dual link manager
-        private JetsonConnectionManager _jetsonConnectionManager;  // Jetson HTTP connectivity
-        private NomadJoystickService _joystickService;        // Physical joysticks → gimbal + ZED tilt
+        private NomadJoystickService _joystickService;        // Physical joysticks → gimbal + camera tilt
         private GimbalArrowKeyFilter _gimbalArrowKeyFilter;    // Mission Planner-wide arrow key nudges
         private SerialJoystickBridge _serialBridge;           // Python subprocess: serial → virtual Xbox 360
         private Form _popOutForm;                             // Pop-out window for NOMAD screen
@@ -71,22 +68,16 @@ namespace NOMAD.MissionPlanner
                 // Load configuration
                 _config = NOMADConfig.Load();
 
-                // Initialize centralized API service (must be before any component that uses HttpClient)
-                JetsonApiService.Initialize(_config);
-
                 // FlightModeController builds core clients from the same config
                 // (CoreExePath / CoreMavlinkEndpoint / CoreApiKey) so GuidedGoto
                 // and EmergencyLand route through the C++ core boundary.
                 FlightModeController.Initialize(_config);
                 OutputController.Initialize(_config);
 
-                // Initialize dual-link sender
-                _sender = new DualLinkSender(_config);
-
                 // Notification service runs plugin-wide so battery / GPS
                 // alerts (including audio + TTS) fire regardless of which NOMAD tab
                 // is open — and even when the user is on a non-NOMAD MP screen.
-                _notificationService = new NotificationService(null, _sender);
+                _notificationService = new NotificationService();
                 NotificationService.Shared = _notificationService;
                 _notificationService.StartMonitoring();
 
@@ -112,10 +103,6 @@ namespace NOMAD.MissionPlanner
 
                 // Startup chime + spoken welcome (fires once per process).
                 AudioAlerts.PlayWelcomeOnce();
-
-                // Initialize Jetson connection manager for non-blocking UI
-                _jetsonConnectionManager = new JetsonConnectionManager(_config);
-                _jetsonConnectionManager.StartPolling();
 
                 // Initialize MAVLink dual link connection manager
                 if (_config.DualLinkEnabled && _config.RouterEnabled)
@@ -166,7 +153,7 @@ namespace NOMAD.MissionPlanner
                             $"NOMAD Plugin v{Version} loaded (debug mode).\n\n" +
                             $"Click NOMAD in the menu bar to open the interface;\n" +
                             $"hover it for tools and settings.\n\n" +
-                            $"Jetson IP: {_config.EffectiveIP}",
+                            $"C++ core endpoint: {_config.CoreMavlinkEndpoint}",
                             "NOMAD"
                         );
                     });
@@ -269,11 +256,6 @@ namespace NOMAD.MissionPlanner
                 _notificationService?.Dispose();
                 _notificationService = null;
 
-                // Stop Jetson connection manager
-                _jetsonConnectionManager?.StopPolling();
-                _jetsonConnectionManager?.Dispose();
-                _jetsonConnectionManager = null;
-
                 // Stop connection manager monitoring
                 _connectionManager?.StopMonitoring();
                 _connectionManager?.Dispose();
@@ -304,8 +286,6 @@ namespace NOMAD.MissionPlanner
                 // ignore disposal errors
             }
 
-            _sender?.Dispose();
-            JetsonApiService.Shutdown();
             return true;
         }
 
@@ -388,7 +368,8 @@ namespace NOMAD.MissionPlanner
                 {
                     _config = form.Config;
                     _config.Save();
-                    _sender.UpdateConfig(_config);
+                    FlightModeController.Initialize(_config);
+                    OutputController.Initialize(_config);
                     ApplyDualLinkSettings();
                     try { _serialBridge?.UpdateConfig(_config); }
                     catch (Exception ex) { Log.Error($"Serial bridge update failed — {ex.Message}"); }

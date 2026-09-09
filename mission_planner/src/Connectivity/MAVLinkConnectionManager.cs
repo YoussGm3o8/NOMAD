@@ -110,7 +110,6 @@ namespace NOMAD.MissionPlanner
         /// </summary>
         public class ConnectionConfig
         {
-            public string JetsonTailscaleIP { get; set; } = "";
             public int LtePort { get; set; } = 14560;
             public string LteRemoteHost { get; set; } = "";
             public int LteRemotePort { get; set; } = 0;

@@ -1,183 +1,100 @@
 # Development
 
-NOMAD is moving toward a C++20 core with independent ROS 2, Python, and Mission
-Planner clients. The current Python edge service remains a transitional test
-surface until its replacement passes the migration gates.
+The current tree builds a C++20 library and CLI with optional ROS 2 and Mission
+Planner adapters. Edge Core source is deleted; some task/CI/deployment references
+still need G1 repair. Source status and evidence belong in [migration](migration.md).
 
-## Prerequisites
+## Prerequisites and verified local checks
 
-- Git;
-- Pixi for the repository development environment;
-- CMake and a C++20 compiler for the core;
-- Docker for reproducible SITL and ROS 2 tests;
-- Mission Planner and Visual Studio only for plugin work.
+Use Git, Pixi, CMake and a C++20 compiler. The current codec build also requires
+the pinned ArduPilot MAVLink submodule and Python/mavgen. This is a build-time
+dependency; C++ runtime use does not require Python, ROS or a GPU.
 
-## Target workflow
-
-```bash
-pixi run build-core
+~~~sh
 pixi run test-core
 pixi run test-python
 pixi run lint
 pixi run format-check
-pixi run docs-build
-```
-
-Use `pixi run dev` and `pixi run test-fast` while the transitional Python path is
-still required. Do not add new product behavior to that path.
-
-## C++ layout
-
-```text
-include/nomad/       Public headers
-src/                 Implementation and thin CLI
-tests/               CTest and integration tests
-examples/            Runnable examples
-```
-
-Keep each file focused. A public header should expose the smallest useful API.
-The CLI should call named core operations rather than contain business logic.
-
-## CMake
-
-The core has one library target and one CLI target in the MVP:
-
-```bash
-cmake -S . -B build/core -DCMAKE_BUILD_TYPE=Debug
-cmake --build build/core
-ctest --test-dir build/core --output-on-failure
-```
-
-The local C++ status smoke test is:
-
-```bash
-pixi run core-sitl-status
-```
-
-The C++ core must configure without ROS 2, Python, Mission Planner, or hardware.
-ROS 2 builds are separate adapter packages and depend on the core library.
-
-## CLI authentication (SR-SEC-02/03)
-
-Actuation verbs (`arm`, `disarm`, `mode`, `takeoff`, `land`, `rtl`, and the
-`*-demo` commands) are refused before any socket work unless `NOMAD_API_KEY` is
-set; `connect` and `status` keep a no-key local fallback. Accepted and refused
-actuation attempts emit one stderr line each:
-
-```text
-audit command=arm result=refused auth=none reason=missing_api_key
-audit command=arm result=accepted auth=api-key
-```
-
-The `core-sitl-*` pixi tasks export the development-simulation key from
-`config/nomad.env.example`; deployed machines set a real generated key there
-(`config/nomad.env`).
-
-## Tests
-
-### C++ unit tests
-
-Use fake transports to test:
-
-- MAVLink packet conversion;
-- heartbeat and connection state;
-- telemetry conversion;
-- command validation;
-- acknowledgement handling;
-- vehicle operations;
-- mission execution;
-- timeout and shutdown behavior.
-
-### SITL integration tests
-
-Use ArduPilot SITL to prove the real loop:
-
-```bash
-pixi run sitl
-```
-
-The SITL suite must cover heartbeat, telemetry, arm, mode changes, takeoff, land,
-RTL, command failure, and link loss. The C++ telemetry smoke test is run with:
-
-```bash
-pixi run core-sitl-status
-pixi run core-sitl-command-flow
-pixi run core-sitl-mission
-pixi run core-sitl-velocity-watchdog
-```
-
-The command-flow task runs the C++ CLI through mode, arm, takeoff, RTL, land,
-and disarm, polling `status` after each transition. The mission task runs the
-C++ `MissionExecutor` through GUIDED, arm, takeoff, RTL, land, and disarm. The
-velocity watchdog task proves an active setpoint stops after command timeout.
-Both expect a fresh SITL vehicle in the required starting state.
-
-It expects the ArduPilot Docker service to emit a host UDP copy on
-`NOMAD_CORE_SITL_PORT` (default `14570`). Run safety scenarios only after unit
-tests cover invalid and boundary inputs.
-
-To watch any SITL run live, connect Mission Planner as a passive observer to
-the dev stack's operator link at **TCP `127.0.0.1:5762`** (CONNECT → TCP →
-127.0.0.1:5762). The link accepts multiple clients, so it never disturbs the
-scenario or the core CLI; the `core-sitl-*` tasks print this hint on start.
-Details: `tests/sitl/README.md`.
-
-### ROS 2 tests
-
-ROS 2 tests belong in the adapter package. Test message translation, callback
-behavior, parameter loading, and shutdown without putting ROS dependencies in the
-core.
-
-### Python tests
-
-Retained Python tests cover CV, ML, simulation, log analysis, and transitional
-compatibility until each legacy subsystem is deleted. Avoid expanding tests for
-architecture that the migration plan removes.
-
-### Mission Planner tests
-
-Run the framework-free C# tests for pure client and safety helpers on Windows.
-The full plugin build requires Mission Planner reference assemblies.
-
-## Code quality
-
-The project uses language-native tools:
-
-- C++: `clang-format`, `clang-tidy`, CMake, and CTest;
-- Python: Ruff, mypy where configured, and pytest;
-- shell: ShellCheck;
-- C#: the existing compiler and focused test scripts;
-- docs: ProperDocs strict build.
-
-The shared rules are simple: functions target 40 logical lines, files above 500
-lines are refactoring debt, imports are ordered, and comments explain only
-non-obvious decisions.
-
-## Size checks
-
-The size report excludes generated, build, lock, and vendored files. Existing
-files above 500 lines are migration debt. New or modified files above 500 lines
-fail unless a temporary reviewed exception names an owner and removal issue.
-
-Run:
-
-```bash
-pixi run line-report
 pixi run complexity-check
-```
+pixi run docs-build
+~~~
 
-## Change workflow
+test-core configures/builds before CTest; build-core builds without tests.
+format-check is read-only with respect to source; format rewrites source and is
+not appropriate for a documentation-only review of unrelated migration work.
+docs-build is the strict ProperDocs site check.
 
-1. Identify the owning layer before editing.
-2. Trace callers and current data flow.
-3. Delete unused code before adding abstractions.
-4. Keep core decisions independent of adapters.
-5. Add the smallest test that fails when the behavior breaks.
-6. Update the canonical document if ownership or status changed.
-7. Run focused checks, then the full relevant suite.
+Do not use dev, dev-build, test-api or the old test coverage task as current
+quickstarts: they reference deleted Edge Core files. Compose and CI still carry
+deleted-image references. dev-up/sitl startup must be repaired and verified at
+G1; a task name existing in pixi.toml is not evidence that it works.
 
-## Hardware boundary
+## Test layers
 
-Hardware is tested last. A feature is not complete because it works on a connected
-drone. It must first work with a fake transport, then against SITL, then on the
-actual vehicle with explicit operational safeguards.
+| Layer | Current checks | Required expansion |
+|---|---|---|
+| C++ | Nine CTest targets: core, codec, safety, output, UDP, zero, VIO, limits, fence | Authority, per-field freshness, cancellation, MAVSDK and vehicle-class coverage |
+| Python | pytest includes client contracts, traceability, harnesses, profiles and video tools | Mock competition server/traffic, perception replay and tracker fixtures |
+| ROS | ros2/nomad_ros translation plus tests/ros integration | Bounded callbacks, acquisition-time/frame validation, command-owner integration |
+| Mission Planner | lint-plugin and test-plugin-* helper scripts | Ownership, capabilities, stale displays, action lifecycle and replay |
+| SITL | core-sitl-* and sitl-fence | Current artifacts, QuadPlane transitions, competition scenarios and independent faults |
+| Hardware | No evidence collected in this review | Selected board/sensor/radio/payload/endurance and task gates |
+
+Tests/ros and live SITL checks are environment-gated; report skips explicitly.
+The checked cpp_traceability block only proves references exist. It does not
+prove every safety requirement is covered or satisfied.
+
+## SITL discipline
+
+Use an isolated identified simulator with known state. Serialize scenarios that
+share vehicle state. Every important test establishes state, performs one action,
+observes authoritative outcome, asserts independent conditions and restores
+state when required. A relay ACK is not physical sample collection, and LAND
+mode is not a completed landing.
+
+Existing tasks: core-sitl-status, core-sitl-command-flow, core-sitl-mission,
+core-sitl-velocity-watchdog, core-sitl-geofence, core-sitl-payload,
+core-sitl-link-loss, core-sitl-link-recovery, core-sitl-zero-delivery,
+core-sitl-gcs-heartbeat and sitl-fence. Once G1 startup is repaired, use them
+against the configured isolated endpoint with no hardware path attached.
+
+Add a pinned ArduPlane/QuadPlane SITL path for Task 1. Copter mode numbers and
+velocity-stop behavior cannot stand in for transition, cruise and VTOL landing
+tests. Gazebo/Isaac are optional sensor-evidence tools; they are not prerequisites
+for basic unit or server-contract tests.
+
+## Adapter and optional build checks
+
+MAVSDK build-core-mavsdk and mavsdk-phase-a-smoke are opt-in Phase A tasks; the
+latter requires live SITL. They do not switch production to MAVSDK. Follow
+[MAVSDK parity gates](mavsdk-adoption.md).
+
+ROS builds use the separate ament package and supported image; test-ros-integration
+runs its real adapter tests. Current source still has blocking callbacks; passing
+existing tests does not prove the target callback deadline contract.
+
+Mission Planner uses Windows/.NET Framework 4.8 and its reference assemblies.
+Use lint-plugin and relevant test-plugin-* tasks for non-deploying checks.
+build-plugin invokes a script that can install/overwrite the local plugin;
+inspect it and obtain deployment authorization before running it. Do not confuse
+a pure helper test with full plugin integration.
+
+## Contribution and evidence workflow
+
+1. Read AGENTS and deeper guidance; trace owning symbols, callers and tests.
+2. Define a concrete falsification test and keep one active work item.
+3. Make one focused change; preserve unrelated staged/unstaged work.
+4. Run focused tests, then full relevant checks; report every skip/failure.
+5. Review the final diff and record requirement, artifact/config identity,
+   independent observations, measured values, thresholds and limitations.
+6. Update the canonical subject owner; avoid copying status into several plans.
+
+Use a focused branch for implementation and the repository commit prefix style.
+Do not stage, commit, push or deploy without an explicit request. MAVSDK
+implementation needs a focused merge request with unit and integration evidence;
+this documentation review only plans that work.
+
+Size/complexity rules and technical-debt format remain in AGENTS. Keep C++ public
+headers in include/nomad, implementation in src, and ROS/Python/vendor types out
+of the core API. Retained Python is for tools, perception and tests, never a
+parallel vehicle state machine.

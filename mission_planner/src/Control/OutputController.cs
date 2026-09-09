@@ -23,6 +23,21 @@ namespace NOMAD.MissionPlanner
         private static NOMADConfig _config;
 
         /// <summary>
+        /// GCS-side audit record for a core-routed actuation command. The core
+        /// CLI already emits the authoritative machine-readable line
+        /// (audit command=... result=... auth=...) on its own stderr; this
+        /// companion Log line records the outcome where the operator and the
+        /// plugin's log adapters can see it.
+        /// </summary>
+        private static void Audit(string command, bool accepted, string detail)
+        {
+            // The command names here are the core CLI verbs, matching the
+            // core's own audit lines so a log can be correlated end to end.
+            var outcome = accepted ? "accepted" : "failed";
+            Log.Info($"audit command={command} result={outcome} auth=api-key {detail}");
+        }
+
+        /// <summary>
         /// Called at plugin load so output commands can build the core client
         /// (same wiring as FlightModeController).
         /// </summary>
@@ -60,13 +75,16 @@ namespace NOMAD.MissionPlanner
             if (client == null)
             {
                 Log.Warn("Servo command: NOMAD core not configured.");
+                Audit("servo", false, "reason=core_not_configured");
                 return false;
             }
             if (client.Servo(channel, pwmUs))
             {
+                Audit("servo", true, $"channel={channel} pwm_us={pwmUs}");
                 return true;
             }
             Log.Warn("Servo command: core refused or could not reach the vehicle.");
+            Audit("servo", false, $"channel={channel} pwm_us={pwmUs} reason=core_refused");
             return false;
         }
 
@@ -85,13 +103,16 @@ namespace NOMAD.MissionPlanner
             if (client == null)
             {
                 Log.Warn("Relay command: NOMAD core not configured.");
+                Audit("relay", false, "reason=core_not_configured");
                 return false;
             }
             if (client.SetRelay(relayNumber, on))
             {
+                Audit("relay", true, $"relay={relayNumber} state={(on ? 1 : 0)}");
                 return true;
             }
             Log.Warn("Relay command: core refused or could not reach the vehicle.");
+            Audit("relay", false, $"relay={relayNumber} state={(on ? 1 : 0)} reason=core_refused");
             return false;
         }
 

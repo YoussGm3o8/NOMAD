@@ -21,7 +21,7 @@ namespace NOMAD.MissionPlanner
                 10, y, Color.FromArgb(180, 180, 180));
             y += 18;
             AddLabel(tab,
-                "the other drives the ZED tilt servo. RC override is never sent.",
+                "the other drives the camera tilt servo. RC override is never sent.",
                 10, y, Color.FromArgb(180, 180, 180));
             y += 24;
 
@@ -61,25 +61,25 @@ namespace NOMAD.MissionPlanner
                 GimbalController.MaxRateDegSec = (float)_numJoyGimbalMaxRate.Value;
             y += 36;
 
-            // ZED channel
-            AddSectionLabel(tab, "ZED Tilt Servo", ref y);
+            // Camera tilt channel
+            AddSectionLabel(tab, "Camera Tilt Servo", ref y);
 
-            _chkJoyZedEnabled = AddCheckBox(tab, "Enable", 20, y, Color.LimeGreen);
+            _chkJoyCameraTiltEnabled = AddCheckBox(tab, "Enable", 20, y, Color.LimeGreen);
             y += 28;
 
             AddLabel(tab, "Device:", 20, y);
-            _cmbJoyZedDevice = AddComboBox(tab, 90, y, 290, deviceList);
+            _cmbJoyCameraTiltDevice = AddComboBox(tab, 90, y, 290, deviceList);
             y += 28;
 
             AddLabel(tab, "Tilt axis:", 20, y);
-            _cmbJoyZedTiltAxis = AddComboBox(tab, 95, y, 80, axes);
-            _chkJoyZedTiltInvert = AddCheckBox(tab, "invert", 185, y, Color.White);
+            _cmbJoyCameraTiltAxis = AddComboBox(tab, 95, y, 80, axes);
+            _chkJoyCameraTiltInvert = AddCheckBox(tab, "invert", 185, y, Color.White);
             y += 28;
 
             AddLabel(tab, "Deadzone:", 20, y);
-            _numJoyZedDeadzone = AddNumericUpDown(tab, 95, y, 60, 0.00m, 0.50m, 0.08m, 2);
+            _numJoyCameraTiltDeadzone = AddNumericUpDown(tab, 95, y, 60, 0.00m, 0.50m, 0.08m, 2);
             AddLabel(tab, "Max rate (us/s):", 175, y);
-            _numJoyZedMaxRate = AddNumericUpDown(tab, 280, y, 70, 50, 4000, 400);
+            _numJoyCameraTiltMaxRate = AddNumericUpDown(tab, 280, y, 70, 50, 4000, 400);
             y += 36;
 
             _btnJoyRefreshDevices = new Button
@@ -96,14 +96,14 @@ namespace NOMAD.MissionPlanner
                 var fresh = NomadJoystickService.EnumerateDevices();
                 var freshList = BuildDeviceComboList(fresh);
                 string keepG = _cmbJoyGimbalDevice.SelectedItem?.ToString();
-                string keepZ = _cmbJoyZedDevice.SelectedItem?.ToString();
+                string keepCameraTilt = _cmbJoyCameraTiltDevice.SelectedItem?.ToString();
                 string keepS = _cmbSwitchDevice?.SelectedItem?.ToString();
                 _cmbJoyGimbalDevice.Items.Clear();
-                _cmbJoyZedDevice.Items.Clear();
+                _cmbJoyCameraTiltDevice.Items.Clear();
                 _cmbJoyGimbalDevice.Items.AddRange(freshList);
-                _cmbJoyZedDevice.Items.AddRange(freshList);
+                _cmbJoyCameraTiltDevice.Items.AddRange(freshList);
                 SetComboBoxValue(_cmbJoyGimbalDevice, keepG);
-                SetComboBoxValue(_cmbJoyZedDevice, keepZ);
+                SetComboBoxValue(_cmbJoyCameraTiltDevice, keepCameraTilt);
                 if (_cmbSwitchDevice != null)
                 {
                     _cmbSwitchDevice.Items.Clear();

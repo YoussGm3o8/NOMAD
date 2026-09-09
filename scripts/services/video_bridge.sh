@@ -17,9 +17,8 @@
 # is idempotent.
 #
 # Depends on: edge_core (for the API), isaac_ros_container (to host the bridge
-# process). Does NOT require zed_wrapper to be up — but with no ZED topics
-# available, Edge Core's start call will return 503 and this script will
-# retry.
+# process). The bridge remains an independent video adapter; a camera or
+# estimator provider is not part of the vehicle-control baseline.
 # =============================================================================
 set -u
 SERVICE="video-bridge"

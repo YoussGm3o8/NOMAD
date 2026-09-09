@@ -3,11 +3,13 @@
 #include "nomad/mavlink/udp_connection.hpp"
 #include "nomad/mission/executor.hpp"
 #include "nomad/safety/fence_config.hpp"
+#include "nomad/safety/velocity_config.hpp"
 #include "nomad/safety/watchdog.hpp"
 #include "nomad/vehicle/vehicle.hpp"
 
 #include <charconv>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -45,7 +47,8 @@ struct Arguments {
 };
 
 void print_usage() {
-    std::cout << "Usage: nomad <connect|status|arm|disarm|mode|takeoff|goto|land|rtl|servo|relay|motor-test|gimbal-config|user-command|mission-demo|velocity|velocity-demo|fence-demo|payload-demo> "
+    std::cout << "Usage: nomad <connect|status|arm|disarm|mode|takeoff|goto|land|rtl|servo|relay|motor-test|"
+                 "gimbal-config|user-command|mission-demo|velocity|velocity-demo|fence-demo|payload-demo> "
                  "[value] [--endpoint udpin:host:port]\n";
     std::cout << "goto requires: <latitude> <longitude> <altitude_m>\n";
     std::cout << "servo <channel> <pwm_us> | relay <number> <0|1> | motor-test <instance> <pwm_us> <timeout_s> | "
@@ -58,7 +61,7 @@ std::optional<float> parse_float(std::string_view value) {
     std::string copy(value);
     char *end = nullptr;
     const auto parsed = std::strtof(copy.c_str(), &end);
-    if (end == copy.c_str() || *end != '\0') {
+    if (end == copy.c_str() || *end != '\0' || !std::isfinite(parsed)) {
         return std::nullopt;
     }
     return parsed;
@@ -411,7 +414,10 @@ int run_command(const Arguments &arguments) {
     // before transmission; a malformed configured fence fails closed.
     const auto fence_policy = nomad::safety::load_fence_policy(std::getenv("NOMAD_FENCE_POLYGON"),
                                                                std::getenv("NOMAD_FENCE_MARGIN_M"));
-    nomad::vehicle::Vehicle vehicle(connection, {}, fence_policy);
+    const auto velocity_limits = nomad::safety::load_velocity_limits(
+        std::getenv("NOMAD_VELOCITY_MAX_XY"), std::getenv("NOMAD_VELOCITY_MAX_Z"),
+        std::getenv("NOMAD_VELOCITY_MAX_YAW_RATE"));
+    nomad::vehicle::Vehicle vehicle(connection, {}, fence_policy, velocity_limits);
     if (arguments.command == "arm") {
         return print_result(vehicle.arm());
     }
@@ -467,7 +473,8 @@ int run_command(const Arguments &arguments) {
     if (arguments.command == "fence-demo") {
         return run_fence_demo(vehicle);
     }
-    if (arguments.command == "payload-demo" && arguments.relay_number.has_value() && arguments.duration_seconds.has_value()) {
+    if (arguments.command == "payload-demo" && arguments.relay_number.has_value() &&
+        arguments.duration_seconds.has_value()) {
         return run_payload_demo(vehicle, *arguments.relay_number, *arguments.duration_seconds);
     }
     return EXIT_FAILURE;

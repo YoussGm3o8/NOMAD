@@ -8,7 +8,7 @@
 // buttons send MAV_CMD_DO_MOUNT_CONFIGURE. Works with any DO_MOUNT_CONTROL
 // mount configured as an MNTx_* mount on ArduPilot.
 //
-// This is independent from the ZED tilt servo (PayloadControlPanel), which is
+// This is independent from the camera tilt servo (PayloadControlPanel), which is
 // just a SERVOx output. The command construction lives in GimbalCommand and the
 // shared send/integrator in GimbalController, so this window is pure UI.
 //

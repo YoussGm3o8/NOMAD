@@ -119,7 +119,14 @@ def test_unknown_command_prints_usage_and_fails() -> None:
     "arguments",
     [
         ("takeoff", "banana"),  # altitude must parse as a float
+        ("takeoff", "nan"),  # non-finite altitude must fail before socket work
+        ("takeoff", "inf"),  # non-finite altitude must fail before socket work
         ("mode", "1x"),  # mode must parse as a decimal
+        ("goto", "nan", "9.0", "5"),  # non-finite latitude must fail before socket work
+        ("goto", "45.0", "inf", "5"),  # non-finite longitude must fail before socket work
+        ("goto", "45.0", "9.0", "nan"),  # non-finite altitude must fail before socket work
+        ("velocity", "--vx", "nan", "--duration", "1"),  # non-finite velocity must fail before socket work
+        ("velocity", "--vx", "1", "--duration", "inf"),  # non-finite duration must fail before socket work
         ("takeoff", "5", "9"),  # extra positional argument
         ("mode", "4", "extra"),  # extra positional argument
         ("goto", "45.0", "9.0"),  # goto requires latitude, longitude, and altitude

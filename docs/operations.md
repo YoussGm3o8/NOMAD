@@ -1,211 +1,151 @@
 # Operations
 
-This document covers the target operational model and the current transitional
-workflow. Real hosts, credentials, and absolute paths belong in local ignored
-configuration only.
+Target procedures and current limitations, 2026-09-08. Profile selection does not
+authorize hardware use or prove readiness. [Migration](migration.md) owns gates;
+[architecture](architecture.md) owns component boundaries.
 
-## Target runtime
+## Task and deployment matrix
 
-```text
-nomad CLI or client
-       |
-NOMAD core process or library
-       |
-MAVLink over serial, UDP, or TCP
-       |
-ArduPilot
-```
+| Task/profile | Aircraft-side functions | Ground-side functions | Qualification status |
+|---|---|---|---|
+| Task 1 / groundstation_gpu | Proposed lightweight VTOL; Walksnail FPV camera; Pi Zero for backup LTE and possibly video; Here4 GNSS | GPU CV, video capture/display, C++ core, Mission Planner and server adapter | User direction; video capture, RF bandwidth, QuadPlane support and endurance unqualified |
+| Task 2 / onboard_companion candidate | Under-15-kg quad; optional Jetson if useful autonomy emerges; tracker/tagging/sampling payload | Mission Planner, operator approvals, competition server exchange | Jetson placement and payload mechanism TBD |
+| groundstation_minimal | ArduPilot, navigation and selected command/telemetry link | C++ core and clients; lightweight server exchange when implemented | Product requirement; no ROS/perception dependency |
+| Development | Isolated Copter and future QuadPlane SITL | Core, fake/mock services and passive observers | Existing unit suites pass; startup wiring needs G1 repair |
 
-The MVP uses a one-command CLI. A persistent companion process and remote client
-protocol are deferred until an actual client needs them.
+"15 kg class" does not relax the preview requirement of below 15 kg including
+payload. Weigh every battery/payload/compute configuration and budget margin.
+Task 1 has no battery swap; Task 2 may swap after landing and disarming.
 
-## Local build and SITL
+A Cube Orange or custom ArduPilot controller is under consideration. UART/PWM
+availability, power budget, timing, firmware support and channel mapping require
+board-specific qualification. Here4 with an RTK base is the stated navigation
+choice; verify correction transport, fix state and age, and behavior without
+RTK corrections. Walksnail receiver capture/export interface and any second
+camera remain to be selected/tested. The plan has no ZED dependency.
 
-The target workflow is:
+## Profile and configuration lifecycle
 
-```bash
-pixi run build-core
-pixi run test-core
-pixi run sitl
-# With the SITL stack running:
-pixi run core-sitl-status
-pixi run core-sitl-command-flow
-pixi run core-sitl-mission
-pixi run core-sitl-velocity-watchdog
-```
+The profile files and scripts/profile.py exist. The three product names are
+onboard_companion, groundstation_gpu and groundstation_minimal. dev, drone and
+the older groundstation template are migration artifacts, not extra product
+architectures. Run profile-list to inspect template names; profile-load writes
+ignored runtime configuration and also changes Mission Planner configuration.
+Do not load a profile just to read it.
 
-SITL should expose a local endpoint such as `udp:127.0.0.1:<port>` or a TCP
-endpoint chosen by the simulator. The repository Docker stack emits a dedicated
-host UDP telemetry copy on `NOMAD_CORE_SITL_PORT` (default `14570`) for the C++
-status smoke test. Use placeholders in scripts and documentation; do not commit
-a real address.
+The templates are not deployment-ready: retired keys, development credentials,
+endpoint inconsistencies and unused autostart/capability flags remain (C10–C12).
+NOMAD_VIO_SOURCE_REQUIRED=false does not bypass the C++ VIO-conditioned velocity
+gate. A ready checkbox or true environment value does not establish a healthy
+sensor. G1/G3 must validate effective configuration end to end.
 
-Until the C++ core is ready, the current transitional stack is available:
+Target activation: choose profile, aircraft/firmware identity, single core host,
+command transport, navigation capability, video source, payload mapping and
+server config independently; validate them; then activate while disarmed.
+Reject invalid/missing required settings. Record sanitized configuration version
+and capabilities; keep real settings/credentials in ignored local storage.
 
-```bash
-pixi run dev
-pixi run dev-up
-pixi run test-fast
-pixi run dev-down
-```
+## Connection behavior
 
-The transitional stack runs the Python Edge Core and ArduPilot SITL. It is a
-migration tool, not the target product architecture.
+Current C++ transport accepts udp, udpin and udpout endpoint schemes, such as
+udpin:127.0.0.1:<port>. Native serial/TCP are future MAVSDK deployment capabilities,
+not working current CLI transports. Routers bridge selected physical links to
+UDP. Core placement does not follow automatically from compute placement.
 
-## Connection types
+NOMAD_RELAY_ADDRESS optionally selects the pre-latch GCS announcement destination.
+The existing UDP code emits 1 Hz GCS heartbeats while waiting/polling; after peer
+latching it uses the peer. Malformed overrides fail connection. This heartbeat
+is unrelated to the competition's required 1 Hz telemetry upload.
 
-The core API must not change when the transport changes. Active velocity control
-also owns a fail-closed watchdog: missing commands, stale heartbeat, disarm, mode
-loss, or stale/low-confidence VIO send a zero setpoint and stop the session.
+For remote core placement, a secure network and an authenticated client protocol
+are both required; the latter is unimplemented. Until G2, use one explicitly
+selected standalone writer with exclusive test ownership. Running the ROS node
+and plugin-spawned CLI simultaneously is not a qualified integration.
 
-The core API must not change when the transport changes:
+LTE via Pi Zero is the user's proposed Task 1 backup link, possibly carrying
+video. The primary command/telemetry link is D09. A link budget must separate
+command latency, telemetry, RTK corrections and optional video; LTE/video load
+must not starve safety messages. Independent RC and a second telemetry path
+must be assessed for shared power, antenna, spectrum and router failures.
 
-```text
-serial:<device>:<baud>
-udpin:<host>:<port>
-udpout:<host>:<port>
-tcp:<host>:<port>
-```
+## Startup, degradation and recovery target
 
-Use environment variables or local configuration for device paths, hosts, ports,
-keys, and deployment-specific limits. Defaults are for local development only.
+1. Establish physical safety, correct aircraft and firmware, configuration
+   version, selected core owner and manual control authority.
+2. Start routing and the core; verify ownship identity, fresh individual state,
+   reviewed limits, fence readback and payload-safe state.
+3. Start only selected adapters. Verify camera acquisition, clocks/calibration,
+   CV/VIO/video health, tracker feedback and server connectivity as required.
+4. Display capability reasons and ages; permit only missions whose prerequisites
+   are met. Obtain explicit payload permission separately.
+5. Record mission state and evidence; monitor data age, link margins and energy.
 
-`NOMAD_RELAY_ADDRESS` (optional, `udp`/`udpin`/`udpout:host:port`) overrides where
-the pre-latch GCS heartbeat is sent. UDP relays such as mavlink-router and
-MAVProxy only stream a leg after the endpoint announces itself, so the core emits
-a 1 Hz GCS heartbeat until the first vehicle datagram latches the peer. The
-announcement target defaults to the configured endpoint (a wildcard `0.0.0.0`
-bind address falls back to `127.0.0.1`), which works when the relay shares the
-host loopback. Set `NOMAD_RELAY_ADDRESS` when the relay lives behind a separate
-gateway IP (Docker Desktop's UDP proxy, LTE routers). A malformed value fails
-`connect()` closed — a silent wrong target would strand the link behind a relay
-that never opens. Once a vehicle datagram latches the peer, the override stops
-applying; replies go to the latched address.
-
-## Companion deployment
-
-The eventual companion deployment is one core process plus only the adapters that
-a deployment uses. Systemd may manage that process, but a separate unit is not
-created for every internal responsibility.
-
-Required deployment values belong in a local ignored file such as
-`config/nomad.env`. The committed `config/nomad.env.example` contains placeholders
-and safe development defaults only.
-
-Do not put Tailscale, LTE, Docker, ZED, or ROS 2 assumptions in the C++ core. They
-are deployment concerns.
-
-## Deployment matrix
-
-The same core serves every configuration; only the link endpoints and the set of
-running services differ. Profiles live in `config/profiles/` and are loaded with
-`nomad profile load <name>` (or `python scripts/profile.py load <name>`).
-
-| Configuration | Core host | Drone side | Ground-side links | Profile |
-|---|---|---|---|---|
-| Jetson on drone | Drone Jetson | Jetson runs core + adapters | Tailscale/LTE UDP from drone | `drone` |
-| Ground-station hosted | GCS computer/Jetson | RPi Zero + LTE + Tailscale (mavlink-router only) | LTE UDP + ELRS serial, aggregated | `groundstation` |
-| ELRS-only degraded | GCS computer/Jetson | RPi optional (LTE absent) | ELRS serial only | `groundstation` |
-| Local development | Host | SITL container | Docker UDP copy | `dev` |
-
-### Drone-side LTE bridge (Raspberry Pi Zero or similar)
-
-The bridge is configuration, not product code: install Tailscale, then run
-mavlink-router with two endpoints — the FC serial port and a UDP endpoint
-reachable by the ground station over Tailscale. Example
-`mavlink-routerd` config (values are placeholders):
-
-```ini
-[General]
-TcpServerPort=5760
-ReportStats=false
-
-[UdpEndpoint lte]
-Address=0.0.0.0
-Port=14550
-
-[SerialEndpoint fc]
-Device=/dev/ttyAMA0
-Baud=921600
-```
-
-### Ground-side link aggregation
-
-- Linux GCS: `mavlink-router` receives the Tailscale UDP endpoint and the ELRS
-  serial device and forwards both into the aggregated UDP port the core and
-  Mission Planner consume.
-- Windows GCS: the plugin's `GroundLinkRouter` performs the same aggregation
-  and failover natively.
-
-The C++ core never switches transports itself. It binds one endpoint; the
-aggregator decides which physical link carries the traffic. Both links down
-means no heartbeats, and the core fails closed (SR-LNK-*) and resumes normal
-operation as soon as a link returns.
-
-### Degraded-link semantics
-
-"The system still works for the available controls" means exactly this:
-
-- one link up: commands and telemetry flow normally;
-- both links down: the core refuses commands, stops active velocity with a
-  zero setpoint, and reports disconnected;
-- a link returns: heartbeats resume and the core operates normally again.
-
-The `core-sitl-link-recovery` scenario proves the last two points against
-SITL by dropping and restoring the UDP stream to a live client.
-
-## Ground station
-
-Mission Planner is one client. A deployment may use its plugin for status,
-telemetry, missions, video, and operator controls. The plugin must connect through
-the NOMAD client boundary and must not duplicate core vehicle decisions.
-
-A future GCS can replace Mission Planner without changing the core.
-
-## ROS 2 deployment
-
-ROS 2 runs as a separate adapter package. Nodes use standard messages, YAML
-parameters, and launch files. The adapter may depend on the core library; the core
-must not depend on the ROS installation.
-
-The adapter boundary is useful for ZED, Nav2, nvblox, and perception workloads,
-but the core should remain usable without those systems.
-
-## Networking
-
-Remote operation may use a secure network such as Tailscale, LTE, or another VPN.
-NOMAD does not hard-code one technology. Network configuration belongs outside
-the core and must be authenticated and logged where commands cross a trust
-boundary.
-
-## Logging
-
-Normal logs should explain connection changes, command results, mission state,
-errors, and safety decisions. Do not log high-frequency telemetry at `INFO`.
-Keep logs local to the deployment and rotate them.
-
-## Ports
-
-Ports are deployment values, not core constants. The current transitional setup
-uses values such as:
-
-| Purpose | Example |
+| Failure | Required behavior |
 |---|---|
-| Transitional Edge Core API | `8000/TCP` |
-| MAVLink ground link | `<configured UDP port>` |
-| RTSP video | `<configured TCP port>` |
-| SSH | `22/TCP` |
+| Video/CV lost | Mark unavailable/stale; stop dependent task decisions; keep eligible flight/telemetry functions |
+| VIO lost | Refuse/stop VIO-dependent control; use only separately qualified navigation/recovery |
+| RTK corrections lost | Show changed fix quality/age; apply reviewed navigation accuracy policy |
+| Traffic/server lost | Mark traffic unknown and delivery impaired; apply approved task loss-of-feed procedure |
+| One link lost | Continue only capabilities supported by measured surviving capacity |
+| All command links lost | Attempt stop only if possible; rely on independently verified autopilot/pilot procedure |
+| Core/client restart | Reconcile authoritative aircraft/task state; expire permissions; no automatic motion resume |
+| Payload outcome uncertain | Mark unknown, inhibit retry, inspect/reconcile physical state |
+| Task 2 battery swap | Land/disarm, make payload safe, preserve records, reset permissions, preflight and explicit resume |
 
-Use `config/nomad.env.example` and the active deployment configuration as the
-source of truth.
+These are target rules. Numeric deadlines and aircraft-specific abort actions
+need D07/D08 and safety approval. A resumed heartbeat does not automatically
+resume a mission, and fixed-wing motion cannot be made safe by a Copter zero
+velocity command.
 
-## Safety before flight
+## Simulation and test operations
 
-Before using a real vehicle:
+Read [development](development.md) before running tasks. Current known-good local
+checks are test-core and test-python. The dev/dev-build/test-api paths and
+Compose/CI Edge Core references are stale; G1 must repair startup before the
+dev-up/sitl umbrella commands are accepted as current quickstarts.
 
-1. Run the unit tests.
-2. Run the relevant SITL scenario.
-3. Verify command acknowledgement and state-change handling.
-4. Verify ArduPilot failsafes and the independent RC link.
-5. Confirm boundaries, modes, limits, and payload interlocks.
-6. Keep real credentials and host details out of source control.
+SITL runners already exist for status, command-flow, mission, watchdog, fence,
+payload, link loss/recovery, GCS-heartbeat and zero-delivery. Run them serially
+against an isolated identified simulation once its startup is repaired. Verify
+disarmed/known state between scenarios. Fault injection must never target a
+real aircraft by accidental endpoint reuse. A passive Mission Planner observer
+may use the configured simulator TCP observer link; it must not issue commands.
+
+Use a separate QuadPlane SITL vehicle for Task 1 transitions and return/landing.
+Existing Copter runs do not qualify it. Add mock competition traffic/events and
+recorded image/tracker feeds before demanding GPU simulation. Gazebo/Isaac are
+optional when sensor/physics evidence requires them, not core build dependencies.
+
+## Observability and evidence
+
+Display ownship and each field's age, aircraft type/mode, command owner/outcome,
+mission progress/cancellation, navigation/RTK state, traffic feed age/advisories,
+server delivery backlog, video age, tracker identity and payload safe/unknown
+state. Log transitions with correlation IDs, configuration versions and clocks.
+
+Measure update cadence/jitter, stale events, lost/reordered traffic, queue depth,
+command latency, watchdog timing, CPU/GPU/memory/thermal headroom, dropped frames
+and disk use. Logs rotate and disk-full has an explicit alert. Store imagery,
+flight logs and tracker paths with access controls and retention chosen at D11;
+repository evidence manifests are sanitized and reference private artifacts.
+
+## Security and packaging
+
+The current CLI accepts any nonempty NOMAD_API_KEY: a local opt-in, not identity
+verification. OS account/file/IPC permissions are the immediate trust boundary.
+Production requires the G2 authenticated/authorized protocol, bounded parsing,
+session/replay controls and complete audit. Enable and test DDS security for any
+exposed ROS command surface; no such protection is implied by ROS domain naming.
+
+Separate competition credentials from local command credentials. Validate TLS
+and server identity for the selected official protocol. Restrict media HTTP,
+RTSP, SSH and MAVLink endpoints to intended peers; the retained media HTTP server
+currently lacks authentication. Never ship development credentials as production
+configuration or commit real hosts/keys.
+
+Release packages contain the tested core/plugin/adapters, dependency notices,
+configuration templates and procedures. Qualify OS/architecture/GPU drivers and
+firmware pairs; test clean install and rollback. Plugin build/install scripts
+may overwrite an installed plugin, and profile-load changes local runtime state.
+Perform those only as separately authorized operations. No runtime infrastructure
+was changed by this planning review.

@@ -12,10 +12,8 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.IO.Ports;
-using System.Net.Http;
 using System.Text;
 using System.Windows.Forms;
-using Newtonsoft.Json.Linq;
 
 namespace NOMAD.MissionPlanner
 {
@@ -28,15 +26,9 @@ namespace NOMAD.MissionPlanner
         private TabControl _tabControl;
 
         // Connection Tab
-        private TextBox _txtJetsonIP;
-        private NumericUpDown _numPort;
-        private TextBox _txtJetsonApiKey;
-        private TextBox _txtTailscaleIP;
-        private CheckBox _chkUseTailscale;
-        private TextBox _txtSshUsername;
-        private NumericUpDown _numHttpTimeout;
-        private CheckBox _chkAutoReconnect;
-        private NumericUpDown _numHealthPollInterval;
+        private TextBox _txtCoreExePath;
+        private TextBox _txtCoreEndpoint;
+        private TextBox _txtCoreApiKey;
 
         // Video Tab
         private TextBox _txtVideoUrl;
@@ -65,15 +57,6 @@ namespace NOMAD.MissionPlanner
         private NumericUpDown _numRouterLocalPort;
         private CheckBox _chkRouterDedup;
 
-        // VIO Tab
-        private NumericUpDown _numVioConfidenceWarning;
-        private NumericUpDown _numVioConfidenceCritical;
-        private CheckBox _chkVioAlertsEnabled;
-
-        // Terminal Tab
-        private NumericUpDown _numTerminalTimeout;
-        private CheckBox _chkSaveTerminalHistory;
-
         // UI Tab
         private CheckBox _chkDebugMode;
         private CheckBox _chkShowNotifications;
@@ -90,7 +73,6 @@ namespace NOMAD.MissionPlanner
 
         // Log Analysis Tab
         private TextBox _txtDefaultLogDirectory;
-        private TextBox _txtJetsonLogDirectory;
         private NumericUpDown _numLogVibrationWarning;
         private NumericUpDown _numLogVibrationCritical;
         private NumericUpDown _numLogHdopWarning;
@@ -110,12 +92,12 @@ namespace NOMAD.MissionPlanner
         private CheckBox _chkSprayUseYaw;
 
         // Joystick Tab
-        private CheckBox _chkJoyGimbalEnabled, _chkJoyZedEnabled;
-        private CheckBox _chkJoyGimbalPitchInvert, _chkJoyGimbalRollInvert, _chkJoyZedTiltInvert;
-        private ComboBox _cmbJoyGimbalDevice, _cmbJoyZedDevice;
-        private ComboBox _cmbJoyGimbalPitchAxis, _cmbJoyGimbalRollAxis, _cmbJoyZedTiltAxis;
-        private NumericUpDown _numJoyGimbalDeadzone, _numJoyZedDeadzone;
-        private NumericUpDown _numJoyGimbalMaxRate, _numJoyZedMaxRate;
+        private CheckBox _chkJoyGimbalEnabled, _chkJoyCameraTiltEnabled;
+        private CheckBox _chkJoyGimbalPitchInvert, _chkJoyGimbalRollInvert, _chkJoyCameraTiltInvert;
+        private ComboBox _cmbJoyGimbalDevice, _cmbJoyCameraTiltDevice;
+        private ComboBox _cmbJoyGimbalPitchAxis, _cmbJoyGimbalRollAxis, _cmbJoyCameraTiltAxis;
+        private NumericUpDown _numJoyGimbalDeadzone, _numJoyCameraTiltDeadzone;
+        private NumericUpDown _numJoyGimbalMaxRate, _numJoyCameraTiltMaxRate;
         private Button _btnJoyRefreshDevices;
         private Label _lblJoyStatus;
         // 3-position switch action mapping (6 slots: sw1/2/3 x up/down)
@@ -189,7 +171,6 @@ namespace NOMAD.MissionPlanner
             _tabControl.TabPages.Add(CreateConnectionTab());
             _tabControl.TabPages.Add(CreateVideoTab());
             _tabControl.TabPages.Add(CreateDualLinkTab());
-            _tabControl.TabPages.Add(CreateVioTab());
             _tabControl.TabPages.Add(CreateUiTab());
             _tabControl.TabPages.Add(CreateAlertsTab());
             _tabControl.TabPages.Add(CreateLogsTab());
@@ -418,52 +399,18 @@ namespace NOMAD.MissionPlanner
             }
         }
 
-        private async void BtnTest_Click(object sender, EventArgs e)
+        private void BtnTest_Click(object sender, EventArgs e)
         {
-            _btnTest.Enabled = false;
-            _btnTest.Text = "Testing...";
-
-            try
-            {
-                SaveSettings();
-
-                JetsonApiService.Reconfigure(Config);
-
-                var response = await JetsonApiService.GetAsync("/health");
-
-                if (response.IsSuccessStatusCode)
-                {
-                    MessageBox.Show(
-                        $"Connection successful!\n\nJetson at {Config.EffectiveIP}:{Config.JetsonPort} is reachable.",
-                        "Success",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information
-                    );
-                }
-                else
-                {
-                    MessageBox.Show(
-                        $"Connection failed: HTTP {(int)response.StatusCode}",
-                        "Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning
-                    );
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    $"Connection failed:\n{ex.Message}",
-                    "Error",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
-            }
-            finally
-            {
-                _btnTest.Enabled = true;
-                _btnTest.Text = "Test Connection";
-            }
+            SaveSettings();
+            bool configured = !string.IsNullOrWhiteSpace(Config.CoreApiKey)
+                && !string.IsNullOrWhiteSpace(Config.CoreMavlinkEndpoint);
+            MessageBox.Show(
+                configured
+                    ? "C++ core settings are configured. Live vehicle connectivity is checked by the core command boundary."
+                    : "Configure the C++ core endpoint and API key before issuing vehicle commands.",
+                "NOMAD Core Configuration",
+                MessageBoxButtons.OK,
+                configured ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
 
         private void RefreshSerialBridgeStatus()

@@ -5,7 +5,7 @@
 // ============================================================
 // Handles plugin configuration persistence.
 // Stored in Mission Planner's config directory.
-// Supports all NOMAD features including video, terminal, and VIO.
+// Supports direct video, MAVLink, payload, geofence, and log-analysis features.
 // ============================================================
 
 using System;
@@ -24,44 +24,14 @@ namespace NOMAD.MissionPlanner
         // ============================================================
 
         /// <summary>
-        /// Jetson IP address (local network or Tailscale).
-        /// </summary>
-        /// <summary>
         /// Active NOMAD config profile name. Written by the profile loader
         /// (scripts/profile.py) so the plugin can show which profile is live.
         /// </summary>
         public string ActiveProfile { get; set; } = "dev";
 
-        public string JetsonIP { get; set; } = "";
-
-        /// <summary>
-        /// Jetson API port.
-        /// </summary>
-        public int JetsonPort { get; set; } = 8000;
-
-        /// <summary>
-        /// Jetson API key (must match NOMAD_API_KEY on the Jetson).
-        /// Defaults to the committed DEV key so the plugin works against the dev
-        /// stack out of the box. Override locally (untracked) for a real drone.
-        /// </summary>
-        public string JetsonApiKey { get; set; } = "nomad-dev-key";
-
-        /// <summary>
-        /// SSH login user on the Jetson (used by terminal/service control over SSH).
-        /// </summary>
-        public string JetsonSshUser { get; set; } = "nomad";
-
-        /// <summary>
-        /// Full Jetson Base URL (computed property).
-        /// </summary>
-        [JsonIgnore]
-        public string JetsonBaseUrl => $"http://{JetsonIP}:{JetsonPort}";
-
         /// <summary>
         /// Path to the C++ core CLI binary invoked by <c>NomadCoreClient</c>.
-        /// Empty means "nomad" on PATH. In the ground-station configuration
-        /// the core runs on this machine; in the Jetson configuration the
-        /// plugin keeps using the Jetson API until that path migrates.
+        /// Empty means "nomad" on PATH.
         /// </summary>
         public string CoreExePath { get; set; } = "";
 
@@ -78,45 +48,14 @@ namespace NOMAD.MissionPlanner
         /// </summary>
         public string CoreApiKey { get; set; } = "nomad-dev-sitl-key";
 
-        /// <summary>
-        /// Tailscale IP address (if using VPN).
-        /// </summary>
-        public string TailscaleIP { get; set; } = "";
-
-        /// <summary>
-        /// Use Tailscale IP instead of local IP.
-        /// </summary>
-        public bool UseTailscale { get; set; } = true;
-
-        /// <summary>
-        /// Gets the effective IP based on UseTailscale setting.
-        /// </summary>
-        [JsonIgnore]
-        public string EffectiveIP => UseTailscale && !string.IsNullOrWhiteSpace(TailscaleIP) ? TailscaleIP : JetsonIP;
-
-        /// <summary>
-        /// Gets the effective base URL.
-        /// </summary>
-        [JsonIgnore]
-        public string EffectiveBaseUrl
-        {
-            get
-            {
-                var ip = EffectiveIP;
-                if (string.IsNullOrWhiteSpace(ip))
-                    ip = "127.0.0.1";
-                return $"http://{ip}:{JetsonPort}";
-            }
-        }
-
         // ============================================================
         // Video Streaming Configuration
         // ============================================================
 
         /// <summary>
-        /// Video stream URL for ZED camera.
+        /// Video stream URL for the configured camera or video source.
         /// Default: RTSP stream supporting multiple simultaneous viewers.
-        /// Format: rtsp://&lt;jetson-ip&gt;:8554/stream
+        /// Format: rtsp://&lt;video-host&gt;:8554/stream
         /// </summary>
         public string VideoUrl { get; set; } = "";
 
@@ -138,28 +77,9 @@ namespace NOMAD.MissionPlanner
 
         /// <summary>
         /// Auto-start video on Mission Planner's HUD when plugin loads.
-        /// This displays the ZED camera feed as a background overlay on the HUD.
+        /// This displays the configured video feed as a background overlay on the HUD.
         /// </summary>
         public bool AutoStartHudVideo { get; set; } = true;
-
-        // ============================================================
-        // Communication Configuration
-        // ============================================================
-
-        /// <summary>
-        /// HTTP connection timeout in seconds.
-        /// </summary>
-        public int HttpTimeoutSeconds { get; set; } = 5;
-
-        /// <summary>
-        /// Enable auto-reconnect on connection loss.
-        /// </summary>
-        public bool AutoReconnect { get; set; } = true;
-
-        /// <summary>
-        /// Health polling interval (ms).
-        /// </summary>
-        public int HealthPollInterval { get; set; } = 5000;
 
         // ============================================================
         // MAVLink Dual Link Configuration
@@ -276,44 +196,6 @@ namespace NOMAD.MissionPlanner
         public int LteRemotePort { get; set; } = 0;
 
         // ============================================================
-        // VIO Configuration
-        // ============================================================
-
-        /// <summary>
-        /// VIO confidence warning threshold (0-100).
-        /// </summary>
-        public float VioConfidenceWarning { get; set; } = 50.0f;
-
-        /// <summary>
-        /// VIO confidence critical threshold (0-100).
-        /// </summary>
-        public float VioConfidenceCritical { get; set; } = 30.0f;
-
-        /// <summary>
-        /// Enable VIO status alerts.
-        /// </summary>
-        public bool VioAlertsEnabled { get; set; } = true;
-
-        // ============================================================
-        // Terminal Configuration
-        // ============================================================
-
-        /// <summary>
-        /// SSH username for direct SSH connection.
-        /// </summary>
-        public string SshUsername { get; set; } = "mad";
-
-        /// <summary>
-        /// Terminal command timeout (seconds).
-        /// </summary>
-        public int TerminalTimeout { get; set; } = 30;
-
-        /// <summary>
-        /// Save terminal history between sessions.
-        /// </summary>
-        public bool SaveTerminalHistory { get; set; } = true;
-
-        // ============================================================
         // UI Configuration
         // ============================================================
 
@@ -381,7 +263,7 @@ namespace NOMAD.MissionPlanner
         public double MotorMusicTempoScale { get; set; } = 1.0;
 
         // ============================================================
-        // Drone Geometry & SLAM 3D Configuration
+        // Drone Geometry Configuration
         // ============================================================
 
         /// <summary>Drone body length in cm (nose to tail).</summary>
@@ -405,10 +287,10 @@ namespace NOMAD.MissionPlanner
         /// <summary>Heading offset in degrees to compensate for magnetometer calibration.</summary>
         public float SlamHeadingOffsetDeg { get; set; } = 0.0f;
 
-        /// <summary>SLAM 3D camera field of view in degrees.</summary>
+        /// <summary>Camera field of view in degrees for future visualization.</summary>
         public float SlamCameraFovDeg { get; set; } = 60.0f;
 
-        /// <summary>SLAM 3D local map radius in meters.</summary>
+        /// <summary>Local map radius in meters for future visualization.</summary>
         public float SlamMapRadiusM { get; set; } = 3.0f;
 
         // ============================================================
@@ -451,7 +333,7 @@ namespace NOMAD.MissionPlanner
         // Two independent joystick assignments routed by NomadJoystickService:
         //   * Gimbal: stick deflection → pitch/roll rate, integrated locally
         //     into MAV_CMD_DO_MOUNT_CONTROL angle commands.
-        //   * ZED tilt: stick deflection → PWM rate, integrated locally into
+        //   * Camera tilt: stick deflection → PWM rate, integrated locally into
         //     the camera tilt servo PWM target (DO_SET_SERVO).
         // Axes are referenced by DirectInput state property name: X, Y, Z,
         // Rx, Ry, Rz, Slider1, Slider2.
@@ -485,16 +367,16 @@ namespace NOMAD.MissionPlanner
         /// </summary>
         public bool GimbalArrowKeysEnabled { get; set; } = false;
 
-        /// <summary>Enable the ZED tilt joystick channel.</summary>
-        public bool JoystickZedEnabled { get; set; } = false;
+        /// <summary>Enable the camera tilt joystick channel.</summary>
+        public bool JoystickCameraTiltEnabled { get; set; } = false;
         /// <summary>DirectInput device name. May be the same device as gimbal (different axes).</summary>
-        public string JoystickZedDevice { get; set; } = "";
-        /// <summary>Axis driving ZED tilt rate.</summary>
-        public string JoystickZedTiltAxis { get; set; } = "Y";
-        public bool JoystickZedTiltInvert { get; set; } = true;
-        public float JoystickZedDeadzone { get; set; } = 0.08f;
+        public string JoystickCameraTiltDevice { get; set; } = "";
+        /// <summary>Axis driving camera tilt rate.</summary>
+        public string JoystickCameraTiltAxis { get; set; } = "Y";
+        public bool JoystickCameraTiltInvert { get; set; } = true;
+        public float JoystickCameraTiltDeadzone { get; set; } = 0.08f;
         /// <summary>Max integrated PWM rate (microseconds per second) at full stick deflection.</summary>
-        public float JoystickZedMaxRateUsPerSec { get; set; } = 400f;
+        public float JoystickCameraTiltMaxRateUsPerSec { get; set; } = 400f;
 
         // --- Three-position switch action mapping ---
         // joystick.py encodes each 3-position RadioMaster switch (sw1, sw2, sw3)
@@ -508,9 +390,9 @@ namespace NOMAD.MissionPlanner
         // centre and stop when it returns to middle.
         /// <summary>
         /// DirectInput device that publishes the switch buttons (from joystick.py
-        /// or any other source). Independent of the gimbal/ZED axis devices so
+        /// or any other source). Independent of the gimbal/camera-tilt axis devices so
         /// payload switches keep working even when both axis channels are off.
-        /// Leave blank to fall back to the gimbal device, then the ZED device.
+        /// Leave blank to fall back to the gimbal device, then the tilt device.
         /// </summary>
         public string JoystickSwitchDevice  { get; set; } = "";
 

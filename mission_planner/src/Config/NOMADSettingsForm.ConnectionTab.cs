@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The NOMAD Authors
 
-using System;
 using System.Drawing;
 using System.IO.Ports;
 using System.Windows.Forms;
@@ -12,46 +11,35 @@ namespace NOMAD.MissionPlanner
     {
         private TabPage CreateConnectionTab()
         {
-            var tab = CreateTabPage("Connection");
+            var tab = CreateTabPage("Core");
             int y = 15;
 
-            AddSectionLabel(tab, "Jetson Connection", ref y);
+            AddSectionLabel(tab, "C++ Core Command Boundary", ref y);
 
-            AddLabel(tab, "Jetson IP:", 20, y);
-            _txtJetsonIP = AddTextBox(tab, 150, y, 180);
+            AddLabel(tab, "Core executable:", 20, y);
+            _txtCoreExePath = AddTextBox(tab, 170, y, 360);
             y += 30;
 
-            AddLabel(tab, "API Port:", 20, y);
-            _numPort = AddNumericUpDown(tab, 150, y, 80, 1, 65535, 8000);
+            AddLabel(tab, "MAVLink endpoint:", 20, y);
+            _txtCoreEndpoint = AddTextBox(tab, 170, y, 360);
             y += 30;
 
-            AddLabel(tab, "API Key:", 20, y);
-            _txtJetsonApiKey = AddTextBox(tab, 150, y, 180);
-            _txtJetsonApiKey.UseSystemPasswordChar = true;
-            y += 30;
-
-            AddLabel(tab, "Tailscale IP:", 20, y);
-            _txtTailscaleIP = AddTextBox(tab, 150, y, 180);
-            y += 30;
-
-            _chkUseTailscale = AddCheckBox(tab, "Use Tailscale IP", 20, y);
+            AddLabel(tab, "Core API key:", 20, y);
+            _txtCoreApiKey = AddTextBox(tab, 170, y, 360);
+            _txtCoreApiKey.UseSystemPasswordChar = true;
             y += 35;
 
-            AddSectionLabel(tab, "SSH / HTTP Settings", ref y);
-
-            AddLabel(tab, "SSH Username:", 20, y);
-            _txtSshUsername = AddTextBox(tab, 150, y, 100);
-            y += 30;
-
-            AddLabel(tab, "HTTP Timeout (s):", 20, y);
-            _numHttpTimeout = AddNumericUpDown(tab, 150, y, 60, 1, 60, 5);
-            y += 30;
-
-            _chkAutoReconnect = AddCheckBox(tab, "Auto-reconnect on connection loss", 20, y);
-            y += 30;
-
-            AddLabel(tab, "Health Poll (ms):", 20, y);
-            _numHealthPollInterval = AddNumericUpDown(tab, 150, y, 80, 500, 30000, 5000);
+            var hint = new Label
+            {
+                Text = "Vehicle commands are validated and acknowledged by the C++ core. " +
+                       "The core endpoint is a local MAVLink transport, not a REST service.",
+                Font = new Font("Segoe UI", 8, FontStyle.Italic),
+                ForeColor = Color.FromArgb(170, 170, 170),
+                Location = new Point(20, y),
+                AutoSize = true,
+                MaximumSize = new Size(560, 0),
+            };
+            tab.Controls.Add(hint);
 
             return tab;
         }
@@ -81,7 +69,7 @@ namespace NOMAD.MissionPlanner
             y += 30;
 
             AddLabel(tab, "COM Port:", 40, y);
-            _cmbRadioMasterComPort = AddComboBox(tab, 170, y, 80, SerialPort.GetPortNames());
+            _cmbRadioMasterComPort = AddComboBox(tab, 170, y, 100, SerialPort.GetPortNames());
             y += 30;
 
             AddLabel(tab, "Baud Rate:", 40, y);
@@ -98,7 +86,7 @@ namespace NOMAD.MissionPlanner
             y += 30;
 
             AddLabel(tab, "Preferred Link:", 40, y);
-            _cmbPreferredLink = AddComboBox(tab, 170, y, 130, new[] { "LTE (Tailscale)", "RadioMaster", "None" });
+            _cmbPreferredLink = AddComboBox(tab, 170, y, 130, new[] { "LTE", "RadioMaster", "None" });
             y += 30;
 
             _chkAutoReconnectPreferred = AddCheckBox(tab, "Auto-reconnect to preferred link", 40, y);
@@ -116,7 +104,7 @@ namespace NOMAD.MissionPlanner
             _numLinkMonitorInterval = AddNumericUpDown(tab, 170, y, 80, 100, 5000, 500);
             y += 35;
 
-            AddSectionLabel(tab, "Local Router (MAVProxy-style)", ref y);
+            AddSectionLabel(tab, "Local Router", ref y);
 
             AddLabel(tab, "Bind Address:", 40, y);
             _txtRouterBindAddress = AddTextBox(tab, 170, y, 130);
@@ -129,46 +117,17 @@ namespace NOMAD.MissionPlanner
             _chkRouterDedup = AddCheckBox(tab, "Deduplicate cross-link packets", 40, y);
             y += 30;
 
-            var hint = new Label
+            var routerHint = new Label
             {
-                Text = "Enabled: connect Mission Planner as UDP Client / UDPCl to 127.0.0.1:14600 for merged LTE/RadioMaster failover.\n" +
-                       "Disabled: connect Mission Planner directly to LTE UDP 14560 or RadioMaster UDP 14550.",
+                Text = "When enabled, connect Mission Planner to the merged loopback endpoint " +
+                       "shown above. When disabled, use the direct MAVLink link configured in Mission Planner.",
                 Font = new Font("Segoe UI", 8, FontStyle.Italic),
                 ForeColor = Color.FromArgb(150, 150, 150),
                 Location = new Point(40, y),
                 AutoSize = true,
-                MaximumSize = new Size(440, 0),
+                MaximumSize = new Size(500, 0),
             };
-            tab.Controls.Add(hint);
-
-            return tab;
-        }
-
-        private TabPage CreateVioTab()
-        {
-            var tab = CreateTabPage("VIO");
-            int y = 15;
-
-            AddSectionLabel(tab, "Visual-Inertial Odometry (Isaac ROS)", ref y);
-
-            AddLabel(tab, "Confidence Warning (%):", 20, y);
-            _numVioConfidenceWarning = AddNumericUpDown(tab, 180, y, 70, 0, 100, 50);
-            y += 30;
-
-            AddLabel(tab, "Confidence Critical (%):", 20, y);
-            _numVioConfidenceCritical = AddNumericUpDown(tab, 180, y, 70, 0, 100, 30);
-            y += 35;
-
-            _chkVioAlertsEnabled = AddCheckBox(tab, "Enable VIO status alerts", 20, y);
-            y += 40;
-
-            AddSectionLabel(tab, "Terminal Settings", ref y);
-
-            AddLabel(tab, "Command Timeout (s):", 20, y);
-            _numTerminalTimeout = AddNumericUpDown(tab, 180, y, 70, 5, 300, 30);
-            y += 30;
-
-            _chkSaveTerminalHistory = AddCheckBox(tab, "Save terminal history between sessions", 20, y);
+            tab.Controls.Add(routerHint);
 
             return tab;
         }

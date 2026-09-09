@@ -13,8 +13,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from edge_core.services.ros import simple_video_bridge as svb
-from edge_core.services.ros.simple_video_bridge import BridgeHTTPHandler, BridgeHTTPServer, VideoBridge
+from python.tools import simple_video_bridge as svb
+from python.tools.simple_video_bridge import BridgeHTTPHandler, BridgeHTTPServer, VideoBridge
 
 
 class _NoThread:
@@ -233,9 +233,7 @@ def test_getters_and_status_defaults():
     assert b.get_health() == {"healthy": False, "pipeline_playing": False, "source_topic": "/zed/img"}
 
     b.set_overlay(True)
-    b.set_center_depth(3.5)
     assert b.get_overlay_status() == {"enabled": True, "detection_count": 0}
-    assert b.get_center_depth() == {"range_m": 3.5}
 
 
 def test_status_reports_positive_frame_age():
@@ -409,7 +407,6 @@ def test_monitor_pipeline_returns_without_pipeline():
         ("/health", "pipeline_playing"),
         ("/status", "streaming"),
         ("/overlay/status", "enabled"),
-        ("/depth/center", "range_m"),
     ],
 )
 def test_do_get_routes_to_bridge(path, key):

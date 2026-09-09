@@ -13,10 +13,8 @@ mission_planner/src/Logs/LogAnalysis.cs
 mission_planner/src/Panels/EnhancedHealthDashboard.UI.cs
 mission_planner/src/Panels/LinkHealthPanel.cs
 mission_planner/src/Panels/ServiceControlPanel.Monitoring.cs
-mission_planner/src/SLAM3D/Rendering/VoxelMeshBuilder.cs
 mission_planner/src/Views/NOMADBoundaryView.Operations.cs
 mission_planner/src/Views/NOMADBoundaryView.cs
 mission_planner/src/Views/NOMADLogView.Import.cs
 tests/test_simple_video_bridge.py
 tests/test_video_stream_manager.py
-tools/sim/gazebo/launch/nomad_iris_zed.launch.py

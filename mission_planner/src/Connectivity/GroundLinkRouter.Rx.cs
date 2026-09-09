@@ -216,7 +216,7 @@ namespace NOMAD.MissionPlanner
         {
             if (socketType == LinkType.RadioMaster && IsTailscaleAddress(remote?.Address))
             {
-                EmitLog($"LTE telemetry arrived on RadioMaster UDP port {_cfg.RadioBindPort} from {remote}; treating it as LTE. Check Jetson GCS_PORT_LTE should be {_cfg.LteBindPort}.");
+                EmitLog($"LTE telemetry arrived on RadioMaster UDP port {_cfg.RadioBindPort} from {remote}; treating it as LTE. Check the vehicle uplink port should be {_cfg.LteBindPort}.");
                 return LinkType.LTE;
             }
 
