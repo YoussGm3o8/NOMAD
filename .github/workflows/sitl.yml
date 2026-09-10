@@ -5,11 +5,32 @@ name: sitl
 # case calls for — see tests/sitl/README.md and docs/safety.md).
 #
 # This is deliberately NOT on every push/PR: it builds ArduPilot from source
-# and drives a live autopilot, so it runs nightly and on demand. The fast unit
-# + SC-coverage gates in test.yml protect every PR; this proves the same
-# mitigations close the loop on an actual flight controller.
+# and drives a live autopilot. It runs nightly and on demand, plus on codex
+# development-branch pushes that change the MAVSDK Phase A/SITL qualification
+# inputs. The fast unit + SC-coverage gates in test.yml protect every PR; this
+# proves the same mitigations close the loop on an actual flight controller.
 
 on:
+  push:
+    branches: ["codex/**"]
+    paths:
+      - ".github/workflows/sitl.yml"
+      - ".gitmodules"
+      - "CMakeLists.txt"
+      - "pixi.toml"
+      - "third_party/MAVSDK"
+      - "third_party/MAVSDK/**"
+      - "third_party/ardupilot-mavlink"
+      - "third_party/ardupilot-mavlink/**"
+      - "include/nomad/mavlink/mavsdk_*.hpp"
+      - "src/mavlink/mavsdk_*.cpp"
+      - "examples/mavsdk_phase_a_smoke.cpp"
+      - "scripts/dev/mavsdk_phase_a_*.py"
+      - "scripts/dev/check_mavsdk_phase_a.py"
+      - "tests/mavsdk_phase_a_test.cpp"
+      - "tests/test_mavsdk_phase_a_*.py"
+      - "tests/test_mavsdk_provenance.py"
+      - "licenses/mavsdk-phase-a/**"
   workflow_dispatch:
   schedule:
     - cron: "0 7 * * *" # 07:00 UTC nightly
