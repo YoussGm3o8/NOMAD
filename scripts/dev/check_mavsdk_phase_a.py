@@ -109,14 +109,11 @@ def check_forbidden_patch_additions(path: Path, forbidden: tuple[str, ...]) -> N
 
 
 def text_sha256_variants(path: Path) -> set[str]:
-    """Hash equivalent LF/CRLF text with either terminal-newline convention."""
+    """Hash text independent of checkout EOLs and terminal blank lines."""
     text = path.read_text(encoding="utf-8")
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    if normalized.endswith("\n"):
-        without_terminal_newline = normalized[:-1]
-    else:
-        without_terminal_newline = normalized
-    logical_variants = (without_terminal_newline, without_terminal_newline + "\n")
+    body = normalized.rstrip("\n")
+    logical_variants = (body, body + "\n", body + "\n\n")
     encoded_variants = {
         value.encode("utf-8")
         for logical in logical_variants

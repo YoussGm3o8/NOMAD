@@ -46,8 +46,11 @@ def test_license_hash_ignores_checkout_text_conventions(tmp_path: Path) -> None:
     variants = (
         b"first line\nsecond line",
         b"first line\nsecond line\n",
+        b"first line\nsecond line\n\n",
+        b"first line\nsecond line\n\n\n",
         b"first line\r\nsecond line",
         b"first line\r\nsecond line\r\n",
+        b"first line\r\nsecond line\r\n\r\n",
     )
     hashes: set[frozenset[str]] = set()
     for contents in variants:
