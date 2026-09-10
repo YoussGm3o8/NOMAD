@@ -28,11 +28,13 @@ remain open.
 The dependency-hardened Windows Release build and deterministic peer fixture
 passed locally on 2026-09-10. The fixture proves a sustained telemetry stream
 plus wrong-peer and no-peer failure; it does not substitute for ArduPilot SITL
-or aircraft evidence. The selected graph now uses an immutable PicoSHA2 commit,
-SHA-256 archive verification and a checked redistribution-licence bundle.
-The patch is still uncommitted inside the MAVSDK submodule, so clean-clone
-reproducibility, hosted results, Linux-in-ROS results, live SITL and
-resource-budget approval remain open.
+or aircraft evidence. The selected graph uses an immutable PicoSHA2 commit,
+SHA-256 archive verification and a checked redistribution-licence bundle. The
+three-file hardening patch is published in the project MAVSDK fork as
+`fd8b66dfc5962067ff917705a27e418b24c84cdf`, and NOMAD pins that exact revision.
+The former source-control reproducibility blocker is therefore removed, but a
+fresh recursive clean-checkout qualification, current hosted Linux/Windows/ROS
+results, live SITL and resource-budget approval remain open.
 
 ## Ownership and rationale
 
@@ -91,7 +93,10 @@ build benchmarks.
 After the dependency-input rebuild on 2026-09-10, the executable remained
 2,032,128 bytes and the warm build tree measured 379,308,757 bytes. Configure,
 target build, the three-case peer fixture, provenance checker, 12 focused Python
-tests and 10 CTests passed. Docker was not running, so live SITL was not attempted.
+tests and 10 CTests passed. These checks were run against the same hardening file
+contents before the fork commit and parent gitlink were published; rerun them
+from a fresh recursive checkout before treating clean-clone reproducibility as
+current evidence. Docker was not running, so live SITL was not attempted.
 Run `pixi run check-mavsdk-phase-a` after any source or dependency change, and
 run `pixi run build-core-mavsdk` followed by `pixi run test-mavsdk-phase-a` for
 the deterministic peer contract. Live SITL remains a separate required gate.
