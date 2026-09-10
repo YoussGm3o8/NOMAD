@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 EXPECTED_REVISIONS = {
-    "third_party/MAVSDK": "fd8b66dfc5962067ff917705a27e418b24c84cdf",
+    "third_party/MAVSDK": "9884f109533f564bc6250e5471e6301d3a62f4a7",
     "third_party/ardupilot-mavlink": "288b907c384a892c8519bfe271682424b1e1a3a0",
 }
 EXPECTED_DEPENDENCIES = {
@@ -24,6 +24,7 @@ EXPECTED_DEPENDENCIES = {
     "cpp/third_party/liblzma/CMakeLists.txt": (
         "URL_HASH SHA256=135c90b934aee8fbc0d467de87a05cb70d627da36abe518c357a873709e5b7d6"
     ),
+    "cpp/third_party/mavlink/mavlink.patch": '"PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}"',
     "cpp/third_party/nlohmann_json/CMakeLists.txt": (
         "URL_HASH SHA256=4b92eb0c06d10683f7447ce9406cb97cd4b453be18d7279320f7b2f025c10187"
     ),
@@ -36,6 +37,7 @@ EXPECTED_ARCHIVE_OPTIONS = {
 }
 FORBIDDEN_DEPENDENCY_TEXT = {
     "cpp/third_party/liblzma/CMakeLists.txt": ("URL_MD5",),
+    "cpp/third_party/mavlink/mavlink.patch": ("-m pip install", "pip-dependencies"),
     "cpp/third_party/picosha2/CMakeLists.txt": ("GIT_TAG cmake-install-support",),
 }
 EXPECTED_LICENSE_HASHES = {
