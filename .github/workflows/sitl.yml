@@ -4,15 +4,15 @@ name: sitl
 # safety-critical velocity and geofence core (the §4.5 verification the safety
 # case calls for — see tests/sitl/README.md and docs/safety.md).
 #
-# This is deliberately NOT on every push/PR: it builds ArduPilot from source
-# and drives a live autopilot. It runs nightly and on demand, plus on codex
-# development-branch pushes that change the MAVSDK Phase A/SITL qualification
-# inputs. The fast unit + SC-coverage gates in test.yml protect every PR; this
-# proves the same mitigations close the loop on an actual flight controller.
+# The full suite is deliberately NOT on every push/PR: it builds ArduPilot from
+# source and drives a live autopilot, so it runs nightly and on demand. Main
+# pushes that change MAVSDK Phase A/SITL qualification inputs run only the
+# reduced live MAVSDK connect/status smoke below. The fast unit + SC-coverage
+# gates in test.yml protect every PR.
 
 on:
   push:
-    branches: ["codex/**"]
+    branches: [main]
     paths:
       - ".github/workflows/sitl.yml"
       - ".gitmodules"
@@ -43,8 +43,56 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  mavsdk-phase-a-sitl:
+    name: MAVSDK Phase A SITL smoke
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      NOMAD_CORE_SITL_PORT: "14570"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build ArduPilot SITL image
+        uses: docker/build-push-action@v7
+        with:
+          context: https://github.com/radarku/ardupilot-sitl-docker.git
+          build-args: COPTER_TAG=Copter-4.7.1
+          push: false
+          load: true
+          tags: nomad-sitl:copter-4.7.1
+          cache-from: type=gha,scope=sitl
+          cache-to: type=gha,mode=max,scope=sitl
+
+      - uses: prefix-dev/setup-pixi@v0.9.6
+        with:
+          cache: true
+
+      - name: Bring up the dev + SITL stack
+        run: pixi run dev-up
+
+      - name: Let SITL warm up
+        run: sleep 25
+
+      - name: MAVSDK Phase A connect/status smoke
+        run: pixi run mavsdk-phase-a-smoke
+
+      - name: SITL logs on failure
+        if: failure()
+        run: docker logs nomad-dev-sitl-1 2>&1 | tail -120 || true
+
+      - name: Tear down
+        if: always()
+        run: pixi run dev-down
+
   sitl:
     name: SITL loop closure (velocity + geofence)
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     # Most scenarios read the regular host copy on 14570. The link-recovery
