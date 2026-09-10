@@ -63,6 +63,7 @@ plugins:
 nav:
   - Home: index.md
   - Product Requirements: prd.md
+  - CONOPS requirement inventory: conops-requirements.md
   - Architecture: architecture.md
   - Development: development.md
   - Agent and engineering guidance: agent-guidance.md

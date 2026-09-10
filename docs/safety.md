@@ -1,6 +1,6 @@
 # Safety case
 
-Baseline: 2026-09-08. This is a safety argument and verification backlog, not a
+Baseline: CONOPS v1.0 reconciliation, 2026-09-10. This is a safety argument and verification backlog, not a
 flight authorization. Existing requirement IDs remain stable. Current source and
 test results are in [migration](migration.md); proposed requirements below are
 not claimed as implemented.
@@ -40,6 +40,44 @@ release gates without artifact provenance. The zero-delivery loopback test keeps
 the outbound path open when inbound heartbeat stops; it does not simulate total
 bidirectional radio failure. A lost physical link requires an independent
 autopilot timeout/failsafe and operator procedure.
+
+## Competition safety obligations
+
+These source requirements supplement, without renumbering or weakening, the SR
+requirements below. They have no complete implementation mapping yet.
+
+| Source IDs | Required safety argument | Falsification evidence / release blocker |
+|---|---|---|
+| AE27-OPS-015 through AE27-OPS-020/035 | Aircraft termination is available in every mode independently of ground core; failure of the termination/C2 path causes self-termination | Remove path/power/core under load in Copter, fixed-wing and transition states; observe actual state/output, five-second activation entry and approved rapid self-termination; G7 |
+| AE27-OPS-016/017 | Fixed-wing motor-off/full surfaces differs from rotary vertical descent of at least 2 m/s to touchdown | Independently observe surface outputs and measured descent/touchdown; LAND dispatch or configured speed is not proof; Q02/G7 |
+| AE27-OPS-005/006/020/037/038 | All-mode containment includes non-convex boundary and 100 m AGL | Verified hard polygon and internal inset per U-FEN-01, altitude datum/terrain validation, actual hard-breach and loss-of-navigation tests; G7 |
+| AE27-NET-007/008 | Stay outside supplied traffic cylinders; stale traffic is unknown | Inject delayed/malformed tracks and prove operator response avoids intrusion; settle extent/datum/freshness Q04 before flight; G4/G7 |
+| AE27-T2-005/006 | Exactly one tracker attachment and at least 100 m horizontal offset after withdrawal through rest of window | Wrong/duplicate tracker and target moving toward sampling/return path; prove detection and approved intervention before encroachment; G6/G7 |
+| AE27-OPS-024/031 | Under-15-kg project margin and physical ground propeller inhibit | Independent weighing and props-safe inhibit fault tests; G7 |
+
+The C++ watchdog's delivered zero command is not a competition termination
+mechanism. Mission Planner EmergencyLand ignores parameter-write results and
+reports dispatch, while legacy boundary writers also change descent parameters.
+Those paths are neither all-mode nor independent of the lost link, and must not
+be credited as compliance. Preserve existing failsafes; qualify the aircraft's
+termination mechanism and its interaction with them before changing source.
+No emergency/parameter recipe is approved by this documentation pass.
+
+Q01 is resolved by the project owner: hard-boundary violation triggers
+termination; the soft boundary is an internal configurable inward margin from
+the hard polygon, e.g. 5 m. Keep the existing plugin inset implementation as-is.
+Crossing that internal margin alone is not a termination trigger. Appendix C's
+inconsistent labels remain a source note; a second official polygon is not a
+release dependency. Test inset geometry separately from hard-breach termination,
+including concave/narrow shapes and infeasible margins, without changing the
+plugin in this pass. Q02 still concerns QuadPlane transition termination and
+fixed-wing surface behavior. The plugin's existing 122 m defaults/displays remain
+a separate gap against the official 100 m AGL ceiling.
+
+The original SR-PAY-03 explicit operator interlock remains binding project policy.
+Do not remove it to pursue the sample-autonomy bonus. If preauthorization is
+accepted and selected, propose a bounded sequence and intervention/abort contract
+as a later reviewed change with no uncertain-action retries.
 
 ## Stable safety requirements
 
@@ -87,9 +125,10 @@ mappings when implemented; do not invent entries in the existing checked block.
 | H-17 Network/compute overload | SR-RES-01: bounded queues and safety execution | Video/server flood, dead worker, thermal throttling and disk-full cannot starve command deadlines | G3/G8 |
 | H-18 Untrusted messages/replay | SR-SEC-04: authenticate, authorize and reject replay | Wrong/expired credentials, old session and malformed server/DDS/IPC input are refused and audited | G2/G8 |
 
-Traffic advisories and explicit payload authorization are the initial user-selected
-scope. Automatic conflict avoidance, approach, tagging and sampling remain TBD
-after CONOPS review. Loss-of-traffic response and numeric limits need D07/D08;
+Traffic advisories and explicit payload authorization remain project scope.
+CONOPS permits manual flight but requires actual traffic cylinder avoidance.
+Task 2 no-intervention sample collection earns optional points; changing payload
+permission policy requires D05/Q06 and separate safety evidence. Loss-of-traffic response and numeric limits need D07/D08;
 do not silently choose hold/RTL/descent as an assessment rule.
 
 ## Required evidence by boundary

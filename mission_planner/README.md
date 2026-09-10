@@ -27,6 +27,11 @@ Use `lint-plugin` and focused `test-plugin-*` tasks for non-deploying checks.
 The current core client spawns a local CLI. Direct gimbal, mode/parameter and
 fence paths remain; the integrated target needs one active command owner and
 explicit handover (G2). A remote core protocol is not implemented yet.
+For CONOPS v1.0, the dedicated GCS display must show live aircraft position and
+competition area (AE27-OPS-004). Existing EmergencyLand and boundary parameter
+writes do not establish compliant independent all-mode termination; their
+ownership and acceptance gaps are recorded in migration GAP-05/06. No plugin
+termination behavior is changed or flight-qualified by the requirements review.
 
 Pure helper checks are available through the `test-plugin-*` Pixi tasks. See
 [the canonical architecture](../docs/architecture.md) and

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The NOMAD Authors
 
-#include "mavsdk_phase_a_support.hpp"
+#include "nomad/mavlink/mavsdk_validation.hpp"
 
 #include <charconv>
 #include <cmath>
@@ -63,13 +63,9 @@ bool split_host_port(std::string_view rest, std::string_view &host, std::string_
         }
     }
     if (host.front() == '[') {
-        if (host.back() != ']' || host.size() < 3) {
-            return false;
-        }
-    } else if (host.find(':') != std::string_view::npos) {
-        return false;
+        return host.back() == ']' && host.size() >= 3;
     }
-    return true;
+    return host.find(':') == std::string_view::npos;
 }
 
 } // namespace
@@ -80,7 +76,6 @@ std::optional<std::string> canonicalize_udp_endpoint(std::string_view endpoint) 
     if (!split_endpoint(endpoint, scheme, rest)) {
         return {};
     }
-
     std::string_view host;
     std::string_view port_text;
     if (!split_host_port(rest, host, port_text) || !parse_port(port_text)) {
@@ -89,7 +84,6 @@ std::optional<std::string> canonicalize_udp_endpoint(std::string_view endpoint) 
     if (scheme == "udpout" && host == "0.0.0.0") {
         return {};
     }
-
     return std::string(scheme) + "://" + std::string(host) + ":" + std::string(port_text);
 }
 
@@ -105,7 +99,7 @@ std::optional<std::uint8_t> parse_system_id(std::string_view value) {
     return static_cast<std::uint8_t>(system_id);
 }
 
-SystemSelection classify_system_ids(const std::vector<std::uint8_t>& system_ids, std::uint8_t expected_id) {
+SystemSelection classify_system_ids(const std::vector<std::uint8_t> &system_ids, std::uint8_t expected_id) {
     if (system_ids.empty()) {
         return SystemSelection::NoAutopilot;
     }
@@ -115,7 +109,7 @@ SystemSelection classify_system_ids(const std::vector<std::uint8_t>& system_ids,
     return system_ids.front() == expected_id ? SystemSelection::Selected : SystemSelection::WrongPeer;
 }
 
-bool has_valid_status(const StatusValues& values) {
+bool has_valid_status(const StatusValues &values) {
     constexpr double kMinRelativeAltitudeM = -1000.0;
     constexpr double kMaxRelativeAltitudeM = 100000.0;
     constexpr double kMaxBatteryVoltageV = 1000.0;

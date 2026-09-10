@@ -1,6 +1,6 @@
 # Operations
 
-Target procedures and current limitations, 2026-09-08. Profile selection does not
+Target procedures reconciled to CONOPS v1.0, 2026-09-10. Profile selection does not
 authorize hardware use or prove readiness. [Migration](migration.md) owns gates;
 [architecture](architecture.md) owns component boundaries.
 
@@ -9,13 +9,15 @@ authorize hardware use or prove readiness. [Migration](migration.md) owns gates;
 | Task/profile | Aircraft-side functions | Ground-side functions | Qualification status |
 |---|---|---|---|
 | Task 1 / groundstation_gpu | Proposed lightweight VTOL; Walksnail FPV camera; Pi Zero for backup LTE and possibly video; Here4 GNSS | GPU CV, video capture/display, C++ core, Mission Planner and server adapter | User direction; video capture, RF bandwidth, QuadPlane support and endurance unqualified |
-| Task 2 / onboard_companion candidate | Under-15-kg quad; optional Jetson if useful autonomy emerges; tracker/tagging/sampling payload | Mission Planner, operator approvals, competition server exchange | Jetson placement and payload mechanism TBD |
+| Task 2 / onboard_companion candidate | Under-15-kg quad; optional Jetson if useful autonomy emerges; tracker/tagging/sampling payload | Mission Planner, operator approvals and tracker CSV export; server applicability Q04 | Jetson placement and payload mechanism TBD |
 | groundstation_minimal | ArduPilot, navigation and selected command/telemetry link | C++ core and clients; lightweight server exchange when implemented | Product requirement; no ROS/perception dependency |
 | Development | Isolated Copter and future QuadPlane SITL | Core, fake/mock services and passive observers | Local build/config checks pass; live startup and profile qualification remain open |
 
-"15 kg class" does not relax the preview requirement of below 15 kg including
-payload. Weigh every battery/payload/compute configuration and budget margin.
-Task 1 has no battery swap; Task 2 may swap after landing and disarming.
+Use a strict under-15-kg project ceiling including maximum task payload; the
+CONOPS maximum-15-kg wording conflicts with its under-15-kg FRR wording (Q03).
+Weigh every configuration and budget measurement margin. Task 1 has no battery
+swap. Task 2 swap permission is unstated: plan single-battery completion until
+organizer clarification, retaining swap recovery only as a conditional design.
 
 A Cube Orange or custom ArduPilot controller is under consideration. UART/PWM
 availability, power budget, timing, firmware support and channel mapping require
@@ -23,6 +25,57 @@ board-specific qualification. Here4 with an RTK base is the stated navigation
 choice; verify correction transport, fix state and age, and behavior without
 RTK corrections. Walksnail receiver capture/export interface and any second
 camera remain to be selected/tested. The plan has no ZED dependency.
+
+## Competition runbook requirements
+
+The [PRD inventory](conops-requirements.md) owns exact rules and scores. This
+runbook translates them into preparation, not a flight authorization.
+
+1. Complete eligibility, registrations, insurance and per-aircraft FRR documents;
+   obtain judge acceptance and schedule the props-off termination demonstration.
+   Keep private certificates and receipts outside source control. Verify the hard polygon and
+   resolve Q02 aircraft-phase termination before loading a competition fence.
+2. Prepare the proposal by 2027-01-15 1700 ET, FRR by 2027-04-28, bilingual
+   presentation by 2027-05-13 2359 ET, and mission report by 2027-05-26 1700 ET.
+   Team/member registration dates are 2026-11-27 and 2027-03-12. Follow all format,
+   page, heading and feedback-attestation conditions in AE27-ADM requirements.
+3. Receive official task geometry/course by Thursday night; validate non-convex
+   boundaries, AGL limits, route feasibility, payload search areas and Task 2
+   100 m moving-target offset. Rehearse with variable windows; approximately
+   30 minutes is not a guaranteed duration or an endurance budget.
+4. Arrive with all equipment at least 30 minutes before window (scored rule).
+   At most five flight crew at line; no communication with other team members
+   during window. No field access without RSO permission. Use ground propeller
+   inhibit, effective checklists and explicit per-aircraft pilot assignments.
+5. Keep transmitters off until window or explicit FRR authorization. Obtain RSO
+   permission before each takeoff. Display live position and competition area
+   on a dedicated GCS display for each aircraft. Report GPS/link/RC/fence anomalies.
+6. Task 1: establish server session before arming as the selected startup strategy;
+   send required 1 Hz telemetry whenever armed; fly complete lap course then
+   survey. Monitor cylinder separation and operator response deadlines. Submit
+   labelled `<your_team_name>_task1_survey.txt` in Phase 2 Deliverables; preserve
+   Drive receipt, with hard cutoff 15 minutes after window. Earlier submission
+   earns the stated multiplier. Land safely and clear all UAS parts by window end.
+7. Task 2: verify one permitted tracker placement, withdraw at least 100 m, then
+   maintain that horizontal offset from the moving target through sample pickup
+   and flight-line return. Record five-minute tracker path and submit chronological
+   CSV before window ends. Return intact samples onto the blue 32-inch pad before
+   cutoff. Manual unloading is allowed; record intervention honestly for scoring.
+   Land safely, leaving only the one attached tracker in the field.
+8. Stop transmissions at window end. A restart forfeits prior-attempt points;
+   reconcile selected attempt and do not merge prior evidence silently. Do not
+   publish task setup/perceived performance until every window finishes unless
+   Chief Judge permits it. No on-site rehearsal flights without permission.
+
+Use the existing plugin soft-from-hard feature unchanged: the soft boundary
+is an internal configurable inward margin, such as 5 m, from the hard polygon
+(U-FEN-01; Q01 resolved by the project owner). A soft-margin crossing is not itself
+a termination trigger; hard-boundary violation requires termination. No separate
+official soft polygon is required. Lost termination control must
+cause independent aircraft self-termination; ordinary link failover cannot waive
+that rule. Safety lead must approve the exact definition of surviving C2 and prove
+it for the selected radio/LTE topology. RTK, video and competition-server outages
+are distinct faults from loss of the termination path.
 
 ## Profile and configuration lifecycle
 
@@ -88,11 +141,11 @@ must be assessed for shared power, antenna, spectrum and router failures.
 | VIO lost | Refuse/stop VIO-dependent control; use only separately qualified navigation/recovery |
 | RTK corrections lost | Show changed fix quality/age; apply reviewed navigation accuracy policy |
 | Traffic/server lost | Mark traffic unknown and delivery impaired; apply approved task loss-of-feed procedure |
-| One link lost | Continue only capabilities supported by measured surviving capacity |
-| All command links lost | Attempt stop only if possible; rely on independently verified autopilot/pilot procedure |
+| One link lost | Continue only with termination authority intact and measured surviving capacity; otherwise use approved self-termination behavior |
+| Termination/C2 path lost | Aircraft must self-terminate under the approved all-mode mechanism; a ground stop attempt or ordinary RTL is insufficient evidence (AE27-OPS-015/019) |
 | Core/client restart | Reconcile authoritative aircraft/task state; expire permissions; no automatic motion resume |
 | Payload outcome uncertain | Mark unknown, inhibit retry, inspect/reconcile physical state |
-| Task 2 battery swap | Land/disarm, make payload safe, preserve records, reset permissions, preflight and explicit resume |
+| Task 2 battery swap, only if permitted (Q03) | Land/disarm, make payload safe, preserve records, reset permissions, preflight and explicit resume |
 
 These are target rules. Numeric deadlines and aircraft-specific abort actions
 need D07/D08 and safety approval. A resumed heartbeat does not automatically
@@ -117,7 +170,7 @@ real aircraft by accidental endpoint reuse. A passive Mission Planner observer
 may use the configured simulator TCP observer link; it must not issue commands.
 
 Use a separate QuadPlane SITL vehicle for Task 1 transitions and return/landing.
-Existing Copter runs do not qualify it. Add mock competition traffic/events and
+Existing Copter runs do not qualify it. Add mock competition telemetry/traffic and
 recorded image/tracker feeds before demanding GPU simulation. Gazebo/Isaac are
 optional when sensor/physics evidence requires them, not core build dependencies.
 

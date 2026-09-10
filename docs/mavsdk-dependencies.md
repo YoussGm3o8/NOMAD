@@ -1,8 +1,15 @@
 # MAVSDK Phase A dependency inventory
 
 This inventory records the optional Phase A build inputs at the reviewed NOMAD
-gitlink. It is an engineering and notice audit, not a release approval. The
-production core does not use MAVSDK yet.
+gitlink plus the uncommitted dependency-hardening patch described below. It is
+an engineering and notice audit, not a release approval. The production core
+does not use MAVSDK yet.
+The CONOPS v1.0 reconciliation did not change dependency pins or accepted evidence.
+MAVSDK remains a project prerequisite, not an organizer-prescribed library.
+Competition transport/traffic requirements do not justify adding speculative
+network plugins: obtain the official server contract first. Re-audit this
+inventory when production parity adds required MAVSDK plugins or changes build
+options; the telemetry-only Phase A inventory cannot cover those future inputs.
 
 | Component | Reviewed source | License found in fetched source |
 |---|---|---|
@@ -13,30 +20,50 @@ production core does not use MAVSDK yet.
 | libevents | commit `840a88ea226d4eb0fd4c391ce860317422756435` | BSD-3-Clause |
 | libmavlike | commit `90498b14262137ae10b633705810e81bdb85de9c` | BSD-3-Clause |
 | MAVLink | commit `d6a7eeaf43319ce6da19a1973ca40180a4210643` | generator (L)GPL-3.0 with MIT output exception |
-| nlohmann JSON | archive tag `v3.12.0` | MIT |
-| PicoSHA2 | branch `cmake-install-support` | MIT |
+| nlohmann JSON | archive tag `v3.12.0`, SHA-256 `4b92eb0c06d10683f7447ce9406cb97cd4b453be18d7279320f7b2f025c10187` | MIT |
+| PicoSHA2 | commit `1bf940d8a03bb752604fbb366d47b97b50b9e6ce` | MIT |
 | tinyxml2 | tag `11.0.0` | Zlib |
-| liblzma from XZ Utils | archive `5.4.5` | public domain for liblzma; package contains mixed licenses |
+| liblzma from XZ Utils | archive `5.4.5`, SHA-256 `135c90b934aee8fbc0d467de87a05cb70d627da36abe518c357a873709e5b7d6` | public domain for liblzma; package contains mixed licenses |
 
 The Phase A build disables the MAVSDK server and curl, so their optional
 dependency sets are outside this inventory. Generated/build-only Python tools
 used by the MAVLink dependency are not linked into the smoke executable.
 
 The checker `pixi run check-mavsdk-phase-a` fails if reviewed gitlinks,
-dependency references, or NOTICE component names change without an explicit
-audit update.
+dependency references, archive hashes/timestamp handling, NOTICE component
+names, or any bundled licence text changes without an explicit audit update.
+The complete selected-build texts and their checked hashes are in
+`licenses/mavsdk-phase-a/`. MAVSDK-Proto is not fetched, compiled or linked while
+the server remains disabled; enabling it requires a new audit.
+
+## Local hardening evidence - 2026-09-10
+
+The local MAVSDK checkout remains based on gitlink
+`34b417d45c2c33ce0414bc1bc61b54010d055224`, with an uncommitted three-file
+patch that replaces the mutable PicoSHA2 branch, adds SHA-256 archive checks,
+and uses deterministic extraction timestamps. A Windows Release configure and
+smoke-target rebuild completed against those inputs. The deterministic peer
+fixture accepted the expected ArduPilot-like system, rejected a wrong system ID,
+and failed on an absent peer. The provenance checker and 12 focused Python tests
+passed; the complete C++ suite passed 10/10.
+
+The warm build tree was 379,308,757 bytes and the smoke executable was 2,032,128
+bytes. These are one-machine diagnostics, not approved budgets or clean-build
+benchmarks. Because the fork patch and parent gitlink update are not committed,
+a clean clone cannot reproduce this hardened graph yet. No hosted CI, Linux/ROS
+image, live ArduPilot SITL or aircraft evidence was established by this run.
 
 ## Open release blockers
 
-- PicoSHA2 follows a branch instead of an immutable commit.
-- The nlohmann JSON archive has no checksum in the reviewed CMake input.
-- The XZ archive uses MD5 rather than a collision-resistant checksum.
-- A redistribution package must carry the applicable complete license texts;
-  the root NOTICE is an inventory and does not replace them.
+- Commit the reviewed fork patch and update the parent gitlink in a focused,
+  authorized change so clean clones use the hardened inputs.
+- Re-run the selected dependency and licence audit whenever production parity
+  enables another plugin, server, curl or test dependency.
 - Release owners must approve build-tree, executable, memory, startup, and CI
   time budgets from repeatable Linux and Windows measurements.
+- Hosted Linux/Windows, selected ROS image and live ArduPilot SITL evidence
+  remain required.
 
-debt: Phase A accepts the reviewed upstream references only as an isolated
-experiment; revisit before production cutover or whenever a reference changes;
-then pin immutable content, add strong archive hashes, assemble distribution
-licenses, and rerun the build/runtime qualification matrix.
+debt: the hardened selected-build graph exists only as an uncommitted fork patch;
+revisit at the next authorized focused change; then commit the fork revision,
+update the parent gitlink and rerun the clean build/runtime qualification matrix.

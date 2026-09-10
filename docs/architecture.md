@@ -1,6 +1,6 @@
 # Architecture
 
-Target design, 2026-09-08. Requirements and pending decisions are in
+Target design reconciled to CONOPS v1.0, 2026-09-10. Requirements and pending decisions are in
 [PRD](prd.md); current implementation and discrepancies are in [migration](migration.md).
 The working tree already removes Edge Core. Removal is not proof of a complete
 replacement deployment.
@@ -12,7 +12,7 @@ Mission Planner / CLI ---- authenticated client requests ------+
                                                                v
 ROS 2 / Python compute ---- validated observations ----> one C++ command owner
 Competition web adapter --- validated traffic ---------> mission / safety / vehicle
-                        <-- telemetry and events -------+       |
+                        <-- ownship telemetry ----------+       |
                                                                v
                                                     MAVLink implementation
                                                                |
@@ -21,7 +21,16 @@ Competition web adapter --- validated traffic ---------> mission / safety / vehi
 ~~~
 
 ArduPilot owns stabilization, motor control, EKF, low-level navigation and
-failsafes. The C++ core owns high-level mission behavior, command validation,
+failsafes. The competition termination mechanism belongs on the aircraft, with
+independently qualified safety hardware/ArduPilot behavior even when the C++ core
+or ground link is unavailable. C++ verifies configuration/readiness and exposes
+outcomes; Mission Planner requests and displays, never owns parallel termination
+parameter policy. All-mode containment, 100 m AGL and five-second termination
+entry require separate evidence. Hard-boundary violation is the termination trigger (U-FEN-01); Q02 still
+blocks final aircraft-phase termination design;
+this architecture does not prescribe a new kill command or failsafe override.
+
+The C++ core owns high-level mission behavior, command validation,
 traffic response decisions, payload authorization and authoritative outcome
 tracking. Perception produces observations; it does not directly steer vehicles.
 
@@ -47,6 +56,17 @@ framework. The current one-shot CLI remains useful for exclusive local use.
 Target per-field freshness and command authority are missing from the current
 library. The existing ROS node embeds its own Vehicle and the plugin spawns CLI
 processes; those are alternative standalone modes until G2 unifies ownership.
+
+## Boundary geometry
+
+The hard polygon is the authoritative containment/termination boundary.
+Per project decision U-FEN-01, the soft polygon is internal: offset the hard
+polygon's sides inward by a configurable distance in metres, such as 5 m.
+Preserve the plugin's existing SoftBoundaryFromHard / SoftBoundaryInsetMeters
+behavior and UI unchanged. The internal margin does not replace or shrink the
+authoritative hard fence and is not itself a termination trigger. No second
+organizer polygon is required. Future integrated ownership changes must preserve
+these semantics and test concave geometry, narrow regions and infeasible insets.
 
 ## Command authority and client protocol
 
@@ -184,27 +204,45 @@ Use one ground-side competition adapter, initially C++ as an application adapter
 outside the reusable core. The wire protocol, library, authentication and schema
 remain D07. A mock server can use Python because it is a test fixture.
 
-Outbound periodic telemetry samples the latest valid ownship snapshot at 1 Hz.
-Track scheduled, sent and server-received time separately. Event data has unique
-IDs, occurrence time, type, task context and evidence references as allowed by
-the official schema. Keep periodic snapshots and events in separate bounded
-queues so retries do not delay current telemetry. Use bounded retry/backoff and
-explicit expiry; do not relabel historical telemetry as live after an outage.
-Event deduplication/reconciliation must match server capabilities, not assume
-exactly-once delivery.
+Outbound telemetry is required at 1 Hz whenever armed in Task 1. The confirmed
+fields are bidder UAV ID, Unix time, decimal-degree position, AGL metres,
+horizontal/vertical accuracy metres, battery percent, six-state official mode
+and normalized RC/telemetry link quality (AE27-NET-001 through AE27-NET-006).
+Core telemetry owns source validity, age and aircraft state; the adapter maps to
+the versioned wire contract. Neither MSL nor home-relative altitude is AGL without
+a reviewed terrain/reference conversion. GPS fix/satellite count is not metre
+accuracy; a battery-valid flag must not validate an unknown percentage.
+
+Track scheduled, sent and server-received time separately. Bounded retries and
+expiry are proposed engineering policy pending Q04; never send historical
+positions as current or replay a burst to fill a 1 Hz gap. The penalty thresholds
+in the PRD inventory are scoring rules, not safe age limits. Do not hardcode
+unverified endpoints, field names, timestamp precision or authentication flow.
+Disarmed initialization is a project strategy to avoid startup-armed penalties,
+not a CONOPS-specified disarmed cadence. Event uploads, their schema and delivery
+semantics are unconfirmed; implement no event wire protocol before Q04. Internal
+mission evidence and physical action IDs remain necessary regardless of server
+support. Task 2 CSV is a separate ground deliverable, not assumed server telemetry.
 
 Inbound traffic is separate from ownship. Validate schema, vehicle identity,
 timestamp, coordinates, datum, velocity, validity and sequence where supplied.
 Record receive age and uncertainty; handle duplicates, gaps, reordering, stale
-tracks, server errors and reconnects. Event exchange with simulated UAVs goes
-through documented server/cooperation interfaces, never through ownship command
-ACK handling.
+tracks, server errors and reconnects. Simulated-UAV cooperation currently means
+receiving traffic and avoiding its
+exclusion zones; no additional cooperation-event contract is confirmed.
 
 C++ deconfliction starts as deterministic advisory logic (initial D05 scope confirmed): compare
-ownship plan/state with traffic trajectories over a configurable horizon, account
+ownship plan/state with server-supplied cylindrical exclusion zones, account
 for age/uncertainty, and report conflict interval, source and reason. A stale feed
-means traffic unknown, not clear. Separation/lookahead and loss-of-feed response
-are D07/D08. Automatic reroute/hold/RTL/land needs feasibility, fence, terrain,
+means traffic unknown, not clear. Server radial/vertical keepaway values must
+be respected; do not invent a
+constant separation radius. Vertical extent/datum semantics, freshness,
+prediction horizon, right-of-way and loss-of-feed response are Q04/D08.
+A proposed prediction horizon is an engineering choice requiring evidence.
+Advisories must produce demonstrably timely operator avoidance; displaying a
+warning alone does not satisfy AE27-NET-008. Manual operation is permitted by
+AE27-OPS-028, but that permission does not waive the exclusion zones.
+Automatic reroute/hold/RTL/land needs feasibility, fence, terrain,
 energy and command-authority checks plus separate evidence. A zero velocity
 command or RTL is not universally collision-safe. Simulated traffic is not
 real-world detect-and-avoid certification.
@@ -214,11 +252,28 @@ real-world detect-and-avoid certification.
 Split tracker device firmware/hardware, tracker data adapter, C++ task state and
 operator presentation. Select the actual radio/GNSS/protocol at D04; receive
 positions independently of the vehicle link, track sequence/age/battery and
-identity, map gaps, and preserve task association across battery swaps.
+identity and clock provenance, map gaps, and preserve task association across
+restarts. Task 2 requires a chronological ISO8601 timestamp/latitude/longitude
+CSV before window end. Record the five-minute tracking interval starting at
+100 m withdrawal and assess interpolation against independent ground truth.
+The core enforces the moving-target 100 m horizontal offset throughout all
+remaining flight actions, including sample approach and return. Missing/stale
+tracker positions cannot mean the offset is satisfied. Tracker device/radio
+identity is distinct from ownship and simulated-aircraft identity.
+
+The tracker must be custom, under 250 g and at most 8 cm on every axis, standalone
+and untethered. One attachment only: hook-and-loop (hook on tracker) or allowed
+box placement. Payload feedback must distinguish release from actual attachment.
+Sample interfaces must support observed egg integrity, dung core dimensions/
+colour/shape and droppings count/integrity, not merely a relay activation.
+A task evidence exporter is a ground tool; C++ owns task/attempt selection and
+authorization, Python may format/review data without becoming a vehicle owner.
 
 C++ payload operations bind authorization to task, target, output and expiry.
 Proposed states: safe, authorized, executing, verified, failed/unknown. Cancel,
-restart or takeover invalidates permission. Require observed attachment/sample
+restart or takeover invalidates permission. Battery-swap recovery is conditional
+on organizer permission Q03; no plan assumes it is allowed. Require observed
+attachment/sample
 feedback or explicit operator confirmation; an ACK only establishes command
 acceptance. Never automatically retry an uncertain irreversible action.
 

@@ -1,7 +1,9 @@
 # Migration and release gates
 
-Source review baseline: 2026-09-08, including the existing staged, unstaged and
-untracked migration changes. This document owns implementation status, the
+Source review baseline: `fab9f46`, inspected 2026-09-10 with a clean working tree;
+includes planning `d31b0aa`, runtime `3ef38e7`, profiles `51f309e`, setup `a9762b0`
+and MAVSDK Phase A `6922371`. Earlier evidence below retains its original dates.
+This document owns implementation status, the
 cutover inventory and gate evidence. [PRD](prd.md) owns requirements and decisions;
 [architecture](architecture.md) owns the target; TODO is the working ledger.
 
@@ -11,7 +13,7 @@ cutover inventory and gate evidence. [PRD](prd.md) owns requirements and decisio
 
 | Area | Source and tests inspected | Actual scope and remaining limitation |
 |---|---|---|
-| C++ foundation | CMakeLists.txt; include/nomad; src; nine CTest targets | Library and CLI build; Python/mavgen build dependency, no Python runtime dependency |
+| C++ foundation | CMakeLists.txt; include/nomad; src; ten CTest targets | Library and CLI build; Python/mavgen build dependency, no Python runtime dependency |
 | MAVLink | src/mavlink; core_test, codec_golden_test, udp_connection_test | Generated dialect, CRC/framing, UDP, ACKs, typed telemetry, heartbeat/relay handling; native serial/TCP absent |
 | Vehicle | src/vehicle/vehicle.cpp; core_test.cpp | Arm/mode/takeoff/goto/land/RTL and state checks; Copter modes hardcoded; LAND/RTL success verifies mode, not task completion |
 | Missions | src/mission/executor.cpp; core_test.cpp | Synchronous small step executor; no integrated cancellation, persisted resume, survey or Task 2 workflow |
@@ -22,7 +24,7 @@ cutover inventory and gate evidence. [PRD](prd.md) owns requirements and decisio
 | Video | python/tools/simple_video_bridge.py, video_bridge_server.py; test_simple_video_bridge.py | ROS image to GStreamer/RTSP; control HTTP is loopback-only; no validated capture/CV/VIO product pipeline |
 | Profiles | scripts/profile.py; three product profile files; test_deployment_profiles.py | Canonical endpoint and stale-setting checks exist; optional workloads and hardware remain unqualified |
 | MAVSDK | CMake opt-in target; qualified telemetry smoke; deterministic peer fixture; provenance and CI gates | Phase A local evidence exists; hosted/SITL/license/budget gates remain; production still uses current codec |
-| Competition | No dedicated implementation found in src/include/ROS/Python/plugin scans | Web telemetry/events, traffic model/deconfliction, herd survey, tracker/path and sampling workflows are open |
+| Competition | No dedicated implementation found in src/include/ROS/Python/plugin scans | Official telemetry, traffic model/deconfliction, herd survey, tracker/path and sampling workflows are open; events await contract |
 
 The working tree removes the Edge Core source/service/API and many camera/
 SLAM/terminal UI components. Their removal is already present, not performed by
@@ -39,7 +41,7 @@ for missing workflows.
 | C03 | Older docs said Edge Core still runs and only two deployment profiles exist | Three profiles are product scope; qualify actual entrypoints in G3 |
 | C04 | CLI key check accepts any nonempty value; CLI logs admission before outcome; library has no inherited auth/audit | OS trust boundary now; authenticated client protocol and full lifecycle audit at G2 |
 | C05 | Separate CLI invocations, ROS Vehicle and direct plugin writers can conflict | One integrated command owner, explicit manual handover and per-session cancellation |
-| C06 | FlightModeController.EmergencyLand changes descent parameters using old CONOPS wording | Do not carry that rule into 2027; review/remove behavior in a later code change and test safe vehicle-specific abort |
+| C06 | FlightModeController.EmergencyLand writes LAND_SPEED/WPNAV_SPEED_DN and returns mode dispatch; plugin comments claim termination compliance | v1.0 does require minimum 2 m/s rotary descent, but dispatch/parameters prove neither touchdown nor five-second/all-mode/C2-loss termination; redesign ownership and prove aircraft-specific behavior at G2/G7 |
 | C07 | Generic servo/relay paths bypass release_payload's consuming interlock; plugin has its own timers/confirmation | Reserve hazardous channels, unify authorization in core, provide independent output timeout/feedback |
 | C08 | ROS callbacks wait synchronously; receipt timestamps and mixed odometry frames can misrepresent freshness/frame | Bounded worker operations; acquisition-time/frame contract and independent axis/time tests |
 | C09 | VehicleState has validity flags but no per-field age; connection freshness is not position freshness | Add independent field timestamps; reject fresh-heartbeat/stale-position decisions |
@@ -50,6 +52,38 @@ for missing workflows.
 | C14 | Prior ZED/sim components were deleted; current sensor/workload path is unspecified | Preserve optional compute goals, choose supported capture/provider paths; no ZED prerequisite |
 | C15 | Scan-based failsafe and traceability tests do not prove all command surfaces are safe | Semantic parameter/output authorization and actual fault tests; retain scans as structural checks |
 | C16 | MAVSDK adoption was both "decided" and awaiting approval; Phase A was marked complete/in-progress in several places | User confirmed early release prerequisite; one transport record and G-M gates below |
+| C17 | Preview plan asserted Task 2 battery swaps and event uploads, left all task details TBD | Replaced with AE27 inventory; swaps and event protocol remain Q03/Q04, not official facts |
+| C18 | Generic survey/animal identity plan omitted specific deer clusters, tag codes and timed text/CSV submissions | G5/G6 now use exact task artifacts and scoring oracles |
+| C19 | Advisory-first wording could imply display alone meets deconfliction; payload autonomy was wholly pending CONOPS | Actual cylinder avoidance required; manual operation permitted; Task 2 autonomy separately scored, D05/Q06 still needed |
+| C20 | Generic link-loss recovery and fence upload could be mistaken for competition termination compliance | Independent all-mode termination, C2-path loss, 100 m AGL and verified hard-polygon containment are G7 gates; internal soft inset remains unchanged per U-FEN-01 |
+| C21 | Profile README still claimed template credentials/endpoint defects; SITL README retained removed task; CONTRIBUTING described existing Edge Core | Local summaries reconciled to repaired source; no runtime code changed |
+| C22 | GeofenceConfig.MaxAltitudeAglMeters and NOMADBoundaryView default to 122 m; preset display checks 122 m; optional soft-from-hard inset uses a project buffer | CONOPS ceiling is 100 m AGL; qualify core-owned limits and truthful UI, reject old competition presets, preserve the plugin internal inset unchanged per U-FEN-01; no second official polygon required (GAP-05/G7) |
+
+## Official CONOPS gap analysis
+
+Requirement IDs resolve in the [PRD source inventory](conops-requirements.md).
+Every row is open. Existing primitives or mocked tests are partial implementation
+coverage, never end-to-end competition acceptance. Dependencies are prerequisites,
+not authorization to fly. Major gate evidence is expanded below this table.
+
+| Gap / requirements | Required behavior and current source coverage | Owner | Dependencies | Safety risk | Objective test / required evidence | Gate | Blocked decision |
+|---|---|---|---|---|---|---|---|
+| GAP-01 / U-CORE-01, U-ADAPT-01 | One authority; main.cpp creates UDP connection, ROS node owns another Vehicle, plugin starts CLI and writes directly | C++ runtime / client adapters | G-M, versioned client contract | Conflicting actions and stale authorization | Concurrent client/pilot takeover/replay tests; one accepted writer, no automatic resume | G2 | D02/D10 |
+| GAP-02 / AE27-NET-002 through AE27-NET-006 | Required telemetry fields; state.hpp lacks per-field age, position accuracy, link metrics and official mode model; protocol.cpp supplies MSL/home-relative altitude | C++ telemetry / link adapter | Firmware sources, time and datum model | False position/AGL/health | Independent fixtures for terrain change, fresh heartbeat with frozen position, unknown accuracy/battery/link and overlapping modes | G2/G4 | D08/Q04 |
+| GAP-03 / AE27-NET-001, AE27-NET-009 through AE27-NET-014 | Authenticated armed 1 Hz upload and scoring receipt; no competition adapter exists; MAVLink heartbeat is unrelated | Competition adapter | GAP-02, official token/schema contract | Hidden outage or blocked control | Independent receiver clocks, 300 s armed run, 30 s+ outages, cadence boundaries, expired auth, startup armed; official server acceptance | G4 | Q04/D11 |
+| GAP-04 / AE27-NET-007/008, AE27-INT-002 | Receive 1 Hz traffic and avoid cylinders; no traffic model or advisories | Adapter / C++ safety / operator | GAP-02/03, approved cylinder semantics and response budget | Collision / stale feed interpreted clear | Crossing/head-on/overtaking, vertical separation, exact boundary, duplicate IDs, stale/reordered feed; demonstrate actual operator avoidance within budget | G4/G7 | Q04/D05/D08 |
+| GAP-05 / AE27-OPS-005/006/020/037/038 | Continuous all-mode concave/altitude containment; geofence.cpp checks position targets only, unset fence allows targets; fence upload not automatic enforcement proof | ArduPilot / C++ safety | Verified hard polygon, internal inset distance, AGL source, firmware | Flyaway / wrong termination trigger | Reject absent/invalid competition fence; readback action/altitude; trajectory crossing despite inside endpoint; breach tests all modes | G2/G7 | U-FEN-01 resolved; hard-fence/AGL evidence still required |
+| GAP-06 / AE27-OPS-015 through AE27-OPS-019/035 | Aircraft-specific termination always available, five-second entry and C2-loss self-termination; watchdog zero and plugin LAND dispatch insufficient | ArduPilot / safety hardware; C++ verifies readiness | Qualified termination path, phase/type detection | Catastrophic uncontrolled aircraft | Props-off judge demonstration plus isolated SITL fault matrix; independently measure fixed-wing outputs, rotary descent/touchdown, C2/core/power faults and transition phases | G7 | Q02/D01/D09 |
+| GAP-07 / AE27-T1-001/002/008/012 | Full 3-5 km prescribed lap route, single-battery reserve, VTOL landing; executor.cpp only synchronous steps and Copter mode constants | C++ mission / ArduPilot | G-M QuadPlane parity, GAP-05/06 | Invalid transition, exhaustion, false landing success | QuadPlane takeoff/transition/course/laps/abort/landing SITL, then single-battery field rehearsal with independent position/landed evidence | G5/G7 | D01/D08; actual course |
+| GAP-08 / AE27-T1-003 through AE27-T1-007/010/011 | Deer totals/clusters/codes/anomalies and timed TXT; video bridge moves images, no task perception/export | Python perception / C++ mission / ground evidence | Capture hardware, calibrated imagery, clock/attempt model | Wrong target or misleading count | Held-out tagged decoys/distractors/occlusion, clustering oracle, timed upload name/content checks and operator audit | G5 | Q05/D01/D08/D11 |
+| GAP-09 / AE27-T2-001 through AE27-T2-006/017 | Custom compliant tracker and single attachment; no tracker interface, generic outputs only | Tracker hardware / payload / C++ mission | Chosen device/mechanism and safe feedback | Duplicate release, wrong target, contact harm | Complete tracker mass/axis measurement, placement witness, duplicate/reboot/no-contact/jam tests; 100 m exclusion through sampling/return | G6/G7 | D04 and official site geometry |
+| GAP-10 / AE27-T2-007 through AE27-T2-010/018 | Five-minute path/ISO8601 CSV on time; no tracker ingestion/export | Tracker adapter / evidence tools | Device, time synchronization, GAP-09 | Lost person offset / falsely precise path | Independent 5 m/s trajectory with burst/gap/reboot faults; linear interpolation 5/15 m error scoring and deadline upload | G6 | Q07/D04/D08 |
+| GAP-11 / AE27-T2-011 through AE27-T2-015/019 | Intact egg, 1-4 cm green core, four spheres on pad; release_payload interlock not collection verification; raw output bypass exists | Payload hardware / C++ safety | Mechanism/feedback, reserved channels, authority | Unintended actuation, damaged sample | Independently inspect quantity/integrity on pad; power/link/jam/unknown feedback, no repeated irreversible action | G6/G7 | D04/Q07 |
+| GAP-12 / AE27-T2-020/021; AE27-INT-001 | Optional no-intervention bonus; conditional swap recovery; no autonomous task/persisted resume | C++ mission / operator | GAP-09/11, explicit strategy | Unsafe autonomous interaction / replay | Continuous no-intervention success record if bonus selected; swap/resume permissions expire and records persist if swaps permitted | G6 | D05/Q03/Q06 |
+| GAP-13 / U-PROF-01 through U-PROF-03; AE27-OPS-004/027/029 | Core viable in all profiles with truthful missing features and live map; templates tested, capability service/capture/resource evidence absent | Integration / Mission Planner | Qualified camera/radio/compute, single owner | Frozen video/map or overload starves safety | Clean boots without GPU/ROS/camera; source loss and saturated video/LTE/RTK; position-age display and measured deadlines | G3/G7 | D01/D02/D06/D08/D09 |
+| GAP-14 / AE27-OPS-023 through AE27-OPS-036 | Physical aircraft, mass, electric power, RF, prop inhibit and FRR | Airframe / safety / flight leads | Final hardware and approved procedures | Unsafe/ineligible aircraft | Per-aircraft weigh/BOM/licence/prop-inhibit inspection, full proof-flight video, weather/energy envelope and approved FRR | G7/G8 | Q03/Q08/D01/D10 |
+| GAP-15 / AE27-ADM-001 through AE27-ADM-035; AE27-OPS-022 | Deadline, eligibility, publication, preparation and attempt evidence; no competition deliverable workflow | Competition lead / ground evidence | Roster, owners, secure storage and reviewed rubric | Lost eligibility/evidence, mixed attempts | Timed isolated-crew rehearsals, attempt reset, file/heading/page/rubric and private receipt checks | G8 | D10/D11/Q08/Q09 |
+| GAP-16 / U project MAVSDK decision | Production MAVSDK mandatory; main.cpp still UdpMavlinkConnection, optional smoke only | Transport lead | Phase A pins/licences/CI/SITL/budgets then parity | Mistaking telemetry smoke for safe control | Phases A-E evidence, Copter and QuadPlane, watchdog/stop/heartbeat/fence/parameters, production provenance and rollback | G-M | D08/D10; external evidence |
 
 Telemetry frame review must include the ROS odometry NED label with up-positive
 position and body-frame metadata, and velocity sign conversion through both
@@ -89,10 +123,12 @@ permission to operate hardware. No gate is closed merely by this planning change
 ### G0 — Planning baseline (lead + competition lead)
 
 Reconcile these docs, preserve stable safety IDs, resolve links and traceability.
-Read the full CONOPS when available and attach source sections to P requirements.
-Record user decisions and keep remaining hardware/rule thresholds TBD.
+The full v1.0 CONOPS is now read and inventoried under AE27 IDs in the PRD
+source appendix. Preserve the retired P-ID crosswalk; retain resolved Q01/U-FEN-01, resolve Q02-Q09 and assign
+named owners without pretending this review closes organizer questions.
 Exit: strict docs build and traceability test pass; no unsupported requirement
-claims; assigned decision owners and CONOPS reconciliation remain necessary.
+claims; assigned decision owners and resolution of blocking interpretations
+remain necessary. This pass establishes provenance, not flight readiness.
 
 ### G1 — Executable baseline (build/integration lead; depends on G0 planning)
 
@@ -225,18 +261,23 @@ VIO feeds are separately qualified if needed. Profile strings are insufficient.
 
 ### G4 — Server and traffic (integration + core leads; G2, D07/D08)
 
-Implement schema adapter and deterministic mock; sample/send at 1 Hz plus events,
-consume/process 1 Hz traffic. Define data age, retry, queue, clock and outage
+Implement the confirmed field model and an independent fixture, then the
+official schema adapter after Q04. Send 1 Hz telemetry whenever armed in Task 1
+and consume 1 Hz traffic; event uploads and Task 2 applicability are unresolved. Define data age, retry, queue, clock and outage
 policies with approved thresholds. Advisory-first is the user's initial scope;
-automatic maneuver decisions remain TBD after CONOPS.
+manual operation is permitted, but actual exclusion-zone avoidance must be
+demonstrated. Automatic maneuver design is not mandated by this document.
 
 Exit: record send and independent receipt timestamps, missed cycles and jitter;
-events reconcile across restart without duplicate effect; malformed/auth-expired/
+startup/armed and clock/rate penalties are independently exercised; malformed/auth-expired/
 rate-limited/offline server cannot block command handling. Inject crossing,
 head-on, overtaking, diverging, stationary, duplicate-ID and stale traffic with
 ground truth; measure false/missed advisories and warning time against approved
-thresholds. Missing feed shows unknown. Official-server integration and required
-simulated-UAV cooperation are separate acceptance runs, not mock-only closure.
+thresholds. Missing feed shows unknown. Measure 300 seconds of armed receipt, 30-second
+and longer outages, >1.1-second and <0.4-second intervals, invalid GPS and startup
+armed against clarified scoring semantics. Test cylinder radial/vertical boundaries
+and operator response under load. Official-server acceptance and actual simulated
+traffic avoidance are separate runs, not mock-only closure.
 
 ### G5 — Task 1 mission (mission + perception + flight leads; G2–G4)
 
@@ -248,22 +289,32 @@ GNSS/Here4 RTK is the intended navigation baseline; VIO is not a Task 1 dependen
 Exit: independent known animal/marker counts and identities, held-out imagery,
 coverage and geolocation errors, duplicate/occlusion cases and review audit.
 QuadPlane SITL plus authorized field rehearsal verifies complete task with
-single-battery reserve, transitions and landing. Required accuracy/distance/
-duration thresholds come from CONOPS and D08, not this plan.
+single-battery reserve, transitions and landing. Use the prescribed 3-5 km total lap course, antler/no-antler decoys, capitalized
+two-character codes, 10 m clusters (Q05 oracle), anomaly descriptions and correctly
+named TXT export. Test submission exactly at five minutes before and 15 minutes
+after cutoff and adjacent timestamps. Record actual Drive receipt. Runtime
+accuracy/reserve/latency budgets still need D08; source scoring does not set them.
 
 ### G6 — Task 2 payload mission (payload + mission + safety leads; G2–G4, D04)
 
 Custom tracker technology (possibly ESP32), attachment and sample mechanism remain
 undecided. Implement tracker identity/position ingestion, association and mapped
 path with uncertainty/gaps. Explicit action authorization is initial scope;
-autonomous sampling remains a later CONOPS decision.
+autonomous sampling is an optional scored strategy requiring D05/Q06 and
+no-intervention evidence for the complete pickup-to-pad sequence.
 
 Exit: known ground-truth trajectory and measured error/age; wrong tracker,
 packet loss, replay, reboot, RF interference and depleted tracker battery cases.
 Observe tag attachment and simulated sample collection with independent feedback,
 measure quantity/containment, and test jam/no-contact/relay-off failure/abort.
-Task 2 battery swap proves disarm, safe payload, persistent mission records,
-expired permissions and deliberate resume without duplicate tagging/sampling.
+Measure tracker under 250 g and at most 8 cm per axis, exactly one placement,
+100 m withdrawal and continued horizontal offset, five-minute path up to 5 m/s,
+chronological ISO8601 CSV before cutoff and independent interpolated 5/15 m
+accuracy scoring. Inspect intact egg, 1-4 cm cylindrical core at least 75% green,
+and four intact spheres on the 32-inch pad by cutoff. Require observed safe
+landing and field clearance except the attached tracker. Q07 governs unspecified
+measurement details. If Q03 permits battery swaps, prove disarm, payload safety,
+persisted records, expired permissions and explicit resume without duplicate action.
 
 ### G7 — Hardware and operational safety (hardware + flight/safety leads)
 
@@ -280,8 +331,13 @@ assuming RTK availability or accuracy from the product name.
 Bench evidence covers props-safe setup, sensor calibration/time, camera access,
 actual output de-energization on link/power/process faults, independent manual
 control and common-mode link failures. A disconnected link cannot deliver stop;
-verify ArduPilot behavior independently. Authorized field tests cover aircraft-
-specific abort, transition failure, landing, traffic procedures and safe payload.
+verify the independent all-mode termination mechanism, including loss of C2,
+within-five-second activation entry, fixed-wing motor/surface state, rotary
+minimum-2-m/s descent through touchdown and QuadPlane transition cases. Settle
+Q02 before aircraft testing; fence/altitude/termination readback alone does
+not prove behavior. Complete every AE27-OPS FRR, licence, propeller-inhibit,
+weather and proof-flight requirement, with judge acceptance before competition.
+Authorized field tests cover aircraft-specific abort, transition failure, landing, traffic procedures and safe payload.
 Re-read safe configuration and disarmed state after each session; record failures.
 
 ### G8 — Competition release (release + safety + competition leads; all gates)
@@ -313,6 +369,89 @@ wire evidence survives the switch. Do not interpret this plan as permission to
 delete the current codec before G-M.
 
 ## Checks run for this documentation review
+
+### MAVSDK Phase A dependency hardening - 2026-09-10
+
+Requirement: project MAVSDK decision / GAP-16. Falsification: change the
+PicoSHA2 commit, either archive SHA-256, extraction timestamp option or a bundled
+licence text and require the provenance tests to fail; rebuild and run the peer
+fixture to reject wrong/absent systems.
+
+The local MAVSDK fork patch now pins PicoSHA2 to commit
+`1bf940d8a03bb752604fbb366d47b97b50b9e6ce`, verifies nlohmann JSON and XZ
+archives with SHA-256, and requests deterministic archive extraction timestamps.
+`licenses/mavsdk-phase-a/` carries the complete texts for the selected static
+telemetry build, and the provenance checker verifies their hashes and NOTICE
+coverage. The Windows Release configure and target build passed; the peer
+fixture passed expected-system, wrong-system and no-peer cases; 12 focused
+Python tests and all 10 CTests passed. The warm build tree measured 379,308,757
+bytes and the executable 2,032,128 bytes; no budget is inferred.
+
+The three-file fork patch is uncommitted and the parent gitlink still names
+`34b417d45c2c33ce0414bc1bc61b54010d055224`, so clean-clone reproducibility is
+not established. Docker Desktop was not running; live SITL was not attempted.
+Hosted Linux/Windows, ROS-image, live-SITL, memory/startup and approved-budget
+evidence remain open. Production continues to use the legacy transport.
+
+### Boundary clarification - 2026-09-10
+
+The project owner resolved Q01: hard-boundary violation means termination;
+soft boundary is an internal configurable inward distance from the same hard
+polygon, e.g. 5 m. The existing plugin implementation/default inset is retained
+unchanged, including its configuration controls. No second official soft polygon
+or organizer ruling is required for this design. Appendix C's inconsistent labels
+remain a source note. Hard-containment/termination tests and the separate 100 m
+AGL/default-display discrepancy remain open; no runtime behavior changed.
+
+### CONOPS reconciliation - 2026-09-10
+
+Read all 36 pages before editing; inventoried 125 statements/conditions with
+source pages, owner, safety relevance, provenance status and evidence. Visually
+checked the contradictory Appendix C table and task scoring/sample tables.
+Mapped implementation into 16 open gaps and retained stable SR and preview IDs.
+The new structural test does not prove semantic completeness or flight compliance.
+
+Checks recorded when the reconciliation itself completed, before the later
+Phase A source hardening above:
+
+- `pixi run test-core`: 10/10 CTests passed, Windows Debug; compiler emitted
+  existing C4530 exception-unwind warnings. No C++ source/build options changed.
+- `pixi run test`: 328 passed, 3 skipped; retained Python coverage 96.34%.
+  This runs the full Python suite, including the four new traceability cases.
+- Focused CONOPS and safety traceability suite: 74 passed.
+- `pixi run lint`, `format-check`, `typecheck`, `complexity-check`, `docs-build`
+  and `check-mavsdk-phase-a`: passed. Type check covers its configured seven
+  source files; it is not a C++ or full adapter proof.
+- `pixi run lint-plugin`: non-deploying Release compile/dead-code check passed.
+- All changed-file pre-commit hooks passed. Read-only whole-tree SPDX hook
+  still fails only on the pre-existing scripts/hardware/servo_test.c header;
+  that file is unchanged. A whole-tree all-hook pass is not claimed.
+- Local Markdown link check: 67 links in changed documents resolved before
+  this evidence note; every changed file below 100 KB. Final diff review includes
+  both new files; no runtime/configuration mutation, secret, real deployment
+  address, generated artifact or unrelated source change is included.
+
+Changed document set: PLAN.md, TODO.md, README.md, CONTRIBUTING.md; docs/prd.md,
+docs/conops-requirements.md (new subordinate appendix), docs/architecture.md,
+docs/migration.md, docs/operations.md, docs/safety.md, docs/development.md,
+docs/index.md, docs/mavsdk-adoption.md, docs/mavsdk-dependencies.md;
+config/profiles/README.md, mission_planner/README.md and tests/sitl/README.md.
+Supporting changes: properdocs.yml navigation and tests/test_conops_traceability.py.
+
+Branch: `codex/conops-2027-reconciliation`, created from clean main `fab9f46`.
+No staging, commit, push, merge request or deployment performed. Earlier supplied
+topic branch names are absent from this checkout's local/cached remote refs;
+the commit comparison `a9762b0..6922371` still contains exactly the Phase A commit.
+The earlier push verification and signed-out PR attempt are historical user
+evidence, not newly verified remote/PR status. This reconciliation is a separate
+logical change and must not be folded into that one-commit MAVSDK comparison.
+
+No live SITL, hardware, ROS image, hosted CI or official-server acceptance was
+run here. The server portal could not be read by the web tool; Q04 remains open.
+MAVSDK Phase A and production adoption remain incomplete; no release gate closes
+solely because these documentation and local regression checks pass.
+
+### Earlier planning review - 2026-09-08
 
 - 2026-09-08: pixi run test-core — 9/9 CTest targets passed (Windows Debug).
 - 2026-09-08: pixi run test-python — 251 passed, 3 skipped.

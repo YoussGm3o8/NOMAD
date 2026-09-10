@@ -1,8 +1,8 @@
 # NOMAD delivery plan
 
-Planning baseline: 2026-09-08. This replaces the duplicated migration narratives
-previously in PLAN and TODO. It plans software for the AEAC SUAS 2027 Wildlife
-Monitoring preview; it does not approve flight, hardware changes, or deployment.
+Planning baseline: CONOPS v1.0 (2026-09-08), reconciled 2026-09-10.
+This is the delivery summary for the official AEAC SUAS 2027 assessment;
+it does not approve flight, hardware changes, or deployment.
 
 ## Read this plan in order
 
@@ -48,9 +48,9 @@ work without ROS/perception, but does not by itself satisfy wildlife assessment.
 | MAVSDK adoption | Tested ArduPilot transport parity, production cutover and focused merge request | G-M |
 | Core authority | One active writer, fresh state, cancellable missions, bounded adapters, truthful outcomes | G2 |
 | Profile qualification | Each profile runs its declared capabilities and exposes missing ones | G3 |
-| Competition integration | Outbound 1 Hz telemetry/events, inbound 1 Hz traffic, deterministic advisories | G4 |
+| Competition integration | Armed 1 Hz telemetry, inbound traffic cylinders and demonstrated operator avoidance | G4 |
 | Task 1 | Survey evidence, count/identity review, simulated-UAV coordination, return and landing | G5 |
-| Task 2 | Tracker association/path, authorized tagging and simulated sampling, battery-swap recovery | G6 |
+| Task 2 | Tracker association/path, authorized tagging and specific samples, conditional swap recovery | G6 |
 | Hardware qualification | Mass/endurance/link/sensor/payload evidence for selected aircraft and profiles | G7 |
 | Release | Full rehearsals, security/observability, operator acceptance and reproducible package | G8 |
 
@@ -70,17 +70,22 @@ Task 1 targets a lightweight VTOL with groundstation_gpu, ground CV/video and
 Pi Zero LTE backup. Task 2 targets a heavier quad below 15 kg with optional onboard
 Jetson. The current Copter-only mode semantics need explicit QuadPlane support.
 Traffic advisories and explicit payload authorization are the initial scope;
-greater autonomy remains a CONOPS decision. Hardware detail is recorded in PRD.
+manual operation is allowed; Task 2 autonomous collection/takeoff/landing are
+optional scored criteria. Team scoring priorities remain D05/Q06. Hardware
+detail is recorded in PRD.
 
 ## Planning milestones
 
-The [organizer page](https://www.aerialevolution.ca/2027-student-competition/)
-lists proposal submission on January 15, flight demonstration on May 14–16,
-and mission report on May 26, 2027; it says CONOPS publication is planned for
-mid-September 2026. Revalidate these external dates when baselining the CONOPS.
+CONOPS v1.0 section 2 fixes team registration 2026-11-27, proposal
+2027-01-15 1700 ET, flight selection starting 2027-03-02, member registration
+2027-03-12, FRR documents 2027-04-28, presentation 2027-05-13 2359 ET,
+demonstration May 14-16 and report May 26 1700 ET. Default deadlines are 2359 ET.
+The [PRD inventory](docs/conops-requirements.md) owns format/eligibility/scoring
+conditions. Obtain final insurance/fees and boundary/server clarifications.
 
 Recommended internal sequence: close requirement and hardware choices after
-CONOPS review; substantiate the proposal with measured feasibility; complete
+the remaining Q02-Q09 clarification review; substantiate the proposal with measured
+feasibility; complete
 integration and authorized rehearsals before the May demonstration; preserve
 evidence for the report. These are dependencies, not staffing estimates or
 promised dates. Team owners and capacity remain D10.
@@ -88,8 +93,10 @@ promised dates. Team owners and capacity remain D10.
 ## Working discipline
 
 The planning/migration baseline is recorded in commit `d31b0aa`. Focused
-implementation follows the single active item in TODO; build/task repair is
-underway with runtime limitations recorded in migration. Preserve unrelated work
+implementation follows the single active item in TODO. Runtime/profile/setup
+repairs and partial MAVSDK Phase A evidence are recorded in migration. This
+reconciliation begins from clean main at `fab9f46` and changes no flight code.
+Preserve unrelated work
 and follow AGENTS for publication and deployment authorization.
 
 Gate closure requires a recorded artifact/configuration and independent observed

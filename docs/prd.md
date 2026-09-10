@@ -1,53 +1,73 @@
 # Product requirements
 
-Baseline: 2026-09-08. NOMAD is a C++20 vehicle-control system with independent
-clients and optional companion compute, prepared for the AEAC SUAS 2027 Wildlife
-Monitoring assessment preview.
+Baseline: official AEAC SUAS 2027 CONOPS v1.0, 2026-09-08; reconciliation
+2026-09-10 against clean source commit `fab9f46` (including `6922371`).
+NOMAD is a C++20 vehicle-control system with independent clients and optional
+compute. This document is the product requirement authority.
 
 ## Requirement authority
 
-| Label | Meaning |
+| Class | Meaning |
 |---|---|
-| U | Explicit product direction from the project owner in this planning request |
-| P | Competition preview requirement supplied by the project owner; provisional until CONOPS reconciliation |
-| E | Independently checked organizer publication |
-| R | Architect recommendation; not a competition rule or accepted user decision |
-| TBD | Unresolved; cannot be used to authorize behavior or close a gate |
+| Confirmed CONOPS | AE27 IDs in the [source inventory](conops-requirements.md), with exact section/page and required evidence |
+| Project decision (U) | Explicit project direction; not an organizer rule |
+| Working assumption (R) | Engineering recommendation awaiting qualification |
+| Unresolved (Q / TBD) | Insufficient or contradictory information; cannot close affected gate |
+| Deferred design (D) | Team choice to make when dependencies and evidence are ready |
 
-The [organizer page](https://www.aerialevolution.ca/2027-student-competition/)
-was checked on 2026-09-08. It confirms the wildlife survey/tagging scenario and
-announces mid-September CONOPS publication. It links the
-[assessment preview](https://drive.google.com/file/d/1jsKWHc171YceXCohEF51jnElIylXg505/view).
-The linked PDF body was not retrievable through the browsing tool; P rows below
-use the user's supplied summary, not a claimed independent reading of the PDF.
+The complete supplied 36-page CONOPS is authoritative for this baseline. Its
+identity, statement-by-statement inventory, scoring conditions, permissions and
+interpretations are in the subordinate source inventory. That inventory is part
+of this PRD. C means source-confirmed, not implemented. Later amendments must
+be reconciled before release. The
+[organizer page](https://www.aerialevolution.ca/2027-student-competition/) still described a preview
+when checked during this review; it does not override the supplied v1.0 PDF.
 
-No full CONOPS has been baselined here. At G0, record its version/date and section
-for each P row, reconcile differences, and update affected gates before treating
-new details as requirements. Do not import old CONOPS section numbers or scoring
-rules from source comments. Confirmed product direction and provisional preview
-requirements are intentionally distinct.
+## Competition requirements and superseded preview IDs
 
-## Competition requirements
+| Previous ID | Official source IDs | Reconciled requirement |
+|---|---|---|
+| P-T1-01 | AE27-T1-001 through AE27-T1-011 | Prescribed 3-5 km lap approach, deer totals, 10 m clusters, two-character tags, anomalous interactions and timed text report |
+| P-T1-02 | AE27-NET-001 through AE27-NET-014 | Armed 1 Hz telemetry and 1 Hz simulated traffic; keep outside supplied cylindrical zones; no separate cooperation-event protocol specified |
+| P-T1-03 | AE27-T1-012 | Safe flight-line landing by window end; field clear of UAS parts |
+| P-T2-01 | AE27-T2-001 through AE27-T2-006 | Custom tracker under 250 g, maximum 8 cm per axis; attach one with hook-and-loop or use box; withdraw and maintain 100 m offset |
+| P-T2-02 | AE27-T2-007 through AE27-T2-010; AE27-T2-018 | Five-minute path, chronological ISO8601 CSV before window end; 5/15 m accuracy scoring |
+| P-T2-03 | AE27-T2-011 through AE27-T2-022 | Egg, cylindrical dung core and four droppings; intact return to 32-inch pad; autonomy is separately scored |
+| P-AIR-01 | AE27-OPS-023 | One UAV per task; same or different designs/aircraft allowed |
+| P-AIR-02 | AE27-OPS-024 | Maximum 15 kg wording conflicts with under-15-kg FRR; project uses strict under 15 kg with measurement margin |
+| P-OPS-01 | AE27-T1-008; AE27-INT-001 | Task 1 no swaps confirmed; Task 2 permission unresolved, not an established rule |
+| P-NET-01/02 | AE27-NET-001 through AE27-NET-014; AE27-INT-003 | Fields, units, rates and penalties specified; event requirement withdrawn pending official server contract |
 
-| ID | Basis | Requirement | Acceptance evidence |
-|---|---|---|---|
-| P-T1-01 | P | Long-distance herd survey; visual detection, counting, identification | G5: ground-truth survey dataset and field rehearsal, coverage/count/identity errors reported |
-| P-T1-02 | P | Cooperate with simulated UAVs; exchange telemetry and deconflict traffic | G4/G5: independent traffic simulator, cooperation events and conflict scenarios |
-| P-T1-03 | P | End Task 1 with safe landing | G5/G7: authoritative landed/disarmed state and operator evidence |
-| P-T2-01 | P | Design a tracker and tag the animal | G6/G7: tracker qualification, association and observed tag placement |
-| P-T2-02 | P | Track animal movement and map its path | G6: independent trajectory, position error and gaps visible |
-| P-T2-03 | P | Collect simulated biological samples | G6/G7: measured collection result, identity, containment and abort tests |
-| P-AIR-01 | P | One aircraft per task | G7/G8: task roster and configuration; same airframe across tasks is TBD |
-| P-AIR-02 | P | Aircraft mass below 15 kg including payload | G7: calibrated all-up measurement of each flight configuration, including battery |
-| P-OPS-01 | P | Battery swaps allowed only for Task 2 | G5: Task 1 single-battery endurance; G6: Task 2 safe swap/resume |
-| P-NET-01 | P | Send telemetry to the competition web server at 1 Hz plus event-driven data | G4: mock and official server receipt timing, schema validation, event reconciliation |
-| P-NET-02 | P | Receive and process a 1 Hz traffic stream | G4: timed ingestion, expiry, malformed/reordered/duplicate/lost-update tests |
+Cross-task flight requirements now explicitly include 100 m AGL, continuous
+per-aircraft GCS position/area display, all-mode containment and aircraft-specific
+termination. ArduPilot and safety hardware must operate without ground C++
+availability. Ground LAND dispatch and ordinary RTL are not termination evidence.
+See [safety](safety.md), including the project boundary decision in Q01.
 
-Task distances, duration, animal classes and appearance, identification meaning,
-tag attachment method, sample medium/quantity, scoring, minimum separation,
-altitude datum, allowed autonomy, server protocol/authentication and delivery
-tolerances remain TBD. Do not invent those values. Strictly below 15 kg is the
-supplied constraint; manufacturing/measurement margin is a design decision.
+## Unresolved organizer questions
+
+Q01 is resolved by project direction; Q02-Q09 remain questions to prepare for the organizers, not messages sent by this
+review. Competition/safety leads own obtaining written answers and versioning them.
+
+| ID | Missing or conflicting information | Consequence / required resolution |
+|---|---|---|
+| Q01 (resolved by project owner, 2026-09-10) | Appendix C labels remain inconsistent as a source note; no separate official soft polygon is needed for our design | Hard-boundary violation triggers termination. Soft boundary is internal, derived by a configurable inward distance from the same hard polygon, e.g. 5 m. Preserve the existing plugin implementation and settings; no plugin change requested |
+| Q02 | Fixed-wing full-surface direction/magnitude and QuadPlane transition termination semantics are unspecified; lost-mechanism rapid response has no independent numeric definition | Safety lead obtains aircraft-specific acceptance and proves all flight phases without disabling failsafes |
+| Q03 | Maximum 15 kg versus under 15 kg; Task 2 swaps not expressly permitted | Keep strict under 15 kg; plan Task 2 single-battery until ruling; validate swaps only as conditional recovery |
+| Q04 | Server protocol/paths/token lifecycle, field keys/nulls, timestamp units/clock rules, mode precedence, accuracy interpretation, startup armed/GPS validity, latency penalty, outage/retry/events and Task 2 applicability unresolved | Version and test official contract; do not invent JSON, endpoint paths, disarmed rate or failover permission |
+| Q05 | 10 m cluster radius does not define overlapping clusters or centre construction | Confirm scoring oracle before selecting clustering algorithm; retain operator review |
+| Q06 | Whether pre-sequence operator authorization preserves autonomous sample credit is unspecified | Keep explicit authorization baseline; no autonomy-credit claim until accepted; no new flight behavior in this pass |
+| Q07 | Tracker clock alignment/CSV name and destination, exact 5/15 m score boundary, shortened trajectory scoring, and dung 75% measurement method unspecified | Confirm deliverable/measurement conventions; use private ground truth and conservative design margins |
+| Q08 | Insurance details and fees TBC; incorrect FRR cross-references; event-certificate versus AEAC SFOC signature wording | Obtain final administrative package, applicable regulatory review and judge approval before flight |
+| Q09 | Speed ranking interpolation/ties/one-finisher cases and actual flight-window length not fully fixed | Keep configurable scoring/rehearsal oracle; no fixed 30-minute endurance assumption |
+
+Q04 also includes traffic altitude datum, vertical keepaway half-height versus
+full height, coordinate frame, track timestamps/sequence, exclusion-boundary
+equality, freshness/expiry, velocity availability, prediction horizon, right-of-way,
+required alerting and response to stale/missing feed. CONOPS supplies cylinders
+and a duty to avoid them, not those detailed semantics. The referenced server
+portal could not be retrieved by the web tool during this review; its contents
+are not claimed to have been read. No token was requested or competition telemetry sent.
 
 ## Confirmed product direction
 
@@ -72,7 +92,7 @@ payload channel mapping, or transport has been qualified.
 - Task 1: proposed lightweight VTOL, no onboard Jetson, groundstation_gpu for
   CV/video; Pi Zero for backup LTE and possibly video streaming.
 - Task 2: heavier quadcopter in the 15 kg class, still strictly below 15 kg
-  all-up; Jetson onboard is optional pending the actual autonomous task.
+  all-up; Jetson onboard remains optional for the selected scoring strategy.
 - Walksnail FPV camera planned; additional camera TBD. No ZED dependency.
 - Use the flight controller's IMU. Cube Orange or a custom ArduPilot controller
   is under consideration; UART/PWM counts and board integration need validation.
@@ -81,7 +101,8 @@ payload channel mapping, or transport has been qualified.
 - Custom tracker, possibly ESP32, remains undecided. Tagging and sample
   mechanisms/feedback are not selected.
 - Begin with traffic advisories and explicit action authorization. Revisit
-  automatic traffic/payload behavior after CONOPS; it is not yet required.
+  automatic traffic/payload behavior only after reviewed evidence. CONOPS allows
+  manual flight, requires actual traffic separation, and separately rewards autonomy.
 - MAVSDK must be used at competition: early adoption, unit/integration testing
   and a focused merge request are required implementation work (D03 resolved).
 
@@ -89,29 +110,54 @@ These are user product directions or explicitly tentative hardware choices,
 not additional organizer rules. ArduPlane/QuadPlane support is necessary for
 the proposed Task 1; Copter evidence cannot establish it.
 
+## Internal soft boundary (project decision)
+
+U-FEN-01, confirmed 2026-09-10: use the hard-boundary polygon as the authoritative
+termination boundary. The soft boundary is an internal margin, generated by
+insetting its sides by a configurable distance in metres (for example 5 m).
+It is not a separately supplied competition polygon or a termination trigger
+merely because the internal margin is crossed. Preserve the plugin's existing
+SoftBoundaryFromHard / SoftBoundaryInsetMeters implementation as it is; the
+current inset value defaults to 5.0 m. This decision does not change stored
+settings, enable a mode, alter the 100 m AGL ceiling or qualify termination.
+The PDF's contradictory soft/hard labels remain a provenance note, not a blocker
+requiring a second official polygon.
+
 ## Mission workflows
 
-Task 1: load reviewed survey area and limits; check energy and required
-capabilities; survey; accept timestamped detections with evidence references;
-associate tracks and avoid double counting; obtain operator review where needed;
-exchange cooperation events and traffic; return with reserve; verify landing;
-export the reviewed result and its evidence.
+Task 1: ingest reviewed course, lap count, survey polygon and AGL limits;
+check single-battery energy reserve; connect before arming as a project strategy
+to avoid startup-armed penalties; emit required telemetry throughout armed time;
+fly the complete approach, avoid traffic cylinders, count deer/clusters and read
+tags/anomalies; export the labelled text with upload receipt; safely land and
+clear the field before the flight window ends. Retain imagery internally for
+verification; it is not a mandated Task 1 upload.
 
-Task 2: register tracker and target association; authorize a tagging attempt;
-observe attachment or declare outcome unknown; receive tracker positions and
-map gaps; authorize simulated sampling; verify collected material and its
-identity; return and disarm. For a battery swap, preserve mission/tracker/sample
-records, invalidate action permissions, recheck aircraft state, and require
-explicit resume. Never replay an uncertain physical action after restart.
+Task 2: identify the leg-banded deer; authorize and observe one tracker placement;
+move at least 100 m away and maintain that moving-target offset through every
+remaining action, including sampling and return; record the five-minute path
+and submit CSV before window end. Collect selected egg/dung/droppings samples,
+return intact to the marked pad, land safely and account for all parts except
+the attached tracker. The geometry may make sampling and the 100 m offset
+incompatible; detect that before flight rather than violate the exclusion.
 
-These detailed sequences are R proposals within the user's advisory/authorization
-scope. They do not establish automatic targeting,
-animal approach distances, payload mechanics, or a permission to interact with
-real wildlife. Payload/assessment interpretation is D04.
+Manual/semi-autonomous workflows remain eligible. Operator-authorized sample
+manipulation cannot claim the 20 autonomous-collection bonus points without a
+ruling on Q06 and continuous no-intervention evidence. Autonomous takeoff and
+landing are separate five-point criteria. Box placement earns zero attachment
+points but is a permitted tracking strategy. This review recommends reliable
+manual/authorized completion first; team D05 chooses which bonus paths to pursue.
+
+Task 2 swaps are a conditional engineering recovery path pending Q03: land/disarm,
+make payload safe, preserve records, expire permissions, recheck state and obtain
+explicit resume. Never replay uncertain physical actions. Restarting an attempt
+forfeits previous points; exports and permissions must stay associated with the
+selected attempt, not silently aggregate attempts.
 
 ## Performance and capability contract
 
-P-NET-01/02 establish rates, not latency, jitter, availability or safety margins.
+AE27-NET-001 through AE27-NET-014 establish rates and scoring thresholds, not
+engineering safety margins. A scoring penalty threshold is not a safe expiry limit.
 Before implementation acceptance, choose measurable budgets for telemetry age,
 traffic expiry and lookahead, command cancellation, inference latency, video age,
 count/identity accuracy, map error, link capacity and endurance reserve (D07/D08).
@@ -134,17 +180,18 @@ but cannot authorize autonomous actions, runtime changes, or release acceptance.
 | D02 | Core placement and client transport, groundstation OS | Persistent ground core for first integrated release; onboard authority only when required and remotely authenticated | G2/G3 |
 | D03 | MAVSDK cutover before competition | Resolved: mandatory and early priority, with tests and a focused merge request; G-M gates production cutover | G-M/G8 |
 | D04 | Tracker/tagger/sample hardware and assessment interaction | Select mechanics and feedback before defining autonomous payload behavior; current generic outputs are insufficient | G6 |
-| D05 | Final traffic, approach and payload autonomy level | Initial scope resolved: advisories and explicit authorization; revisit greater autonomy after CONOPS | G4/G6 |
+| D05 | Final traffic, approach and payload autonomy level | Retain advisories with demonstrated operator avoidance and explicit authorization; choose Task 2 bonus targets after Q06 | G4/G6 |
 | D06 | Is VIO for mapping/perception or required flight navigation? | GNSS/ArduPilot navigation baseline; external-navigation fusion only after end-to-end timing evidence | G3/G7 |
-| D07 | Official server contract, event types, simulated-UAV cooperation and separation rules | Versioned adapter and mock now; no invented wire schema or separation threshold | G4 |
+| D07 | Official server wire contract and traffic semantics (Q04) | Obtain contract first; model confirmed fields/cylinders in isolated fixtures; no invented events | G4 |
 | D08 | Accuracy, latency, stale-data, reserve and operating-environment budgets | Agree numeric acceptance thresholds before collecting gate evidence | G3–G7 |
 | D09 | Primary radio, communications topology and manual authority | Pi Zero LTE backup is intended for Task 1; primary link and VPN/ELRS choices remain TBD; measure common-mode failures | G3/G7 |
 | D10 | Named engineering, payload, perception, safety and test owners; capacity and dates | Assign accountable people to gates before promising a schedule | G1 |
 | D11 | Evidence storage, retention and team/server credentials | Access-controlled artifacts; sanitized manifests in repository; no private datasets or secrets committed | G4/G8 |
 
 User answers above resolve D03 and the initial D05 scope, and partially resolve
-D01/D04. Other entries remain open. All competition-rule interpretations must
-be reconciled with CONOPS.
+D01/D04. Other entries and Q02-Q09 remain open; the inventory records v1.0
+provenance, not organizer
+acceptance of our interpretations. Gate ownership still needs named people.
 
 ## Scope boundary
 

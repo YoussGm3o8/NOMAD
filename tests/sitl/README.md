@@ -17,8 +17,7 @@ evidence; the repaired startup path still needs a current live G1 run.
 - Other core_sitl_* runners cover status, command flow, mission, fence
   upload/readback, payload, link recovery and heartbeat relay behavior.
 
-The old sitl-gimbal task references a missing gimbal_mount_control.py; it is a
-G1 repair item, not a runnable test. No successful gimbal evidence is claimed.
+The obsolete sitl-gimbal task was removed with runtime wiring repair. No successful gimbal evidence is claimed.
 
 Use the commands and safety discipline in
 [development](../../docs/development.md) and

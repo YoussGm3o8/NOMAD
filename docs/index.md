@@ -7,6 +7,7 @@ qualification.
 | Subject owner | Document |
 |---|---|
 | Requirements, provenance and user decisions | [PRD](prd.md) |
+| PRD source appendix: official rules, scoring and interpretations | [CONOPS inventory](conops-requirements.md) |
 | Target ownership and data flow | [Architecture](architecture.md) |
 | Source inventory, contradictions and objective gates | [Migration](migration.md) |
 | Build, tests and contribution workflow | [Development](development.md) |

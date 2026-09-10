@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The NOMAD Authors
 
-#include "mavsdk_phase_a_support.hpp"
+#include "nomad/mavlink/mavsdk_validation.hpp"
 
 #include <cmath>
 #include <cstdlib>

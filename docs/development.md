@@ -55,7 +55,7 @@ other optional compute services disabled until G3 qualification.
 
 | Layer | Current checks | Required expansion |
 |---|---|---|
-| C++ | Nine CTest targets: core, codec, safety, output, UDP, zero, VIO, limits, fence | Authority, per-field freshness, cancellation, MAVSDK and vehicle-class coverage |
+| C++ | Ten CTest targets: core, codec, safety, output, UDP, zero, VIO, limits, fence, MAVSDK qualification | Authority, per-field freshness, cancellation, MAVSDK and vehicle-class coverage |
 | Python | pytest includes client contracts, traceability, harnesses, profiles and video tools | Mock competition server/traffic, perception replay and tracker fixtures |
 | ROS | ros2/nomad_ros translation plus tests/ros integration | Bounded callbacks, acquisition-time/frame validation, command-owner integration |
 | Mission Planner | lint-plugin and test-plugin-* helper scripts | Ownership, capabilities, stale displays, action lifecycle and replay |
@@ -65,6 +65,11 @@ other optional compute services disabled until G3 qualification.
 Tests/ros and live SITL checks are environment-gated; report skips explicitly.
 The checked cpp_traceability block only proves references exist. It does not
 prove every safety requirement is covered or satisfied.
+The CONOPS traceability test checks inventory fields, source-page bounds, unique
+IDs, canonical references, unresolved-question links and the single active ledger
+item. Run `pixi run python -m pytest tests/test_conops_traceability.py -q` after
+requirements edits. A passing structural check does not prove extraction
+completeness, interpretation accuracy or implemented flight compliance.
 
 ## SITL discipline
 

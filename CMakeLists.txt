@@ -40,13 +40,13 @@ if(NOMAD_ENABLE_MAVSDK)
 endif()
 
 if(NOMAD_ENABLE_MAVSDK OR BUILD_TESTING)
-    add_library(nomad_mavsdk_phase_a_support examples/mavsdk_phase_a_support.cpp)
-    target_include_directories(nomad_mavsdk_phase_a_support PUBLIC examples)
-    target_compile_features(nomad_mavsdk_phase_a_support PUBLIC cxx_std_20)
+    add_library(nomad_mavsdk_validation src/mavlink/mavsdk_validation.cpp)
+    target_include_directories(nomad_mavsdk_validation PUBLIC include)
+    target_compile_features(nomad_mavsdk_validation PUBLIC cxx_std_20)
     if(MSVC)
-        target_compile_options(nomad_mavsdk_phase_a_support PRIVATE /W4 /permissive- /EHsc)
+        target_compile_options(nomad_mavsdk_validation PRIVATE /W4 /permissive- /EHsc)
     else()
-        target_compile_options(nomad_mavsdk_phase_a_support PRIVATE -Wall -Wextra -Wpedantic)
+        target_compile_options(nomad_mavsdk_validation PRIVATE -Wall -Wextra -Wpedantic)
     endif()
 endif()
 
@@ -120,22 +120,32 @@ if(NOMAD_ENABLE_MAVSDK)
         IMPORTED_LOCATION "${NOMAD_MAVSDK_FMT_LIBRARY}"
         INTERFACE_INCLUDE_DIRECTORIES "${NOMAD_MAVSDK_INSTALL_DIR}/include")
 
-    add_executable(nomad_mavsdk_phase_a_smoke examples/mavsdk_phase_a_smoke.cpp)
-    target_include_directories(nomad_mavsdk_phase_a_smoke PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/examples"
+    add_library(nomad_mavsdk_connection src/mavlink/mavsdk_connection.cpp)
+    target_include_directories(nomad_mavsdk_connection PUBLIC include PRIVATE
         "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/core/include"
         "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/telemetry/include"
     )
-    add_dependencies(nomad_mavsdk_phase_a_smoke mavsdk)
+    target_compile_features(nomad_mavsdk_connection PUBLIC cxx_std_20)
+    add_dependencies(nomad_mavsdk_connection mavsdk)
     target_link_libraries(
-        nomad_mavsdk_phase_a_smoke PRIVATE mavsdk nomad_mavsdk_fmt nomad_mavsdk_phase_a_support)
+        nomad_mavsdk_connection PUBLIC nomad_mavsdk_validation PRIVATE mavsdk nomad_mavsdk_fmt)
+    if(MSVC)
+        target_compile_options(nomad_mavsdk_connection PRIVATE /W4 /permissive- /EHsc)
+    else()
+        target_compile_options(nomad_mavsdk_connection PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_executable(nomad_mavsdk_phase_a_smoke examples/mavsdk_phase_a_smoke.cpp)
+    target_include_directories(nomad_mavsdk_phase_a_smoke PRIVATE include)
+    add_dependencies(nomad_mavsdk_phase_a_smoke mavsdk)
+    target_link_libraries(nomad_mavsdk_phase_a_smoke PRIVATE nomad_mavsdk_connection)
 endif()
 
 # The adapter packages embed this file as a subproject; only build the CTest
 # targets when the tests/ source tree is actually present.
 if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     add_executable(nomad_mavsdk_phase_a_tests tests/mavsdk_phase_a_test.cpp)
-    target_link_libraries(nomad_mavsdk_phase_a_tests PRIVATE nomad_mavsdk_phase_a_support)
+    target_link_libraries(nomad_mavsdk_phase_a_tests PRIVATE nomad_mavsdk_validation)
     if(MSVC)
         target_compile_options(nomad_mavsdk_phase_a_tests PRIVATE /W4 /permissive- /EHsc)
     endif()

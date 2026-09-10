@@ -33,8 +33,8 @@ python/              CV, ML, simulation, analysis, and utilities
 mission_planner/     Ground-station client
 ```
 
-The current `edge_core/` tree is transitional. Do not add new dynamic modules,
-service registries, REST layers, or vehicle-control paths there. Put new product
+The `edge_core/` tree has been removed. Do not recreate dynamic modules,
+service registries, REST layers, or Python vehicle-control paths. Put new product
 behavior in the migration plan first.
 
 ## Code standard

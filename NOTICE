@@ -11,14 +11,15 @@ Third-party components
 MAVSDK (optional C++ MAVLink implementation)
 Copyright (c) 2016-2023, MAVSDK Development Team
 BSD 3-Clause License. The complete license is in
-third_party/MAVSDK/LICENSE.md.
+licenses/mavsdk-phase-a/MAVSDK-BSD-3-Clause.txt.
 
 The optional MAVSDK Phase A build also fetches Asio (Boost-1.0), fmt (MIT),
 libevents (BSD-3-Clause), libmavlike (BSD-3-Clause), MAVLink ((L)GPL-3.0
 generator with an MIT output exception), nlohmann JSON (MIT), PicoSHA2 (MIT),
 tinyxml2 (Zlib), and liblzma from XZ Utils (public domain for liblzma; the XZ
-source package contains mixed licenses). Reviewed versions and outstanding
-release-notice work are recorded in docs/mavsdk-dependencies.md.
+source package contains mixed licenses). Complete license texts for this selected
+build are in licenses/mavsdk-phase-a. Reviewed sources and hashes are recorded
+in docs/mavsdk-dependencies.md.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

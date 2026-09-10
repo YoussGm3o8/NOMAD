@@ -7,6 +7,10 @@ request. It is gate G-M in [migration](migration.md), a prerequisite for release
 
 This is the transport decision record. Product phases, hardware and competition
 requirements live in the canonical migration, architecture and PRD documents.
+CONOPS v1.0 does not mandate MAVSDK; mandatory adoption is the project decision.
+Its [source requirements](conops-requirements.md) now define the acceptance
+context: 100 m AGL, all-mode termination, traffic separation and task evidence.
+No Phase A gate is closed by this documentation reconciliation.
 
 ## Current status
 
@@ -21,12 +25,14 @@ submodule/branch. Read the root `.gitmodules`, the gitlinks, and the [dependency
 inventory](mavsdk-dependencies.md) for provenance. Phases B–E production parity
 remain open.
 
-The current Windows Release build and deterministic peer fixture passed locally
-on 2026-09-09. The fixture proves a sustained telemetry stream plus wrong-peer
-and no-peer failure; it does not substitute for ArduPilot SITL or aircraft
-evidence. Hosted build results, Linux-in-ROS results, live SITL, immutable
-dependency pins, distribution license assembly, and resource-budget approval
-remain open.
+The dependency-hardened Windows Release build and deterministic peer fixture
+passed locally on 2026-09-10. The fixture proves a sustained telemetry stream
+plus wrong-peer and no-peer failure; it does not substitute for ArduPilot SITL
+or aircraft evidence. The selected graph now uses an immutable PicoSHA2 commit,
+SHA-256 archive verification and a checked redistribution-licence bundle.
+The patch is still uncommitted inside the MAVSDK submodule, so clean-clone
+reproducibility, hosted results, Linux-in-ROS results, live SITL and
+resource-budget approval remain open.
 
 ## Ownership and rationale
 
@@ -82,6 +88,10 @@ After the hardened smoke rebuild on 2026-09-09, the Windows Release executable
 was 2,032,128 bytes and the warm working build tree was 379,886,610 bytes. These
 are diagnostic measurements from one machine, not approved budgets or clean
 build benchmarks.
+After the dependency-input rebuild on 2026-09-10, the executable remained
+2,032,128 bytes and the warm build tree measured 379,308,757 bytes. Configure,
+target build, the three-case peer fixture, provenance checker, 12 focused Python
+tests and 10 CTests passed. Docker was not running, so live SITL was not attempted.
 Run `pixi run check-mavsdk-phase-a` after any source or dependency change, and
 run `pixi run build-core-mavsdk` followed by `pixi run test-mavsdk-phase-a` for
 the deterministic peer contract. Live SITL remains a separate required gate.
@@ -100,6 +110,11 @@ datum rather than assuming a generic goto call is equivalent.
 Add explicit vehicle-class identification and reject incompatible operations.
 Task 1 requires Plane/QuadPlane coverage, not a renamed Copter test. Pin mode
 mapping, transition state and accepted command matrix.
+Telemetry parity must also expose independently sourced AGL, metre accuracy,
+per-field freshness, link-quality inputs and the official mode mapping required
+by AE27-NET-002 through AE27-NET-006. The smoke's relative altitude and GPS fix
+qualification are not those capabilities. Do not copy its 1.5-second age limit
+into competition traffic policy or treat it as a CONOPS safety threshold.
 
 Exit: fake-transport and codec-independent contract tests, CLI/plugin tests and
 Copter command-flow/payload SITL pass; negative ACK, wrong target, delayed state,
@@ -129,6 +144,12 @@ Exit: core-sitl-geofence and sitl-fence containment evidence; full relevant
 parameter/fence state matches the reviewed plan. Add any mission upload/progress/
 abort APIs required by Task 1 in a focused extension with independent QuadPlane
 SITL evidence, not an untested side effect of transport replacement.
+Resolve Q02 before proving aircraft-phase termination. Q01 is resolved: use
+the hard polygon for termination and retain the plugin internal soft inset.
+Prove non-convex hard containment, 100 m AGL, independent termination, C2 loss, five-second
+activation and separate rotary/fixed-wing/transition outcomes. Parameter parity
+alone cannot prove a minimum 2 m/s descent through touchdown. Preserve ArduPilot
+failsafes and require independent physical evidence at G7.
 
 ## Phase E — Production cutover
 
@@ -136,6 +157,9 @@ Switch the production connection after A–D pass. Retain golden/wire semantic
 references until equivalent coverage survives replacement. Remove obsolete
 codec/UDP/generation code and possibly its submodule only after caller inventory,
 profile checks and stable safety traceability remapping.
+Keep the old transport available for controlled comparison until both parity
+and install/rollback evidence exist; remove it only afterward. A rollback package
+must start disarmed/inhibited and never resume stale mission or payload actions.
 
 Exit: default CLI/runtime and clients demonstrably use MAVSDK; full unit,
 adapter and SITL matrix passes for supported firmware; dependency notices and

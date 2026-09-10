@@ -1,7 +1,7 @@
 # NOMAD
 
 NOMAD is a C++20 vehicle-control core with CLI, Mission Planner and ROS 2 clients,
-prepared for the AEAC SUAS 2027 Wildlife Monitoring preview. ArduPilot owns
+prepared for the AEAC SUAS 2027 Wildlife Monitoring CONOPS v1.0. ArduPilot owns
 stabilization, EKF, navigation execution and failsafes.
 
 ## Current status
@@ -17,7 +17,7 @@ implementation work.
 Task 1 targets a lightweight VTOL with ground GPU vision. Task 2 targets a quad
 below 15 kg with optional onboard compute. All three product profiles remain:
 onboard_companion, groundstation_gpu and groundstation_minimal. See the canonical
-documents for confirmed directions, provisional requirements and unresolved choices.
+documents for confirmed directions, confirmed source requirements and unresolved choices.
 
 ## Start here
 

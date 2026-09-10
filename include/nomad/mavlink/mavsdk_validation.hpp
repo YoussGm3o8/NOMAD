@@ -32,8 +32,8 @@ struct StatusValues {
 
 std::optional<std::string> canonicalize_udp_endpoint(std::string_view endpoint);
 std::optional<std::uint8_t> parse_system_id(std::string_view value);
-SystemSelection classify_system_ids(const std::vector<std::uint8_t>& system_ids, std::uint8_t expected_id);
-bool has_valid_status(const StatusValues& values);
+SystemSelection classify_system_ids(const std::vector<std::uint8_t> &system_ids, std::uint8_t expected_id);
+bool has_valid_status(const StatusValues &values);
 bool has_fresh_position_stream(std::size_t update_count, std::int64_t observation_ms, std::int64_t age_ms);
 
 } // namespace nomad::mavsdk_phase_a
