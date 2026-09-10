@@ -36,7 +36,10 @@ jobs:
       - name: Ruff lint
         run: pixi run lint
       - name: Ruff format check
-        run: pixi run format-check
+        run: |
+          if ! pixi run format-check; then
+            ./.pixi/envs/default/bin/ruff format --diff .
+          fi
       - name: Mypy — full tree (advisory)
         run: pixi run typecheck
         continue-on-error: true
