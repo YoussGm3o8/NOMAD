@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,8 +45,33 @@ def has_required_output(command: str, output: str, system_id: str) -> bool:
     return all(field in output for field in required)
 
 
+def child_peak_rss_bytes() -> int | None:
+    """Return peak RSS for completed child processes when the platform supports it."""
+    try:
+        import resource
+    except ImportError:
+        return None
+
+    peak = int(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss)
+    if sys.platform == "darwin":
+        return peak
+    return peak * 1024
+
+
+def report_runtime_metric(command: str, elapsed_seconds: float) -> None:
+    fields = [
+        f"command={command}",
+        f"elapsed_seconds={elapsed_seconds:.3f}",
+    ]
+    peak_rss = child_peak_rss_bytes()
+    if peak_rss is not None:
+        fields.append(f"peak_child_rss_bytes={peak_rss}")
+    print(f"mavsdk_phase_a_runtime_metric {' '.join(fields)}", flush=True)
+
+
 def run_smoke(binary: Path, command: str, endpoint: str, system_id: str) -> int:
     print(f"Running MAVSDK {command} smoke against {endpoint}", flush=True)
+    started = time.perf_counter()
     try:
         result = subprocess.run(
             [str(binary), command, endpoint, system_id],
@@ -55,11 +81,15 @@ def run_smoke(binary: Path, command: str, endpoint: str, system_id: str) -> int:
             timeout=20,
         )
     except subprocess.TimeoutExpired:
+        report_runtime_metric(command, time.perf_counter() - started)
         print(f"error: MAVSDK {command} smoke timed out", file=sys.stderr)
         return 2
     except OSError as error:
+        report_runtime_metric(command, time.perf_counter() - started)
         print(f"error: could not run MAVSDK smoke: {error}", file=sys.stderr)
         return 2
+
+    report_runtime_metric(command, time.perf_counter() - started)
     if result.stdout:
         print(result.stdout, end="")
     if result.stderr:

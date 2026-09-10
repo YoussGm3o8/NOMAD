@@ -82,6 +82,9 @@ jobs:
       - name: MAVSDK Phase A connect/status smoke
         run: pixi run mavsdk-phase-a-smoke
 
+      - name: Record Phase A build metrics
+        run: python scripts/dev/mavsdk_phase_a_metrics.py
+
       - name: SITL logs on failure
         if: failure()
         run: docker logs nomad-dev-sitl-1 2>&1 | tail -120 || true
@@ -142,6 +145,9 @@ jobs:
 
       - name: MAVSDK Phase A connect/status smoke
         run: pixi run mavsdk-phase-a-smoke
+
+      - name: Record Phase A build metrics
+        run: python scripts/dev/mavsdk_phase_a_metrics.py
 
       - name: C++ core command flow (Phase 3/4)
         run: pixi run core-sitl-command-flow
