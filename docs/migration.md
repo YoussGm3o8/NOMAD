@@ -23,7 +23,7 @@ cutover inventory and gate evidence. [PRD](prd.md) owns requirements and decisio
 | ROS 2 | ros2/nomad_ros/src/node.cpp, translation.cpp; tests/ros | Owns a Vehicle, telemetry topics, VIO health/source gate and Trigger services; blocking callbacks, no selected estimator or navigation fusion |
 | Video | python/tools/simple_video_bridge.py, video_bridge_server.py; test_simple_video_bridge.py | ROS image to GStreamer/RTSP; control HTTP is loopback-only; no validated capture/CV/VIO product pipeline |
 | Profiles | scripts/profile.py; three product profile files; test_deployment_profiles.py | Canonical endpoint and stale-setting checks exist; optional workloads and hardware remain unqualified |
-| MAVSDK | CMake opt-in target; qualified telemetry smoke; deterministic peer fixture; provenance and CI gates | Phase A local evidence exists; hosted/SITL/license/budget gates remain; production still uses current codec |
+| MAVSDK | CMake opt-in target; qualified telemetry smoke; deterministic peer fixture; provenance and CI gates | Published Phase A pin plus hosted Linux/Windows/ROS and live Copter SITL evidence exist; resource-budget approval remains; production still uses current codec |
 | Competition | No dedicated implementation found in src/include/ROS/Python/plugin scans | Official telemetry, traffic model/deconfliction, herd survey, tracker/path and sampling workflows are open; events await contract |
 
 The working tree removes the Edge Core source/service/API and many camera/
@@ -83,7 +83,7 @@ not authorization to fly. Major gate evidence is expanded below this table.
 | GAP-13 / U-PROF-01 through U-PROF-03; AE27-OPS-004/027/029 | Core viable in all profiles with truthful missing features and live map; templates tested, capability service/capture/resource evidence absent | Integration / Mission Planner | Qualified camera/radio/compute, single owner | Frozen video/map or overload starves safety | Clean boots without GPU/ROS/camera; source loss and saturated video/LTE/RTK; position-age display and measured deadlines | G3/G7 | D01/D02/D06/D08/D09 |
 | GAP-14 / AE27-OPS-023 through AE27-OPS-036 | Physical aircraft, mass, electric power, RF, prop inhibit and FRR | Airframe / safety / flight leads | Final hardware and approved procedures | Unsafe/ineligible aircraft | Per-aircraft weigh/BOM/licence/prop-inhibit inspection, full proof-flight video, weather/energy envelope and approved FRR | G7/G8 | Q03/Q08/D01/D10 |
 | GAP-15 / AE27-ADM-001 through AE27-ADM-035; AE27-OPS-022 | Deadline, eligibility, publication, preparation and attempt evidence; no competition deliverable workflow | Competition lead / ground evidence | Roster, owners, secure storage and reviewed rubric | Lost eligibility/evidence, mixed attempts | Timed isolated-crew rehearsals, attempt reset, file/heading/page/rubric and private receipt checks | G8 | D10/D11/Q08/Q09 |
-| GAP-16 / U project MAVSDK decision | Production MAVSDK mandatory; main.cpp still UdpMavlinkConnection, optional smoke only | Transport lead | Phase A pins/licences/CI/SITL/budgets then parity | Mistaking telemetry smoke for safe control | Phases A-E evidence, Copter and QuadPlane, watchdog/stop/heartbeat/fence/parameters, production provenance and rollback | G-M | D08/D10; external evidence |
+| GAP-16 / U project MAVSDK decision | Production MAVSDK mandatory; main.cpp still UdpMavlinkConnection, optional smoke only | Transport lead | Phase A pins/licences/CI/SITL/budgets then parity | Mistaking telemetry smoke for safe control | Phases A-E evidence, Copter and QuadPlane, watchdog/stop/heartbeat/fence/parameters, production provenance and rollback | G-M | D08/D10; resource approval then parity |
 
 Telemetry frame review must include the ROS odometry NED label with up-positive
 position and body-frame metadata, and velocity sign conversion through both
@@ -132,7 +132,7 @@ remain necessary. This pass establishes provenance, not flight readiness.
 
 ### G1 — Executable baseline (build/integration lead; depends on G0 planning)
 
-Repair C02/C10–C12 deployment/task leftovers without reintroducing Edge Core.
+Repair C02/C10-C12 deployment/task leftovers without reintroducing Edge Core.
 Retain video and both optional compute placements. Demonstrate fresh checkout
 builds and selected simulation startup with no deleted-path dependencies.
 Exit: test-core, test-python, lint, format-check, complexity-check, docs-build,
@@ -141,14 +141,15 @@ against actual files; current runtime repairs require their own focused change.
 
 #### C02 repair evidence - 2026-09-09
 
-Baseline commit: `d31b0aa`; repair branch: `codex/repair-runtime-wiring`.
-The repair removes deleted Edge Core services, image jobs, console entrypoint and
-missing API/gimbal test tasks. `dev`/`dev-build` build the core; `sitl` builds it
-before simulator startup. Compose forwards host traffic independently of ROS,
-with the ROS destination enabled by `sim-ros-up`. The SITL CI default no longer
-duplicates the private relay output. ROS image/module paths package the retained
-video tool. Incomplete perception/Gazebo startup tasks exit unavailable before
-starting containers; optional images and media/compute source remain.
+Baseline commit: `d31b0aa`; subsequent runtime-repair topic work is recorded in
+repository history. The repair removes deleted Edge Core services, image jobs,
+console entrypoint and missing API/gimbal test tasks. `dev`/`dev-build` build the
+core; `sitl` builds it before simulator startup. Compose forwards host traffic
+independently of ROS, with the ROS destination enabled by `sim-ros-up`. The SITL
+CI default no longer duplicates the private relay output. ROS image/module paths
+package the retained video tool. Incomplete perception/Gazebo startup tasks exit
+unavailable before starting containers; optional images and media/compute source
+remain.
 
 Local evidence: CTest 9/9; `pixi run test` 258 passed, 3 environment skips;
 retained Python coverage 96.65% against the unchanged 85% floor. Seven runtime
@@ -215,13 +216,12 @@ independent wire observations and CLI/plugin compatibility. Test both Copter
 and the chosen QuadPlane firmware as support is introduced; existing Copter
 tests alone cannot qualify Task 1.
 
-Create focused implementation changes and a merge request with unit tests,
-integration evidence, requirement mapping and limitations. Upstream ArduPilot
-fixes need reproducible tests and tracked merge requests/PRs; publication follows
-the contribution authorization workflow. This planning pass does not implement
-or publish those changes.
+Create focused, reviewable implementation changes with unit tests, integration
+evidence, requirement mapping and limitations. Upstream ArduPilot fixes need
+reproducible tests and separately tracked upstream changes when publication is
+authorized.
 
-Exit: phases A–E in [MAVSDK adoption](mavsdk-adoption.md) pass; default production
+Exit: phases A-E in [MAVSDK adoption](mavsdk-adoption.md) pass; default production
 runtime demonstrably uses MAVSDK; legacy deletion passes gates below; transitive
 notices and supported firmware matrix are recorded. Phase F upstream acceptance
 may lag, but required patches must be maintained and reviewed. G-M is mandatory
@@ -231,7 +231,7 @@ server/CV prototypes may proceed without waiting.
 ### G2 — One authority and aircraft semantics (core + safety leads; G1/G-M)
 
 Add the small persistent runtime and client boundary; unify mission/payload/
-traffic state, stop/cancel/restart semantics and audit. Correct C04–C09/C13/C15.
+traffic state, stop/cancel/restart semantics and audit. Correct C04-C09/C13/C15.
 Implement vehicle-class capability checks before interpreting mode numbers.
 Plan Task 1 around ArduPlane/QuadPlane mission execution and Task 2 around Copter;
 prefer autopilot execution of reviewed survey missions, with C++ planning,
@@ -279,7 +279,7 @@ armed against clarified scoring semantics. Test cylinder radial/vertical boundar
 and operator response under load. Official-server acceptance and actual simulated
 traffic avoidance are separate runs, not mock-only closure.
 
-### G5 — Task 1 mission (mission + perception + flight leads; G2–G4)
+### G5 — Task 1 mission (mission + perception + flight leads; G2-G4)
 
 Cover area planning, CV evidence, count/identity review, simulated cooperation,
 traffic advisories and safe return/landing on the VTOL. Characterize video
@@ -295,7 +295,7 @@ named TXT export. Test submission exactly at five minutes before and 15 minutes
 after cutoff and adjacent timestamps. Record actual Drive receipt. Runtime
 accuracy/reserve/latency budgets still need D08; source scoring does not set them.
 
-### G6 — Task 2 payload mission (payload + mission + safety leads; G2–G4, D04)
+### G6 — Task 2 payload mission (payload + mission + safety leads; G2-G4, D04)
 
 Custom tracker technology (possibly ESP32), attachment and sample mechanism remain
 undecided. Implement tracker identity/position ingestion, association and mapped
@@ -377,21 +377,30 @@ PicoSHA2 commit, either archive SHA-256, extraction timestamp option or a bundle
 licence text and require the provenance tests to fail; rebuild and run the peer
 fixture to reject wrong/absent systems.
 
-The local MAVSDK fork patch now pins PicoSHA2 to commit
+The project MAVSDK fork is published and NOMAD pins
+`9884f109533f564bc6250e5471e6301d3a62f4a7`. The selected graph pins PicoSHA2 to
 `1bf940d8a03bb752604fbb366d47b97b50b9e6ce`, verifies nlohmann JSON and XZ
-archives with SHA-256, and requests deterministic archive extraction timestamps.
-`licenses/mavsdk-phase-a/` carries the complete texts for the selected static
-telemetry build, and the provenance checker verifies their hashes and NOTICE
-coverage. The Windows Release configure and target build passed; the peer
-fixture passed expected-system, wrong-system and no-peer cases; 12 focused
-Python tests and all 10 CTests passed. The warm build tree measured 379,308,757
-bytes and the executable 2,032,128 bytes; no budget is inferred.
+archives with SHA-256, handles archive extraction on both legacy and newer CMake,
+and uses the pinned nested pymavlink generator source rather than build-time
+network package resolution. `licenses/mavsdk-phase-a/` carries the selected-build
+licence texts; the provenance checker verifies reviewed revisions, hashes, patch
+invariants, NOTICE coverage and licence content.
 
-The three-file fork patch is uncommitted and the parent gitlink still names
-`34b417d45c2c33ce0414bc1bc61b54010d055224`, so clean-clone reproducibility is
-not established. Docker Desktop was not running; live SITL was not attempted.
-Hosted Linux/Windows, ROS-image, live-SITL, memory/startup and approved-budget
-evidence remain open. Production continues to use the legacy transport.
+Recursive hosted test run `34535620056` passed the Python suite, C++ core,
+optional MAVSDK build, provenance checker and deterministic expected/wrong/absent
+peer qualification on both Ubuntu and Windows. Selected ROS-image run
+`34538394497` built with NOMAD_ENABLE_MAVSDK=ON and passed the ROS adapter tests.
+Mainline SITL run `34538903820` built ArduPilot Copter 4.7.1, brought up the
+development/SITL stack and passed the live MAVSDK Phase A connect/status smoke.
+The larger SITL loop-closure job is intentionally nightly/on-demand; the main
+push ran only the reduced Phase A live regression gate.
+
+Historical Windows measurements remain diagnostic: the warm build tree measured
+379,308,757 bytes and the smoke executable 2,032,128 bytes. They are not approved
+budgets. Repeatable current build-tree, executable, runtime memory, startup and
+CI-time measurements plus explicit budget approval remain the sole Phase A gate
+items. Production continues to use the legacy transport; command/telemetry parity
+and cutover belong to later G-M phases.
 
 ### Boundary clarification - 2026-09-10
 
@@ -438,18 +447,16 @@ docs/index.md, docs/mavsdk-adoption.md, docs/mavsdk-dependencies.md;
 config/profiles/README.md, mission_planner/README.md and tests/sitl/README.md.
 Supporting changes: properdocs.yml navigation and tests/test_conops_traceability.py.
 
-Branch: `codex/conops-2027-reconciliation`, created from clean main `fab9f46`.
-No staging, commit, push, merge request or deployment performed. Earlier supplied
-topic branch names are absent from this checkout's local/cached remote refs;
-the commit comparison `a9762b0..6922371` still contains exactly the Phase A commit.
-The earlier push verification and signed-out PR attempt are historical user
-evidence, not newly verified remote/PR status. This reconciliation is a separate
-logical change and must not be folded into that one-commit MAVSDK comparison.
+The CONOPS reconciliation was prepared from clean main at `fab9f46`; those local
+checks predate the later published implementation commits. Main now contains the
+reconciliation plus subsequent MAVSDK Phase A hardening and qualification. Do
+not reinterpret the earlier local pass counts as current hosted or live-SITL
+evidence; the current Phase A evidence is recorded separately above.
 
-No live SITL, hardware, ROS image, hosted CI or official-server acceptance was
-run here. The server portal could not be read by the web tool; Q04 remains open.
-MAVSDK Phase A and production adoption remain incomplete; no release gate closes
-solely because these documentation and local regression checks pass.
+No hardware or official-server acceptance was performed by the reconciliation.
+Q04 remains open. MAVSDK production adoption remains incomplete; no release gate
+closes solely because documentation, hosted Phase A smoke, or local regressions
+pass.
 
 ### Earlier planning review - 2026-09-08
 

@@ -9,12 +9,13 @@ close its integration or release gate.
 
 ## Current work
 
-- [~] G-M Phase A reproducibility and evidence: pin the published MAVSDK hardening
-  revision in NOMAD, then complete clean-checkout provenance/build evidence,
-  hosted Linux/Windows/ROS and live ArduPilot SITL evidence, and approve resource
-  budgets. Falsification: a recursive clean checkout resolves mutable/weak build
-  inputs, disagrees with the provenance checker, or cannot reproduce the selected
-  Phase A build graph.
+- [~] G-M Phase A resource qualification: the published MAVSDK graph now has
+  recursive clean-checkout provenance/build evidence, hosted Linux/Windows/ROS
+  qualification and a live ArduPilot Copter SITL connect/status pass. Collect
+  repeatable build/runtime measurements and obtain explicit approval for build
+  tree, executable, memory, startup and CI-time budgets before closing Phase A.
+  Falsification: the reviewed pins stop reproducing, live qualification regresses,
+  or measured resources exceed an approved threshold.
 
 ## Ordered implementation backlog
 
@@ -29,7 +30,7 @@ close its integration or release gate.
 - [ ] G-M Phases B–D: MAVSDK command, telemetry, velocity/watchdog, GCS heartbeat,
   zero-delivery, fence and parameter parity; unit plus integration tests.
 - [ ] G-M: add ArduPlane/QuadPlane support coverage for Task 1 alongside Copter;
-  prepare focused implementation merge request(s) with independent evidence.
+  prepare focused reviewable implementation changes with independent evidence.
 - [ ] G-M Phase E: switch production to MAVSDK and remove the old implementation
   only after parity, traceability, profile and release checks pass.
 - [ ] G-M Phase F: upstream tested ArduPilot fixes; track patches, review status
@@ -68,9 +69,10 @@ gates. Do not mark multiple work items active or bypass predecessor safety gates
 - [x] MAVSDK optional Phase A build/smoke target and fork wiring exist;
   production migration is still open.
 - [x] MAVSDK Phase A selected-build inputs use immutable/strong-hash references,
-  carry checked licence texts, and are published in the project fork; the parent
-  NOMAD pin/provenance update is the active slice, while clean-checkout hosted,
-  live-SITL and budget evidence remain open.
+  carry checked licence texts, and are published and pinned at the reviewed
+  revision. Recursive hosted Linux/Windows, selected ROS and live Copter SITL
+  qualification have passed; resource-budget approval is the remaining Phase A
+  release blocker.
 - [x] Three profile templates/config tests and retained Python video bridge exist;
   runtime and hardware capability evidence remains open.
 - [x] Documentation review baseline: test-core 9/9; test-python 251 passed,
@@ -88,7 +90,8 @@ gates. Do not mark multiple work items active or bypass predecessor safety gates
 - Traffic advisories and explicit action authorization first; revisit autonomy
   against the optional bonuses and actual traffic-avoidance obligation.
 - MAVSDK is mandatory for competition and an early work priority with tests and
-  a merge request. The CONOPS review changes documentation and traceability only.
+  focused reviewable changes. The CONOPS review changes documentation and
+  traceability only.
 
 ## Decisions still open
 

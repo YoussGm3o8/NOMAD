@@ -2,15 +2,14 @@
 
 Decision originally recorded 2026-09-06; confirmed by the user on 2026-09-08:
 MAVSDK ArduPilot support must be used during competition. Adoption is an early
-implementation priority with unit tests, integration tests and a focused merge
-request. It is gate G-M in [migration](migration.md), a prerequisite for release.
+implementation priority with unit tests, integration tests and focused reviewable
+changes. It is gate G-M in [migration](migration.md), a prerequisite for release.
 
 This is the transport decision record. Product phases, hardware and competition
 requirements live in the canonical migration, architecture and PRD documents.
 CONOPS v1.0 does not mandate MAVSDK; mandatory adoption is the project decision.
-Its [source requirements](conops-requirements.md) now define the acceptance
-context: 100 m AGL, all-mode termination, traffic separation and task evidence.
-No Phase A gate is closed by this documentation reconciliation.
+Its [source requirements](conops-requirements.md) define the acceptance context:
+100 m AGL, all-mode termination, traffic separation and task evidence.
 
 ## Current status
 
@@ -20,21 +19,27 @@ separate connect/status smoke executable, not a MAVSDK-backed Vehicle.
 
 Phase A source exists: opt-in subbuild, telemetry smoke consumer, deterministic
 ArduPilot-like UDP fixture, pure qualification tests, Linux/Windows CI jobs,
-optional ROS image compile wiring, dependency inventory, root NOTICE and a fork
-submodule/branch. Read the root `.gitmodules`, the gitlinks, and the [dependency
-inventory](mavsdk-dependencies.md) for provenance. Phases B–E production parity
-remain open.
+selected ROS image compile wiring, dependency inventory, root NOTICE and a pinned
+project MAVSDK fork. The parent gitlink now pins
+`9884f109533f564bc6250e5471e6301d3a62f4a7`; read `.gitmodules`, the gitlinks and
+the [dependency inventory](mavsdk-dependencies.md) for provenance. Phases B-E
+production parity remain open.
 
-The dependency-hardened Windows Release build and deterministic peer fixture
-passed locally on 2026-09-10. The fixture proves a sustained telemetry stream
-plus wrong-peer and no-peer failure; it does not substitute for ArduPilot SITL
-or aircraft evidence. The selected graph uses an immutable PicoSHA2 commit,
-SHA-256 archive verification and a checked redistribution-licence bundle. The
-three-file hardening patch is published in the project MAVSDK fork as
-`fd8b66dfc5962067ff917705a27e418b24c84cdf`, and NOMAD pins that exact revision.
-The former source-control reproducibility blocker is therefore removed, but a
-fresh recursive clean-checkout qualification, current hosted Linux/Windows/ROS
-results, live SITL and resource-budget approval remain open.
+The published Phase A graph has now passed recursive hosted qualification. Test
+run `34535620056` completed the Python suite, C++ core, provenance checker,
+deterministic peer fixture and optional MAVSDK build on both Ubuntu and Windows.
+Selected ROS-image run `34538394497` built with NOMAD_ENABLE_MAVSDK=ON and passed
+the ROS adapter integration suite. Mainline SITL run `34538903820` built the
+ArduPilot Copter 4.7.1 image, started the development/SITL stack and passed the
+MAVSDK Phase A connect/status smoke. Subsequent changes through the mainline
+workflow cleanup did not alter the selected MAVSDK source graph. These runs close
+the clean-checkout/hosted/live-Copter evidence portion of Phase A; they do not
+qualify command parity, aircraft hardware or QuadPlane behavior.
+
+The remaining Phase A release blocker is resource qualification: collect
+repeatable build-tree, executable, memory, startup and CI-time measurements and
+approve explicit budgets. Historical one-machine measurements below are retained
+for comparison but are not themselves approved thresholds.
 
 ## Ownership and rationale
 
@@ -57,9 +62,9 @@ verified against the pinned source; they are not claims about latest upstream.
 ## Phase A — Build, dependencies and telemetry
 
 Keep the opt-in build isolated while measuring footprint and reviewing notices.
-The current setup selects static libraries, telemetry, no gRPC
-server, no MAVSDK tests, and BUILD_WITHOUT_CURL=ON. Revisit options only for a
-demonstrated required plugin.
+The current setup selects static libraries, telemetry, no gRPC server, no MAVSDK
+tests, and BUILD_WITHOUT_CURL=ON. Revisit options only for a demonstrated required
+plugin.
 
 The smoke contract accepts only explicit UDP input/output endpoints and one
 expected autopilot system ID. Status succeeds only while that system remains
@@ -93,13 +98,15 @@ build benchmarks.
 After the dependency-input rebuild on 2026-09-10, the executable remained
 2,032,128 bytes and the warm build tree measured 379,308,757 bytes. Configure,
 target build, the three-case peer fixture, provenance checker, 12 focused Python
-tests and 10 CTests passed. These checks were run against the same hardening file
-contents before the fork commit and parent gitlink were published; rerun them
-from a fresh recursive checkout before treating clean-clone reproducibility as
-current evidence. Docker was not running, so live SITL was not attempted.
-Run `pixi run check-mavsdk-phase-a` after any source or dependency change, and
-run `pixi run build-core-mavsdk` followed by `pixi run test-mavsdk-phase-a` for
-the deterministic peer contract. Live SITL remains a separate required gate.
+tests and 10 CTests passed. Those local measurements predate the final published
+fork compatibility changes and remain historical only.
+
+Current accepted technical evidence is the recursive hosted matrix and live SITL
+runs recorded above. Run `pixi run check-mavsdk-phase-a` after any source or
+dependency change, and run `pixi run build-core-mavsdk` followed by
+`pixi run test-mavsdk-phase-a` for the deterministic peer contract. The reduced
+mainline SITL job is the live Phase A regression gate; the larger SITL suite stays
+nightly/on-demand because it exercises later safety and parity behavior.
 
 ## Phase B — Vehicle and output parity
 
@@ -151,14 +158,14 @@ abort APIs required by Task 1 in a focused extension with independent QuadPlane
 SITL evidence, not an untested side effect of transport replacement.
 Resolve Q02 before proving aircraft-phase termination. Q01 is resolved: use
 the hard polygon for termination and retain the plugin internal soft inset.
-Prove non-convex hard containment, 100 m AGL, independent termination, C2 loss, five-second
-activation and separate rotary/fixed-wing/transition outcomes. Parameter parity
-alone cannot prove a minimum 2 m/s descent through touchdown. Preserve ArduPilot
-failsafes and require independent physical evidence at G7.
+Prove non-convex hard containment, 100 m AGL, independent termination, C2 loss,
+five-second activation and separate rotary/fixed-wing/transition outcomes.
+Parameter parity alone cannot prove a minimum 2 m/s descent through touchdown.
+Preserve ArduPilot failsafes and require independent physical evidence at G7.
 
 ## Phase E — Production cutover
 
-Switch the production connection after A–D pass. Retain golden/wire semantic
+Switch the production connection after A-D pass. Retain golden/wire semantic
 references until equivalent coverage survives replacement. Remove obsolete
 codec/UDP/generation code and possibly its submodule only after caller inventory,
 profile checks and stable safety traceability remapping.
@@ -173,15 +180,15 @@ release G8 cannot pass with MAVSDK limited to a smoke executable.
 
 ## Phase F — Upstream work and maintenance
 
-Prepare focused merge requests/PRs with reproductions for confirmed ArduPilot
+Prepare focused upstream changes with reproductions for confirmed ArduPilot
 issues: GUIDED mode interpretation, battery units, location command semantics,
 and any stop/heartbeat/fence/QuadPlane fixes. Recheck each historical finding
 against pinned/upstream source before patching.
 
 Required local fixes must have tests and an accountable maintainer even if
-upstream review is pending. The implementation merge request should contain
-problem/behavior, requirements, exact pins, unit/integration evidence and residual
-limitations. This planning change neither implements nor publishes it.
+upstream review is pending. Each reviewable change should contain problem/
+behavior, requirements, exact pins, unit/integration evidence and residual
+limitations.
 
 debt: only required ArduPilot fork patches; revisit on each upstream release or
 quarterly maintenance review; then upstream/drop resolved patches and requalify

@@ -47,31 +47,32 @@ pre-3.24 and newer CMake, and removes MAVLink's build-time network package
 resolution in favor of its pinned nested pymavlink generator source. NOMAD pins
 that revision directly so a recursive clean checkout resolves the reviewed graph.
 
-Before publication, a Windows Release configure and smoke-target rebuild completed
-against the original three-file dependency pin. The deterministic peer fixture
-accepted the expected ArduPilot-like system, rejected a wrong system ID, and failed
-on an absent peer. The provenance checker and 12 focused Python tests passed; the
-complete C++ suite passed 10/10. Those results predate the subsequent legacy-CMake
-and pinned-generator compatibility changes and therefore do not qualify the current
-fork revision; fresh hosted evidence is required.
+Recursive hosted test run `34535620056` passed the optional MAVSDK build,
+provenance checker and deterministic expected/wrong/absent-peer fixture on both
+Ubuntu and Windows, alongside the Python and C++ core suites. Selected ROS-image
+run `34538394497` built the pinned graph with NOMAD_ENABLE_MAVSDK=ON and passed
+the ROS adapter integration tests. Mainline SITL run `34538903820` built an
+ArduPilot Copter 4.7.1 image and passed the live MAVSDK Phase A connect/status
+smoke. These results establish current clean-checkout and hosted build evidence
+for the reviewed Phase A graph; they do not qualify later plugin additions,
+production cutover or aircraft hardware.
 
-The historical warm build tree was 379,308,757 bytes and the smoke executable was
-2,032,128 bytes. These are one-machine diagnostics, not approved budgets or clean-
-build benchmarks. Fresh clean-checkout provenance/build evidence, hosted
-Linux/Windows, selected ROS image, live ArduPilot SITL and aircraft evidence remain
-required.
+The historical warm Windows build tree was 379,308,757 bytes and the smoke
+executable was 2,032,128 bytes. These are one-machine diagnostics, not approved
+budgets or clean-build benchmarks. Current build-tree, executable, runtime memory,
+startup and CI-time measurements still need repeatable collection and explicit
+budget approval before Phase A closes.
 
 ## Open release blockers
 
-- Re-run provenance, configure/build and deterministic peer qualification from a
-  recursive clean checkout at the published NOMAD/MAVSDK pins.
+- Collect repeatable build-tree, executable, runtime memory, startup and CI-time
+  measurements on the selected qualification environments and approve explicit
+  Phase A budgets.
 - Re-run the selected dependency and licence audit whenever production parity
   enables another plugin, server, curl or test dependency.
-- Release owners must approve build-tree, executable, memory, startup, and CI
-  time budgets from repeatable Linux and Windows measurements.
-- Hosted Linux/Windows, selected ROS image and live ArduPilot SITL evidence
-  remain required.
+- Requalify the hosted Linux/Windows, selected ROS and live ArduPilot SITL matrix
+  whenever the MAVSDK pin, selected dependency graph or smoke contract changes.
 
-debt: the selected-build graph is published and pinned; revisit after the
-clean-checkout/hosted qualification matrix, and again whenever dependency or
-MAVSDK plugin selection changes.
+debt: the selected-build graph is published, pinned and hosted-qualified; revisit
+when resource budgets are approved and whenever dependency or MAVSDK plugin
+selection changes.
