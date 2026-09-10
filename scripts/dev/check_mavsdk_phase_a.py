@@ -109,12 +109,20 @@ def check_forbidden_patch_additions(path: Path, forbidden: tuple[str, ...]) -> N
 
 
 def text_sha256_variants(path: Path) -> set[str]:
-    """Return hashes for LF and CRLF forms so checkout EOL conversion is ignored."""
+    """Hash equivalent LF/CRLF text with either terminal-newline convention."""
     text = path.read_text(encoding="utf-8")
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    lf = normalized.encode("utf-8")
-    crlf = normalized.replace("\n", "\r\n").encode("utf-8")
-    return {hashlib.sha256(lf).hexdigest(), hashlib.sha256(crlf).hexdigest()}
+    if normalized.endswith("\n"):
+        without_terminal_newline = normalized[:-1]
+    else:
+        without_terminal_newline = normalized
+    logical_variants = (without_terminal_newline, without_terminal_newline + "\n")
+    encoded_variants = {
+        value.encode("utf-8")
+        for logical in logical_variants
+        for value in (logical, logical.replace("\n", "\r\n"))
+    }
+    return {hashlib.sha256(value).hexdigest() for value in encoded_variants}
 
 
 def verify_license_bundle() -> None:
