@@ -42,11 +42,7 @@ def collect_build_metrics(build_dir: Path = DEFAULT_BUILD_DIR) -> dict[str, int 
     install_lib = build_dir / "mavsdk" / "third_party" / "install" / "lib"
     archives = []
     if install_lib.is_dir():
-        archives = [
-            item
-            for item in install_lib.rglob("*")
-            if item.is_file() and item.suffix.lower() in {".a", ".lib"}
-        ]
+        archives = [item for item in install_lib.rglob("*") if item.is_file() and item.suffix.lower() in {".a", ".lib"}]
 
     return {
         "build_tree_bytes": directory_size(build_dir),
