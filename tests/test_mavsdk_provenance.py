@@ -33,24 +33,23 @@ def test_picosha2_uses_immutable_revision() -> None:
 
 
 def test_mavlink_generator_avoids_build_time_package_resolution() -> None:
-    patch = (check_mavsdk_phase_a.ROOT / "third_party/MAVSDK/cpp/third_party/mavlink/mavlink.patch").read_text(
-        encoding="utf-8"
-    )
+    patch_path = check_mavsdk_phase_a.ROOT / "third_party/MAVSDK/cpp/third_party/mavlink/mavlink.patch"
+    additions = check_mavsdk_phase_a.patch_added_text(patch_path)
 
-    assert '"PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}"' in patch
-    assert "-m pip install" not in patch
-    assert "pip-dependencies" not in patch
+    assert '"PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}"' in additions
+    assert "-m pip install" not in additions
+    assert "pip-dependencies" not in additions
 
 
 def test_license_hash_is_checkout_line_ending_independent(tmp_path: Path) -> None:
     license_path = tmp_path / "license.txt"
     license_path.write_bytes(b"first line\nsecond line\n")
-    lf_hash = check_mavsdk_phase_a.normalized_text_sha256(license_path)
+    lf_hashes = check_mavsdk_phase_a.text_sha256_variants(license_path)
 
     license_path.write_bytes(b"first line\r\nsecond line\r\n")
-    crlf_hash = check_mavsdk_phase_a.normalized_text_sha256(license_path)
+    crlf_hashes = check_mavsdk_phase_a.text_sha256_variants(license_path)
 
-    assert lf_hash == crlf_hash
+    assert lf_hashes == crlf_hashes
 
 
 def test_redistribution_license_bundle_is_complete() -> None:

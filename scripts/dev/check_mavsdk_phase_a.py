@@ -37,8 +37,10 @@ EXPECTED_ARCHIVE_OPTIONS = {
 }
 FORBIDDEN_DEPENDENCY_TEXT = {
     "cpp/third_party/liblzma/CMakeLists.txt": ("URL_MD5",),
-    "cpp/third_party/mavlink/mavlink.patch": ("-m pip install", "pip-dependencies"),
     "cpp/third_party/picosha2/CMakeLists.txt": ("GIT_TAG cmake-install-support",),
+}
+FORBIDDEN_PATCH_ADDITIONS = {
+    "cpp/third_party/mavlink/mavlink.patch": ("-m pip install", "pip-dependencies"),
 }
 EXPECTED_LICENSE_HASHES = {
     "Asio-Boost-1.0.txt": "beb8e42e9d6b4284e03304d05a81a0755200a965fc8d0a5e0aea1e84cf805d6e",
@@ -93,11 +95,26 @@ def check_forbidden_text(path: Path, forbidden: tuple[str, ...]) -> None:
         raise RuntimeError(f"{path.relative_to(ROOT)} contains mutable or weak provenance: {values}")
 
 
-def normalized_text_sha256(path: Path) -> str:
-    """Hash text using the reviewed CRLF representation on every platform."""
+def patch_added_text(path: Path) -> str:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return "\n".join(line[1:] for line in lines if line.startswith("+") and not line.startswith("+++"))
+
+
+def check_forbidden_patch_additions(path: Path, forbidden: tuple[str, ...]) -> None:
+    additions = patch_added_text(path)
+    found = [value for value in forbidden if value in additions]
+    if found:
+        values = ", ".join(found)
+        raise RuntimeError(f"{path.relative_to(ROOT)} adds mutable or weak provenance: {values}")
+
+
+def text_sha256_variants(path: Path) -> set[str]:
+    """Return hashes for LF and CRLF forms so checkout EOL conversion is ignored."""
     text = path.read_text(encoding="utf-8")
-    canonical = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    lf = normalized.encode("utf-8")
+    crlf = normalized.replace("\n", "\r\n").encode("utf-8")
+    return {hashlib.sha256(lf).hexdigest(), hashlib.sha256(crlf).hexdigest()}
 
 
 def verify_license_bundle() -> None:
@@ -106,8 +123,7 @@ def verify_license_bundle() -> None:
         path = license_root / name
         if not path.is_file():
             raise RuntimeError(f"missing MAVSDK redistribution license: {path.relative_to(ROOT)}")
-        actual = normalized_text_sha256(path)
-        if actual != expected:
+        if expected not in text_sha256_variants(path):
             raise RuntimeError(f"MAVSDK redistribution license changed: {name}")
 
 
@@ -124,6 +140,8 @@ def verify_provenance() -> None:
         check_expected_text(mavsdk_root / relative, expected)
     for relative, forbidden in FORBIDDEN_DEPENDENCY_TEXT.items():
         check_forbidden_text(mavsdk_root / relative, forbidden)
+    for relative, forbidden in FORBIDDEN_PATCH_ADDITIONS.items():
+        check_forbidden_patch_additions(mavsdk_root / relative, forbidden)
 
     proto = subprocess.run(
         ["git", "rev-parse", "HEAD:proto"],
