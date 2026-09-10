@@ -9,16 +9,15 @@ close its integration or release gate.
 
 ## Current work
 
-- [~] G1: run live image/SITL/ROS and clean-boot service qualification on the
-  repaired build, profile, service and setup paths. C02 and C10-C12 source
-  repairs are recorded in migration.
+- [~] G-M Phase A: deterministic connect/status qualification and reviewed
+  dependency inventory are implemented; hosted Linux/Windows/ROS results, live
+  SITL, immutable/checksummed dependency inputs, distribution notices and
+  approved build/runtime budgets remain.
 
 ## Ordered implementation backlog
 
 - [ ] G0: reconcile full CONOPS and assign remaining decision owners. The planning
   baseline and user hardware/autonomy/MAVSDK direction are recorded.
-- [ ] G-M Phase A: hosted Linux/Windows/ROS builds, live MAVSDK connect/status,
-  transitive notices and approved dependency footprint.
 - [ ] G-M Phases B–D: MAVSDK command, telemetry, velocity/watchdog, GCS heartbeat,
   zero-delivery, fence and parameter parity; unit plus integration tests.
 - [ ] G-M: add ArduPlane/QuadPlane support coverage for Task 1 alongside Copter;

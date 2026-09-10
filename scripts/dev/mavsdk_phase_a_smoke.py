@@ -19,6 +19,13 @@ def get_sitl_port() -> str:
     return port
 
 
+def get_system_id() -> str:
+    system_id = os.environ.get("NOMAD_MAVSDK_SYSTEM_ID", "1")
+    if not system_id.isdecimal() or not 1 <= int(system_id) <= 255:
+        raise ValueError("NOMAD_MAVSDK_SYSTEM_ID must be from 1 to 255")
+    return system_id
+
+
 def find_binary() -> Path | None:
     names = ("nomad_mavsdk_phase_a_smoke.exe", "nomad_mavsdk_phase_a_smoke")
     build_dir = ROOT / "build" / "mavsdk-phase-a"
@@ -30,12 +37,35 @@ def find_binary() -> Path | None:
     return None
 
 
-def run_smoke(binary: Path, command: str, endpoint: str) -> int:
+def has_required_output(command: str, output: str, system_id: str) -> bool:
+    required = ["connected=true", f"system={system_id}"]
+    if command == "status":
+        required.extend(("samples=", "position=", "battery_v=", "gps_fix=", "flight_mode="))
+    return all(field in output for field in required)
+
+
+def run_smoke(binary: Path, command: str, endpoint: str, system_id: str) -> int:
     print(f"Running MAVSDK {command} smoke against {endpoint}", flush=True)
     try:
-        result = subprocess.run([str(binary), command, endpoint], check=False, timeout=20)
+        result = subprocess.run(
+            [str(binary), command, endpoint, system_id],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
     except subprocess.TimeoutExpired:
         print(f"error: MAVSDK {command} smoke timed out", file=sys.stderr)
+        return 2
+    except OSError as error:
+        print(f"error: could not run MAVSDK smoke: {error}", file=sys.stderr)
+        return 2
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    if result.returncode == 0 and not has_required_output(command, result.stdout, system_id):
+        print(f"error: MAVSDK {command} output did not satisfy the evidence contract", file=sys.stderr)
         return 2
     return result.returncode
 
@@ -43,6 +73,7 @@ def run_smoke(binary: Path, command: str, endpoint: str) -> int:
 def main() -> int:
     try:
         port = get_sitl_port()
+        system_id = get_system_id()
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
@@ -57,7 +88,7 @@ def main() -> int:
 
     endpoint = f"udpin:0.0.0.0:{port}"
     for command in ("connect", "status"):
-        result = run_smoke(binary, command, endpoint)
+        result = run_smoke(binary, command, endpoint, system_id)
         if result != 0:
             return result
     return 0

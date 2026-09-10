@@ -82,8 +82,9 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       # Build the Tier-1 sim-ros image (compiles nomad_core + nomad_ros).
-      # The Phase A flag also compiles the optional MAVSDK smoke target in the
-      # same ROS image, covering the third supported build environment.
+      # The Phase A flag compiles the optional MAVSDK smoke target in the same
+      # ROS image. This is compile evidence only; the test workflow owns the
+      # deterministic runtime qualification.
       # Cache is scoped to "sim-ros" so it does not evict the SITL cache.
       - name: Build nomad-sim-ros image
         uses: docker/build-push-action@v7

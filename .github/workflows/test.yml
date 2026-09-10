@@ -59,3 +59,7 @@ jobs:
           cache: true
       - name: Build optional MAVSDK smoke target
         run: pixi run build-core-mavsdk
+      - name: Verify reviewed MAVSDK provenance
+        run: pixi run check-mavsdk-phase-a
+      - name: Run deterministic MAVSDK peer qualification
+        run: pixi run test-mavsdk-phase-a

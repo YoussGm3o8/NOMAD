@@ -14,17 +14,19 @@ The production core still uses UdpMavlinkConnection and generated ArduPilot
 dialect headers. CMake NOMAD_ENABLE_MAVSDK defaults OFF; enabling it builds a
 separate connect/status smoke executable, not a MAVSDK-backed Vehicle.
 
-Phase A source exists: opt-in subbuild, telemetry/passthrough smoke consumer,
-scripts/dev/mavsdk_phase_a_smoke.py, Linux/Windows CI jobs, optional ROS image
-wiring, root NOTICE and a fork submodule/branch. Read .gitmodules and the gitlink
-for actual provenance; no new fork or remote change is required by this plan.
-Phases B–E production parity remain open.
+Phase A source exists: opt-in subbuild, telemetry smoke consumer, deterministic
+ArduPilot-like UDP fixture, pure qualification tests, Linux/Windows CI jobs,
+optional ROS image compile wiring, dependency inventory, root NOTICE and a fork
+submodule/branch. Read the root `.gitmodules`, the gitlinks, and the [dependency
+inventory](mavsdk-dependencies.md) for provenance. Phases B–E production parity
+remain open.
 
-Historical local notes reported Windows Release and Linux-in-ROS builds, but
-the later Windows smoke failed closed without sustained telemetry. An earlier
-evaluation reported a successful stream; that is a different artifact/run and
-does not close current Phase A. Hosted build/SITL evidence and the transitive
-dependency notice audit remain open.
+The current Windows Release build and deterministic peer fixture passed locally
+on 2026-09-09. The fixture proves a sustained telemetry stream plus wrong-peer
+and no-peer failure; it does not substitute for ArduPilot SITL or aircraft
+evidence. Hosted build results, Linux-in-ROS results, live SITL, immutable
+dependency pins, distribution license assembly, and resource-budget approval
+remain open.
 
 ## Ownership and rationale
 
@@ -47,9 +49,15 @@ verified against the pinned source; they are not claims about latest upstream.
 ## Phase A — Build, dependencies and telemetry
 
 Keep the opt-in build isolated while measuring footprint and reviewing notices.
-The current setup selects static libraries, telemetry, passthrough, no gRPC
+The current setup selects static libraries, telemetry, no gRPC
 server, no MAVSDK tests, and BUILD_WITHOUT_CURL=ON. Revisit options only for a
 demonstrated required plugin.
+
+The smoke contract accepts only explicit UDP input/output endpoints and one
+expected autopilot system ID. Status succeeds only while that system remains
+connected and supplies valid mode, 3D-or-better GPS, battery, and at least three
+position updates spanning one second with a latest-sample age at most 1.5
+seconds. It fails closed for absent, wrong, ambiguous, invalid, or stale peers.
 
 Exit: reproducible Linux/Windows/selected ROS builds; live connect/status with
 correct ownship, mode and scaled telemetry; no-peer and wrong-peer failures;
@@ -70,6 +78,13 @@ checkout) are retained as comparison data, not acceptance thresholds:
 
 The executable comparison is not a like-for-like product size comparison.
 Approve actual latency/memory/binary/CI budgets before deciding Phase A passes.
+After the hardened smoke rebuild on 2026-09-09, the Windows Release executable
+was 2,032,128 bytes and the warm working build tree was 379,886,610 bytes. These
+are diagnostic measurements from one machine, not approved budgets or clean
+build benchmarks.
+Run `pixi run check-mavsdk-phase-a` after any source or dependency change, and
+run `pixi run build-core-mavsdk` followed by `pixi run test-mavsdk-phase-a` for
+the deterministic peer contract. Live SITL remains a separate required gate.
 
 ## Phase B — Vehicle and output parity
 

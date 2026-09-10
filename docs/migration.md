@@ -21,7 +21,7 @@ cutover inventory and gate evidence. [PRD](prd.md) owns requirements and decisio
 | ROS 2 | ros2/nomad_ros/src/node.cpp, translation.cpp; tests/ros | Owns a Vehicle, telemetry topics, VIO health/source gate and Trigger services; blocking callbacks, no selected estimator or navigation fusion |
 | Video | python/tools/simple_video_bridge.py, video_bridge_server.py; test_simple_video_bridge.py | ROS image to GStreamer/RTSP; control HTTP is loopback-only; no validated capture/CV/VIO product pipeline |
 | Profiles | scripts/profile.py; three product profile files; test_deployment_profiles.py | Canonical endpoint and stale-setting checks exist; optional workloads and hardware remain unqualified |
-| MAVSDK | CMake opt-in target; examples/mavsdk_phase_a_smoke.cpp; runner and CI wiring | Phase A scaffolding exists; production still uses current codec; command/flight parity absent |
+| MAVSDK | CMake opt-in target; qualified telemetry smoke; deterministic peer fixture; provenance and CI gates | Phase A local evidence exists; hosted/SITL/license/budget gates remain; production still uses current codec |
 | Competition | No dedicated implementation found in src/include/ROS/Python/plugin scans | Web telemetry/events, traffic model/deconfliction, herd survey, tracker/path and sampling workflows are open |
 
 The working tree removes the Edge Core source/service/API and many camera/
