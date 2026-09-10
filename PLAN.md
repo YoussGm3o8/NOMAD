@@ -45,7 +45,7 @@ work without ROS/perception, but does not by itself satisfy wildlife assessment.
 |---|---|---|
 | Planning | Reconciled requirements, source inventory, decisions explicitly pending | G0 |
 | Baseline repair | Build/CI/tasks match the deleted Edge Core tree; retain optional compute and video | G1 |
-| MAVSDK adoption | Tested ArduPilot transport parity, production cutover and focused merge request | G-M |
+| MAVSDK adoption | Tested ArduPilot transport parity, production cutover and focused reviewable changes | G-M |
 | Core authority | One active writer, fresh state, cancellable missions, bounded adapters, truthful outcomes | G2 |
 | Profile qualification | Each profile runs its declared capabilities and exposes missing ones | G3 |
 | Competition integration | Armed 1 Hz telemetry, inbound traffic cylinders and demonstrated operator avoidance | G4 |
@@ -60,11 +60,11 @@ G7 early. Autonomous conflict maneuvers and external-navigation fusion have thei
 own safety evidence inside G4/G7, even if advisory traffic or CV already works.
 
 User decision (2026-09-08): MAVSDK must be used during the competition and is an
-early prerequisite, including unit tests, integration evidence and a focused
-merge request. Complete G-M after baseline repair and before dependent integrated
-command work. Phase A is partial and the current codec still runs; switch only
-after parity. Isolated server/CV prototypes may proceed independently. Never run
-two production command owners as an adoption experiment.
+early prerequisite, including unit tests, integration evidence and focused,
+reviewable implementation changes. Complete G-M after baseline repair and before
+dependent integrated command work. Phase A is partial and the current codec still
+runs; switch only after parity. Isolated server/CV prototypes may proceed
+independently. Never run two production command owners as an adoption experiment.
 
 Task 1 targets a lightweight VTOL with groundstation_gpu, ground CV/video and
 Pi Zero LTE backup. Task 2 targets a heavier quad below 15 kg with optional onboard
@@ -94,10 +94,11 @@ promised dates. Team owners and capacity remain D10.
 
 The planning/migration baseline is recorded in commit `d31b0aa`. Focused
 implementation follows the single active item in TODO. Runtime/profile/setup
-repairs and partial MAVSDK Phase A evidence are recorded in migration. This
-reconciliation begins from clean main at `fab9f46` and changes no flight code.
-Preserve unrelated work
-and follow AGENTS for publication and deployment authorization.
+repairs and MAVSDK Phase A evidence are recorded in migration. The CONOPS
+reconciliation was prepared from clean main at `fab9f46`; subsequent mainline
+commits added optional MAVSDK Phase A hardening and qualification without changing
+the production transport. Preserve unrelated work and follow AGENTS for
+publication and deployment authorization.
 
 Gate closure requires a recorded artifact/configuration and independent observed
 outcome. A source file, a configured CI job, a mock response, or an old pass count
