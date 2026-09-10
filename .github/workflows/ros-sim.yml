@@ -21,7 +21,9 @@ on:
     paths:
       - "CMakeLists.txt"
       - ".gitmodules"
+      - "third_party/MAVSDK"
       - "third_party/MAVSDK/**"
+      - "third_party/ardupilot-mavlink"
       - "third_party/ardupilot-mavlink/**"
       - "src/**"
       - "include/**"
@@ -41,7 +43,9 @@ on:
     paths:
       - "CMakeLists.txt"
       - ".gitmodules"
+      - "third_party/MAVSDK"
       - "third_party/MAVSDK/**"
+      - "third_party/ardupilot-mavlink"
       - "third_party/ardupilot-mavlink/**"
       - "src/**"
       - "include/**"
