@@ -32,9 +32,8 @@ def find_smoke_binary(build_dir: Path = DEFAULT_BUILD_DIR) -> Path | None:
 def collect_build_metrics(build_dir: Path = DEFAULT_BUILD_DIR) -> dict[str, int | str]:
     """Collect byte-count evidence from a completed Phase A build."""
     if not build_dir.is_dir():
-        raise FileNotFoundError(
-            f"MAVSDK Phase A build directory not found: {build_dir}"
-        )
+        message = f"MAVSDK Phase A build directory not found: {build_dir}"
+        raise FileNotFoundError(message)
 
     binary = find_smoke_binary(build_dir)
     if binary is None:
@@ -84,10 +83,8 @@ def main() -> int:
         try:
             write_github_summary(metrics, Path(summary))
         except OSError as error:
-            print(
-                f"warning: could not write GitHub step summary: {error}",
-                file=sys.stderr,
-            )
+            message = f"warning: could not write GitHub step summary: {error}"
+            print(message, file=sys.stderr)
     return 0
 
 
