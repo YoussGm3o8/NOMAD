@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import subprocess
 import sys
 from pathlib import Path
@@ -42,20 +41,23 @@ FORBIDDEN_DEPENDENCY_TEXT = {
 FORBIDDEN_PATCH_ADDITIONS = {
     "cpp/third_party/mavlink/mavlink.patch": ("-m pip install", "pip-dependencies"),
 }
-EXPECTED_LICENSE_HASHES = {
-    "Asio-Boost-1.0.txt": "beb8e42e9d6b4284e03304d05a81a0755200a965fc8d0a5e0aea1e84cf805d6e",
-    "fmt-MIT.txt": "25b5db04aa6070c12ac518b91cbd0a59725c050ecb091456e6ebc3d3eeb369cf",
-    "libevents-BSD-3-Clause.txt": "6f35a7c5c0d7851c6c220a09b31c1cd9f97c587b8ae6c5a46a5fce662489d30b",
-    "libmavlike-BSD-3-Clause.txt": "70e26bc0c922e89a6e54d18083df24c756855b70349a0719d54f722dcc87665b",
-    "MAVLink-generator-and-output.txt": "299f94fd2ac2d859ac828ae0d4b6bdea02fc7d0dae1bf8c0658589550ddad487",
-    "MAVSDK-BSD-3-Clause.txt": "0ccdceb5a7215d4ab3e638040e1effdafc1197a91bc214f80d67f1c412c4aae2",
-    "nlohmann-json-MIT.txt": "46a65cffd1ea955132d95a8dd921640714a8d6b537d2e4e482d31145ae95b603",
-    "PicoSHA2-MIT.txt": "3e4ca187c6ffc8b0ed48f84fb06b9a44eb6fd2c15af856806fc51d44911b4496",
-    "tinyxml2-Zlib.txt": "035a1f2fd2f6dba120f3c25cd2d04f9987f32405c847c0cb4859fe33e6148f45",
-    "XZ-COPYING.txt": "72d7ef9c98be319fd34ce88b45203b36d5936f9c49e82bf3198ffee5e0c7d87e",
-    "XZ-GPL-2.0.txt": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
-    "XZ-GPL-3.0.txt": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
-    "XZ-LGPL-2.1.txt": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
+# Git tree object IDs are used instead of hashing working-tree bytes. This keeps
+# the check exact while remaining independent of checkout EOL conversion and
+# other platform-specific worktree filters.
+EXPECTED_LICENSE_BLOBS = {
+    "Asio-Boost-1.0.txt": "36b7cd93cdfbac762f5be4c6ce276df2ea6305c2",
+    "fmt-MIT.txt": "1cd1ef92696b65b2ecb0e560e622f0a0e869dcf3",
+    "libevents-BSD-3-Clause.txt": "636cc2972ae0336bd65c0fe96de3a80e5814b6b9",
+    "libmavlike-BSD-3-Clause.txt": "384550480ac2c493696a7fe3c4bad9ac7a6dafc0",
+    "MAVLink-generator-and-output.txt": "6f1d4c61b0e2de896454cac2a3300e6d47371254",
+    "MAVSDK-BSD-3-Clause.txt": "edd02bd724689dc54aa0168f92e79dafae104f6c",
+    "nlohmann-json-MIT.txt": "a1dacc8dbbd907c4b622ff1f08e279c27465dcbc",
+    "PicoSHA2-MIT.txt": "b6658bbc98a5b198a49fce48bc2aec7283bef62a",
+    "tinyxml2-Zlib.txt": "85a6a36f0ddf7cda552b7a031a9682f2c062d722",
+    "XZ-COPYING.txt": "f4406b9a20bfeeec8c56566b543664e52438e23f",
+    "XZ-GPL-2.0.txt": "d159169d1050894d3ea3b98e1c965c4058208fe1",
+    "XZ-GPL-3.0.txt": "f288702d2fa16d3cdf0035b15a9fcbc552cd88e7",
+    "XZ-LGPL-2.1.txt": "e5ab03e1238af66de157fae2e6270d7e8f967f93",
 }
 NOTICE_COMPONENTS = (
     "MAVSDK",
@@ -108,28 +110,30 @@ def check_forbidden_patch_additions(path: Path, forbidden: tuple[str, ...]) -> N
         raise RuntimeError(f"{path.relative_to(ROOT)} adds mutable or weak provenance: {values}")
 
 
-def text_sha256_variants(path: Path) -> set[str]:
-    """Hash text independent of checkout EOLs and terminal blank lines."""
-    text = path.read_text(encoding="utf-8")
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    body = normalized.rstrip("\n")
-    logical_variants = (body, body + "\n", body + "\n\n")
-    encoded_variants = {
-        value.encode("utf-8")
-        for logical in logical_variants
-        for value in (logical, logical.replace("\n", "\r\n"))
-    }
-    return {hashlib.sha256(value).hexdigest() for value in encoded_variants}
-
-
 def verify_license_bundle() -> None:
     license_root = ROOT / "licenses" / "mavsdk-phase-a"
-    for name, expected in EXPECTED_LICENSE_HASHES.items():
+    actual_names = {path.name for path in license_root.glob("*.txt")}
+    expected_names = set(EXPECTED_LICENSE_BLOBS)
+    if actual_names != expected_names:
+        missing = sorted(expected_names - actual_names)
+        unexpected = sorted(actual_names - expected_names)
+        details = []
+        if missing:
+            details.append(f"missing: {', '.join(missing)}")
+        if unexpected:
+            details.append(f"unexpected: {', '.join(unexpected)}")
+        raise RuntimeError(f"MAVSDK redistribution license inventory changed ({'; '.join(details)})")
+
+    for name, expected in EXPECTED_LICENSE_BLOBS.items():
         path = license_root / name
         if not path.is_file():
             raise RuntimeError(f"missing MAVSDK redistribution license: {path.relative_to(ROOT)}")
-        if expected not in text_sha256_variants(path):
-            raise RuntimeError(f"MAVSDK redistribution license changed: {name}")
+        repo_path = f"licenses/mavsdk-phase-a/{name}"
+        actual = git_revision(repo_path)
+        if actual != expected:
+            raise RuntimeError(
+                f"MAVSDK redistribution license changed: {name}; expected blob {expected}, observed {actual}"
+            )
 
 
 def verify_provenance() -> None:

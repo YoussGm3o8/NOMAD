@@ -2,8 +2,6 @@
 # Copyright 2026 The NOMAD Authors
 """Tests for the MAVSDK Phase A provenance gate."""
 
-from pathlib import Path
-
 from scripts.dev import check_mavsdk_phase_a
 
 
@@ -41,33 +39,11 @@ def test_mavlink_generator_avoids_build_time_package_resolution() -> None:
     assert "pip-dependencies" not in additions
 
 
-def test_license_hash_ignores_checkout_text_conventions(tmp_path: Path) -> None:
-    license_path = tmp_path / "license.txt"
-    variants = (
-        b"first line\nsecond line",
-        b"first line\nsecond line\n",
-        b"first line\nsecond line\n\n",
-        b"first line\nsecond line\n\n\n",
-        b"first line\r\nsecond line",
-        b"first line\r\nsecond line\r\n",
-        b"first line\r\nsecond line\r\n\r\n",
-    )
-    hashes: set[frozenset[str]] = set()
-    for contents in variants:
-        license_path.write_bytes(contents)
-        hashes.add(frozenset(check_mavsdk_phase_a.text_sha256_variants(license_path)))
+def test_redistribution_license_inventory_is_exact() -> None:
+    license_root = check_mavsdk_phase_a.ROOT / "licenses" / "mavsdk-phase-a"
+    actual = {path.name for path in license_root.glob("*.txt")}
 
-    assert len(hashes) == 1
-
-
-def test_license_hash_still_detects_content_changes(tmp_path: Path) -> None:
-    license_path = tmp_path / "license.txt"
-    license_path.write_text("first line\nsecond line\n", encoding="utf-8")
-    expected = check_mavsdk_phase_a.text_sha256_variants(license_path)
-
-    license_path.write_text("first line\nchanged line\n", encoding="utf-8")
-
-    assert expected.isdisjoint(check_mavsdk_phase_a.text_sha256_variants(license_path))
+    assert actual == set(check_mavsdk_phase_a.EXPECTED_LICENSE_BLOBS)
 
 
 def test_redistribution_license_bundle_is_complete() -> None:
