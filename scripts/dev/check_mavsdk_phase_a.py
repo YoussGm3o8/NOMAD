@@ -93,13 +93,20 @@ def check_forbidden_text(path: Path, forbidden: tuple[str, ...]) -> None:
         raise RuntimeError(f"{path.relative_to(ROOT)} contains mutable or weak provenance: {values}")
 
 
+def normalized_text_sha256(path: Path) -> str:
+    """Hash text using the reviewed CRLF representation on every platform."""
+    text = path.read_text(encoding="utf-8")
+    canonical = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def verify_license_bundle() -> None:
     license_root = ROOT / "licenses" / "mavsdk-phase-a"
     for name, expected in EXPECTED_LICENSE_HASHES.items():
         path = license_root / name
         if not path.is_file():
             raise RuntimeError(f"missing MAVSDK redistribution license: {path.relative_to(ROOT)}")
-        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        actual = normalized_text_sha256(path)
         if actual != expected:
             raise RuntimeError(f"MAVSDK redistribution license changed: {name}")
 

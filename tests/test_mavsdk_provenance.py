@@ -2,6 +2,8 @@
 # Copyright 2026 The NOMAD Authors
 """Tests for the MAVSDK Phase A provenance gate."""
 
+from pathlib import Path
+
 from scripts.dev import check_mavsdk_phase_a
 
 
@@ -28,6 +30,27 @@ def test_picosha2_uses_immutable_revision() -> None:
 
     assert "GIT_TAG 1bf940d8a03bb752604fbb366d47b97b50b9e6ce" in source
     assert "GIT_TAG cmake-install-support" not in source
+
+
+def test_mavlink_generator_avoids_build_time_package_resolution() -> None:
+    patch = (check_mavsdk_phase_a.ROOT / "third_party/MAVSDK/cpp/third_party/mavlink/mavlink.patch").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}"' in patch
+    assert "-m pip install" not in patch
+    assert "pip-dependencies" not in patch
+
+
+def test_license_hash_is_checkout_line_ending_independent(tmp_path: Path) -> None:
+    license_path = tmp_path / "license.txt"
+    license_path.write_bytes(b"first line\nsecond line\n")
+    lf_hash = check_mavsdk_phase_a.normalized_text_sha256(license_path)
+
+    license_path.write_bytes(b"first line\r\nsecond line\r\n")
+    crlf_hash = check_mavsdk_phase_a.normalized_text_sha256(license_path)
+
+    assert lf_hash == crlf_hash
 
 
 def test_redistribution_license_bundle_is_complete() -> None:
