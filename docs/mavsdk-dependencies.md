@@ -1,9 +1,8 @@
 # MAVSDK Phase A dependency inventory
 
 This inventory records the optional Phase A build inputs at the reviewed NOMAD
-gitlink plus the uncommitted dependency-hardening patch described below. It is
-an engineering and notice audit, not a release approval. The production core
-does not use MAVSDK yet.
+gitlink. It is an engineering and notice audit, not a release approval. The
+production core does not use MAVSDK yet.
 The CONOPS v1.0 reconciliation did not change dependency pins or accepted evidence.
 MAVSDK remains a project prerequisite, not an organizer-prescribed library.
 Competition transport/traffic requirements do not justify adding speculative
@@ -13,7 +12,7 @@ options; the telemetry-only Phase A inventory cannot cover those future inputs.
 
 | Component | Reviewed source | License found in fetched source |
 |---|---|---|
-| MAVSDK | NOMAD gitlink `34b417d45c2c33ce0414bc1bc61b54010d055224` | BSD-3-Clause |
+| MAVSDK | NOMAD gitlink `fd8b66dfc5962067ff917705a27e418b24c84cdf` | BSD-3-Clause |
 | MAVSDK proto | nested gitlink `1fd0bc7a05c21336227b1eab266b8b610401cf38` | BSD-3-Clause |
 | Asio | tag `asio-1-30-2` | Boost-1.0 |
 | fmt | tag `12.1.0` | MIT |
@@ -36,27 +35,31 @@ The complete selected-build texts and their checked hashes are in
 `licenses/mavsdk-phase-a/`. MAVSDK-Proto is not fetched, compiled or linked while
 the server remains disabled; enabling it requires a new audit.
 
-## Local hardening evidence - 2026-09-10
+## Hardening evidence - 2026-09-10
 
-The local MAVSDK checkout remains based on gitlink
-`34b417d45c2c33ce0414bc1bc61b54010d055224`, with an uncommitted three-file
-patch that replaces the mutable PicoSHA2 branch, adds SHA-256 archive checks,
-and uses deterministic extraction timestamps. A Windows Release configure and
-smoke-target rebuild completed against those inputs. The deterministic peer
-fixture accepted the expected ArduPilot-like system, rejected a wrong system ID,
-and failed on an absent peer. The provenance checker and 12 focused Python tests
-passed; the complete C++ suite passed 10/10.
+The reviewed three-file MAVSDK hardening patch is published on the project fork
+as `fd8b66dfc5962067ff917705a27e418b24c84cdf`. It replaces the mutable PicoSHA2
+branch with an immutable commit, adds SHA-256 archive checks for liblzma and
+nlohmann JSON, and enables deterministic extraction timestamps. NOMAD pins that
+revision directly so a recursive clean checkout resolves the reviewed graph.
+
+Before publication, a Windows Release configure and smoke-target rebuild completed
+against the same three-file patch. The deterministic peer fixture accepted the
+expected ArduPilot-like system, rejected a wrong system ID, and failed on an absent
+peer. The provenance checker and 12 focused Python tests passed; the complete C++
+suite passed 10/10. Those results predate the immutable fork commit and parent
+gitlink update; they are supporting evidence for identical file contents, not a
+substitute for a fresh clean-checkout run at the published revisions.
 
 The warm build tree was 379,308,757 bytes and the smoke executable was 2,032,128
 bytes. These are one-machine diagnostics, not approved budgets or clean-build
-benchmarks. Because the fork patch and parent gitlink update are not committed,
-a clean clone cannot reproduce this hardened graph yet. No hosted CI, Linux/ROS
-image, live ArduPilot SITL or aircraft evidence was established by this run.
+benchmarks. Fresh clean-checkout provenance/build evidence, hosted Linux/Windows,
+selected ROS image, live ArduPilot SITL and aircraft evidence remain required.
 
 ## Open release blockers
 
-- Commit the reviewed fork patch and update the parent gitlink in a focused,
-  authorized change so clean clones use the hardened inputs.
+- Re-run provenance, configure/build and deterministic peer qualification from a
+  recursive clean checkout at the published NOMAD/MAVSDK pins.
 - Re-run the selected dependency and licence audit whenever production parity
   enables another plugin, server, curl or test dependency.
 - Release owners must approve build-tree, executable, memory, startup, and CI
@@ -64,6 +67,6 @@ image, live ArduPilot SITL or aircraft evidence was established by this run.
 - Hosted Linux/Windows, selected ROS image and live ArduPilot SITL evidence
   remain required.
 
-debt: the hardened selected-build graph exists only as an uncommitted fork patch;
-revisit at the next authorized focused change; then commit the fork revision,
-update the parent gitlink and rerun the clean build/runtime qualification matrix.
+debt: the selected-build graph is now published and pinned; revisit after the
+clean-checkout/hosted qualification matrix, and again whenever dependency or
+MAVSDK plugin selection changes.

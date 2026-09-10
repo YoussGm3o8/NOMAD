@@ -9,20 +9,23 @@ close its integration or release gate.
 
 ## Current work
 
-- [~] G-M Phase B connection boundary: introduce the narrow MAVSDK connection
-  owner behind the existing core boundary without switching production or
-  duplicating vehicle policy. Requirements: project MAVSDK decision, C01 and
-  GAP-16. Falsification: boundary tests accept an invalid/wrong peer, conceal
-  loss, or alter the default legacy production path.
+- [~] G-M Phase A reproducibility and evidence: pin the published MAVSDK hardening
+  revision in NOMAD, then complete clean-checkout provenance/build evidence,
+  hosted Linux/Windows/ROS and live ArduPilot SITL evidence, and approve resource
+  budgets. Falsification: a recursive clean checkout resolves mutable/weak build
+  inputs, disagrees with the provenance checker, or cannot reproduce the selected
+  Phase A build graph.
 
 ## Ordered implementation backlog
 
 - [ ] G0: obtain organizer rulings Q02-Q09 and assign named decision/gate owners
   (D10). The 125-entry documentation reconciliation and Q01 decision are complete;
   unanswered interpretations keep the planning gate open.
-- [ ] G-M Phase A: commit/pin the reviewed hardening patch, complete hosted
-  Linux/Windows/ROS and live ArduPilot SITL evidence, and approve resource
-  budgets. The deterministic local Windows evidence remains partial.
+- [ ] G-M Phase B connection boundary: introduce the narrow MAVSDK connection
+  owner behind the existing core boundary without switching production or
+  duplicating vehicle policy. Requirements: project MAVSDK decision, C01 and
+  GAP-16. Falsification: boundary tests accept an invalid/wrong peer, conceal
+  loss, or alter the default legacy production path.
 - [ ] G-M Phases B–D: MAVSDK command, telemetry, velocity/watchdog, GCS heartbeat,
   zero-delivery, fence and parameter parity; unit plus integration tests.
 - [ ] G-M: add ArduPlane/QuadPlane support coverage for Task 1 alongside Copter;
@@ -64,8 +67,9 @@ gates. Do not mark multiple work items active or bypass predecessor safety gates
   full command ownership migration remains open.
 - [x] MAVSDK optional Phase A build/smoke target and fork wiring exist;
   production migration is still open.
-- [x] MAVSDK Phase A selected-build inputs use immutable/strong-hash references
-  and carry checked licence texts locally; publication, clean-clone, hosted,
+- [x] MAVSDK Phase A selected-build inputs use immutable/strong-hash references,
+  carry checked licence texts, and are published in the project fork; the parent
+  NOMAD pin/provenance update is the active slice, while clean-checkout hosted,
   live-SITL and budget evidence remain open.
 - [x] Three profile templates/config tests and retained Python video bridge exist;
   runtime and hardware capability evidence remains open.
