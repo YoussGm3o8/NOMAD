@@ -95,7 +95,11 @@ for basic unit or server-contract tests.
 
 MAVSDK build-core-mavsdk and mavsdk-phase-a-smoke are opt-in Phase A tasks; the
 latter requires live SITL. They do not switch production to MAVSDK. Follow
-[MAVSDK parity gates](mavsdk-adoption.md).
+[MAVSDK parity gates](mavsdk-adoption.md). The build task emits configure/build
+timing and footprint JSON to standard output. The hosted matrix also writes and
+retains a JSON artifact; local output from a dirty vendor checkout is diagnostic,
+not clean-checkout qualification. Live smoke output includes per-process-tree
+peak RSS and elapsed connect/status time and is retained by the SITL workflow.
 
 ROS builds use the separate ament package and supported image; test-ros-integration
 runs its real adapter tests. Current source still has blocking callbacks; passing

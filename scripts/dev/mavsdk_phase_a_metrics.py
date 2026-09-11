@@ -6,11 +6,43 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
+import time
+from argparse import ArgumentParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BUILD_DIR = ROOT / "build" / "mavsdk-phase-a"
+
+
+def run_build(build_dir: Path = DEFAULT_BUILD_DIR) -> dict[str, float]:
+    """Configure and build the Phase A target while measuring both phases."""
+    configure = [
+        "cmake",
+        "-S",
+        str(ROOT),
+        "-B",
+        str(build_dir),
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DNOMAD_ENABLE_MAVSDK=ON",
+        "-DBUILD_TESTING=OFF",
+    ]
+    build = [
+        "cmake",
+        "--build",
+        str(build_dir),
+        "--config",
+        "Release",
+        "--target",
+        "nomad_mavsdk_phase_a_smoke",
+    ]
+    durations = {}
+    for name, command in (("configure_seconds", configure), ("target_build_seconds", build)):
+        started = time.perf_counter()
+        subprocess.run(command, check=True)
+        durations[name] = round(time.perf_counter() - started, 3)
+    return durations
 
 
 def directory_size(path: Path) -> int:
@@ -66,10 +98,29 @@ def write_github_summary(metrics: dict[str, int | str], summary_path: Path) -> N
         stream.write("\n".join(rows))
 
 
+def parse_arguments() -> tuple[bool, Path | None]:
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument("--build", action="store_true", help="configure and build before collecting metrics")
+    parser.add_argument("--output", type=Path, help="write the JSON evidence record to this path")
+    arguments = parser.parse_args()
+    return arguments.build, arguments.output
+
+
+def write_json(metrics: dict[str, float | int | str], output_path: Path) -> None:
+    """Write a stable JSON evidence record outside the measured build tree."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def main() -> int:
+    build_requested, output_path = parse_arguments()
     try:
-        metrics = collect_build_metrics()
-    except (FileNotFoundError, OSError) as error:
+        durations = run_build() if build_requested else {}
+        metrics: dict[str, float | int | str] = collect_build_metrics()
+        metrics.update(durations)
+        if output_path:
+            write_json(metrics, output_path)
+    except (FileNotFoundError, OSError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
 

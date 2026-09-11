@@ -80,7 +80,14 @@ jobs:
         run: sleep 25
 
       - name: MAVSDK Phase A connect/status smoke
-        run: pixi run mavsdk-phase-a-smoke
+        run: pixi run mavsdk-phase-a-smoke | tee "$RUNNER_TEMP/mavsdk-phase-a-runtime.txt"
+
+      - name: Retain Phase A runtime metrics
+        uses: actions/upload-artifact@v6
+        with:
+          name: mavsdk-phase-a-runtime
+          path: ${{ runner.temp }}/mavsdk-phase-a-runtime.txt
+          if-no-files-found: error
 
       - name: Record Phase A build metrics
         run: python scripts/dev/mavsdk_phase_a_metrics.py
@@ -144,7 +151,14 @@ jobs:
         run: pixi run core-sitl-status
 
       - name: MAVSDK Phase A connect/status smoke
-        run: pixi run mavsdk-phase-a-smoke
+        run: pixi run mavsdk-phase-a-smoke | tee "$RUNNER_TEMP/mavsdk-phase-a-runtime.txt"
+
+      - name: Retain Phase A runtime metrics
+        uses: actions/upload-artifact@v6
+        with:
+          name: mavsdk-phase-a-runtime
+          path: ${{ runner.temp }}/mavsdk-phase-a-runtime.txt
+          if-no-files-found: error
 
       - name: Record Phase A build metrics
         run: python scripts/dev/mavsdk_phase_a_metrics.py

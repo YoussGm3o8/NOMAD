@@ -108,6 +108,53 @@ dependency change, and run `pixi run build-core-mavsdk` followed by
 mainline SITL job is the live Phase A regression gate; the larger SITL suite stays
 nightly/on-demand because it exercises later safety and parity behavior.
 
+The Phase A build task now measures configure time, target-build time, build-tree
+bytes, smoke-executable bytes and selected static-archive bytes in one record.
+Hosted Linux and Windows jobs upload that JSON record as a required artifact.
+This makes samples reviewable but does not make a warm build a clean benchmark or
+approve a budget. The live smoke job records connect/status elapsed time and
+per-process-tree peak RSS on Linux and Windows, and retains its output artifact.
+An unavailable RSS sample is explicit rather than silently omitted.
+
+Two local warm Windows runs on 2026-09-10 against the pre-existing dirty vendor
+checkout `34b417d4` reproduced a 445,271,541-byte tree, 2,033,664-byte executable,
+six selected archives totalling 12,073,548 bytes, with configure/target-build
+times of 42.074/175.365 s and 29.701/169.367 s. The provenance check failed
+because that checkout's MAVLink patch lacks the reviewed pinned-generator marker.
+These measurements validate the collector only; they are not accepted dependency
+or release evidence and do not supersede the published `9884f109` graph.
+
+A separate recursive Windows checkout at NOMAD `610215f` and MAVSDK
+`9884f109533f564bc6250e5471e6301d3a62f4a7` passed the provenance audit,
+28 focused Phase A tests, all three deterministic peer cases, 10 CTests and the
+full Python suite (345 passed, 3 environment skips) on 2026-09-10. Its clean
+first build completed, but its requested evidence file used an unwritable output
+location, so no first-build duration is claimed. A subsequent measured warm run
+recorded a 422,952,646-byte build tree, 2,032,640-byte executable, six selected
+archives totalling 12,070,896 bytes, 32.695 s configure and 165.748 s target
+build. This is clean-source local Windows evidence, not a hosted sample, CI-time
+measurement, runtime/SITL result, approved budget or flight qualification.
+
+Hosted run `34550522657` against commit `219133e` on 2026-09-11 retained the
+following clean recursive-checkout samples and passed provenance plus all three
+deterministic peer cases on both runners:
+
+| Runner | Tree bytes | Executable bytes | Archives | Archive bytes | Configure | Target build |
+|---|---:|---:|---:|---:|---:|---:|
+| `ubuntu-latest` | 213,615,930 | 4,719,032 | 6 | 1,552,468 | 43.020 s | 172.291 s |
+| `windows-latest` | 430,393,315 | 2,015,744 | 6 | 12,051,864 | 187.318 s | 326.074 s |
+
+Hosted run `34550529273` against the same commit connected to the configured
+Copter 4.7.1 SITL system and retained `mavsdk-phase-a-runtime`: connect completed
+in 0.731 s at 9,584,640-byte peak process-tree RSS; status completed in 2.534 s
+at 9,940,992 bytes and returned six fresh samples for system 1. These are hosted
+dependency and live-SITL integration samples, not approved resource budgets,
+aircraft-specific evidence or flight qualification. The same full workflow
+failed twice later in the legacy C++ zero-delivery scenario because its observer
+captured no wire setpoints (`wire=[]`); subsequent full-suite scenarios were
+skipped. That separate SR-LNK-03 evidence gap remains open and is not counted as
+a Phase A MAVSDK regression or as a successful full-SITL run.
+
 ## Phase B — Vehicle and output parity
 
 Implement the existing connection boundary using only required MAVSDK APIs.

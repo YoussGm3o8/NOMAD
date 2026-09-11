@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -30,11 +31,11 @@ def test_run_smoke_passes_expected_identity_and_accepts_complete_status(monkeypa
     )
     calls: list[list[str]] = []
 
-    def fake_run(command: list[str], **_kwargs):
+    def fake_run(command: list[str], _timeout: float):
         calls.append(command)
-        return completed
+        return completed, 1.25, 4096
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(smoke, "run_measured_process", fake_run)
     assert smoke.run_smoke(binary, "status", "udpin:0.0.0.0:14570", "7") == 0
     assert calls == [[str(binary), "status", "udpin:0.0.0.0:14570", "7"]]
 
@@ -43,7 +44,7 @@ def test_run_smoke_rejects_incomplete_success_output(monkeypatch, tmp_path: Path
     binary = tmp_path / "smoke"
     binary.touch()
     result = subprocess.CompletedProcess([], 0, "connected=true system=1\n", "")
-    monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: result)
+    monkeypatch.setattr(smoke, "run_measured_process", lambda *_args, **_kwargs: (result, 1.0, 2048))
     assert smoke.run_smoke(binary, "status", "udpin:0.0.0.0:14570", "1") == 2
 
 
@@ -55,5 +56,22 @@ def test_run_smoke_converts_process_failures_to_evidence_error(error: Exception,
     def fail(*_args, **_kwargs):
         raise error
 
-    monkeypatch.setattr(subprocess, "run", fail)
+    monkeypatch.setattr(smoke, "run_measured_process", fail)
     assert smoke.run_smoke(binary, "connect", "udpin:0.0.0.0:14570", "1") == 2
+
+
+def test_run_measured_process_reports_current_child_memory() -> None:
+    command = [sys.executable, "-c", "import time; value = bytearray(8_000_000); time.sleep(0.1); print(len(value))"]
+    result, elapsed_seconds, peak_rss = smoke.run_measured_process(command, 2.0)
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "8000000"
+    assert elapsed_seconds >= 0.1
+    assert peak_rss is not None and peak_rss >= 8_000_000
+
+
+def test_runtime_metric_reports_unavailable_memory(capsys) -> None:
+    smoke.report_runtime_metric("connect", 1.25, None)
+    output = capsys.readouterr().out
+    assert "elapsed_seconds=1.250" in output
+    assert "peak_process_tree_rss_bytes=unavailable" in output
