@@ -65,9 +65,13 @@ Q04 also includes traffic altitude datum, vertical keepaway half-height versus
 full height, coordinate frame, track timestamps/sequence, exclusion-boundary
 equality, freshness/expiry, velocity availability, prediction horizon, right-of-way,
 required alerting and response to stale/missing feed. CONOPS supplies cylinders
-and a duty to avoid them, not those detailed semantics. The referenced server
-portal could not be retrieved by the web tool during this review; its contents
-are not claimed to have been read. No token was requested or competition telemetry sent.
+and a duty to avoid them, not those detailed semantics. The named
+[AEAC competition portal](https://aeac.mylonics.com/#/) responds as the AEAC
+Student Competition Server, but its documentation is client-rendered and was not
+exposed by the text-only retrieval available during this review. The verified
+logical requirements and the still-unverified portal wire contract are tracked in
+[AEAC 2027 integration](aeac-2027.md). No token was requested and no competition
+telemetry was sent.
 
 ## Confirmed product direction
 
@@ -77,6 +81,7 @@ are not claimed to have been read. No token was requested or competition telemet
 | U-AP-01 | U | Preserve ArduPilot control, EKF and failsafes; NOMAD does not replace them | G2/G7 |
 | U-PY-01 | U | Remove Edge Core and Python-owned vehicle decisions; retain Python for CV/ML/tools/tests | G1/G2 |
 | U-ADAPT-01 | U | Mission Planner and ROS 2 are clients/adapters; no parallel vehicle policy | G2 |
+| U-MOD-01 | U | Keep NOMAD general-purpose: competition/event-specific schemas, credentials, cadence and scoring behavior live in opt-in application modules with no core dependency on those details and no direct vehicle-command path | G2/G4 |
 | U-PROF-01 | U | onboard_companion runs optional ROS 2, VIO, camera/video and perception on a Jetson/SBC aboard | G3/G7 |
 | U-PROF-02 | U | groundstation_gpu runs those optional workloads on a GPU laptop with no Jetson aboard | G3/G7 |
 | U-PROF-03 | U | groundstation_minimal works with direct MAVLink and C++ without companion/perception; missing features are explicit | G3 |
@@ -105,6 +110,10 @@ payload channel mapping, or transport has been qualified.
   manual flight, requires actual traffic separation, and separately rewards autonomy.
 - MAVSDK must be used at competition: early adoption, unit/integration testing
   and a focused merge request are required implementation work (D03 resolved).
+- NOMAD remains general-purpose. AEAC 2027 and future event-specific behavior
+  should be composed as optional modules at narrow generic boundaries rather than
+  spread through the base core; minimize coupling and keep vehicle decisions in
+  the core.
 
 These are user product directions or explicitly tentative hardware choices,
 not additional organizer rules. ArduPlane/QuadPlane support is necessary for
@@ -182,22 +191,25 @@ but cannot authorize autonomous actions, runtime changes, or release acceptance.
 | D04 | Tracker/tagger/sample hardware and assessment interaction | Select mechanics and feedback before defining autonomous payload behavior; current generic outputs are insufficient | G6 |
 | D05 | Final traffic, approach and payload autonomy level | Retain advisories with demonstrated operator avoidance and explicit authorization; choose Task 2 bonus targets after Q06 | G4/G6 |
 | D06 | Is VIO for mapping/perception or required flight navigation? | GNSS/ArduPilot navigation baseline; external-navigation fusion only after end-to-end timing evidence | G3/G7 |
-| D07 | Official server wire contract and traffic semantics (Q04) | Obtain contract first; model confirmed fields/cylinders in isolated fixtures; no invented events | G4 |
+| D07 | Official server wire contract and traffic semantics (Q04) | Transcribe/version the official portal contract first; model confirmed fields/cylinders in isolated fixtures; no invented events | G4 |
 | D08 | Accuracy, latency, stale-data, reserve and operating-environment budgets | Agree numeric acceptance thresholds before collecting gate evidence | G3–G7 |
 | D09 | Primary radio, communications topology and manual authority | Pi Zero LTE backup is intended for Task 1; primary link and VPN/ELRS choices remain TBD; measure common-mode failures | G3/G7 |
 | D10 | Named engineering, payload, perception, safety and test owners; capacity and dates | Assign accountable people to gates before promising a schedule | G1 |
 | D11 | Evidence storage, retention and team/server credentials | Access-controlled artifacts; sanitized manifests in repository; no private datasets or secrets committed | G4/G8 |
 
-User answers above resolve D03 and the initial D05 scope, and partially resolve
-D01/D04. Other entries and Q02-Q09 remain open; the inventory records v1.0
-provenance, not organizer
-acceptance of our interpretations. Gate ownership still needs named people.
+User answers above resolve D03 and the initial D05 scope, establish U-MOD-01, and
+partially resolve D01/D04. Other entries and Q02-Q09 remain open; the inventory
+records v1.0 provenance, not organizer acceptance of our interpretations. Gate
+ownership still needs named people.
 
 ## Scope boundary
 
-No generic plugin registry, event bus, mission scripting language, distributed
-workflow platform, or replacement autopilot. One controlled aircraft per task
-does not imply owning a multi-aircraft fleet; simulated traffic uses independent
+NOMAD supports opt-in application modules at narrow public boundaries, but no
+generic dynamic plugin registry, event bus, mission scripting language,
+distributed workflow platform or replacement autopilot. Modules may translate
+external protocols and observations; they do not become parallel command owners
+or bypass the core to actuate a vehicle. One controlled aircraft per task does
+not imply owning a multi-aircraft fleet; simulated traffic uses independent
 track identities. Video display does not imply VIO navigation. Removing a Python
 vehicle service does not remove supported onboard or ground GPU compute.
 
