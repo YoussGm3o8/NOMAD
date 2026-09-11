@@ -10,6 +10,8 @@ import sys
 import time
 from pathlib import Path
 
+import psutil
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -45,51 +47,62 @@ def has_required_output(command: str, output: str, system_id: str) -> bool:
     return all(field in output for field in required)
 
 
-def child_peak_rss_bytes() -> int | None:
-    """Return peak RSS for completed child processes when the platform supports it."""
+def process_rss_bytes(process: psutil.Process) -> int | None:
+    """Return current RSS for a process tree, or unavailable after exit."""
     try:
-        import resource
-    except ImportError:
+        children = process.children(recursive=True)
+        return process.memory_info().rss + sum(child.memory_info().rss for child in children)
+    except (psutil.AccessDenied, psutil.NoSuchProcess):
         return None
 
-    peak = int(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss)
-    if sys.platform == "darwin":
-        return peak
-    return peak * 1024
+
+def run_measured_process(
+    command: list[str], timeout_seconds: float
+) -> tuple[subprocess.CompletedProcess[str], float, int | None]:
+    """Run a small smoke command and sample its process-tree peak RSS."""
+    started = time.perf_counter()
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    measured_process = psutil.Process(process.pid)
+    peak_rss = process_rss_bytes(measured_process)
+    deadline = started + timeout_seconds
+    while process.poll() is None:
+        current_rss = process_rss_bytes(measured_process)
+        if current_rss is not None:
+            peak_rss = max(peak_rss or 0, current_rss)
+        if time.perf_counter() >= deadline:
+            process.kill()
+            process.communicate()
+            raise subprocess.TimeoutExpired(command, timeout_seconds)
+        time.sleep(0.01)
+    stdout, stderr = process.communicate()
+    result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+    return result, time.perf_counter() - started, peak_rss
 
 
-def report_runtime_metric(command: str, elapsed_seconds: float) -> None:
+def report_runtime_metric(command: str, elapsed_seconds: float, peak_rss: int | None) -> None:
     fields = [
         f"command={command}",
         f"elapsed_seconds={elapsed_seconds:.3f}",
     ]
-    peak_rss = child_peak_rss_bytes()
     if peak_rss is not None:
-        fields.append(f"peak_child_rss_bytes={peak_rss}")
+        fields.append(f"peak_process_tree_rss_bytes={peak_rss}")
+    else:
+        fields.append("peak_process_tree_rss_bytes=unavailable")
     print(f"mavsdk_phase_a_runtime_metric {' '.join(fields)}", flush=True)
 
 
 def run_smoke(binary: Path, command: str, endpoint: str, system_id: str) -> int:
     print(f"Running MAVSDK {command} smoke against {endpoint}", flush=True)
-    started = time.perf_counter()
     try:
-        result = subprocess.run(
-            [str(binary), command, endpoint, system_id],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=20,
-        )
+        result, elapsed_seconds, peak_rss = run_measured_process([str(binary), command, endpoint, system_id], 20)
     except subprocess.TimeoutExpired:
-        report_runtime_metric(command, time.perf_counter() - started)
         print(f"error: MAVSDK {command} smoke timed out", file=sys.stderr)
         return 2
     except OSError as error:
-        report_runtime_metric(command, time.perf_counter() - started)
         print(f"error: could not run MAVSDK smoke: {error}", file=sys.stderr)
         return 2
 
-    report_runtime_metric(command, time.perf_counter() - started)
+    report_runtime_metric(command, elapsed_seconds, peak_rss)
     if result.stdout:
         print(result.stdout, end="")
     if result.stderr:

@@ -59,9 +59,15 @@ jobs:
         with:
           cache: true
       - name: Build optional MAVSDK smoke target
-        run: pixi run build-core-mavsdk
-      - name: Record Phase A build metrics
-        run: python scripts/dev/mavsdk_phase_a_metrics.py
+        run: >-
+          python scripts/dev/mavsdk_phase_a_metrics.py --build
+          --output "${{ runner.temp }}/mavsdk-phase-a-${{ matrix.os }}.json"
+      - name: Retain Phase A build metrics
+        uses: actions/upload-artifact@v6
+        with:
+          name: mavsdk-phase-a-metrics-${{ matrix.os }}
+          path: ${{ runner.temp }}/mavsdk-phase-a-${{ matrix.os }}.json
+          if-no-files-found: error
       - name: Verify reviewed MAVSDK provenance
         run: pixi run check-mavsdk-phase-a
       - name: Run deterministic MAVSDK peer qualification

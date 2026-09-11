@@ -11,9 +11,13 @@ close its integration or release gate.
 
 - [~] G-M Phase A resource qualification: the published MAVSDK graph now has
   recursive clean-checkout provenance/build evidence, hosted Linux/Windows/ROS
-  qualification and a live ArduPilot Copter SITL connect/status pass. Collect
-  repeatable build/runtime measurements and obtain explicit approval for build
-  tree, executable, memory, startup and CI-time budgets before closing Phase A.
+  qualification and a live ArduPilot Copter SITL connect/status pass. The build
+  task now records configure/build timing and footprint metrics, while live smoke
+  records per-process-tree startup/RSS metrics; hosted jobs retain both artifacts.
+  A clean local Windows checkout at the reviewed gitlink passes provenance,
+  build, core/Python suites and deterministic peer cases. Collect hosted samples,
+  then obtain explicit build-tree, executable, memory, startup and CI-time budget
+  approval before closing Phase A.
   Falsification: the reviewed pins stop reproducing, live qualification regresses,
   or measured resources exceed an approved threshold.
 

@@ -108,6 +108,33 @@ dependency change, and run `pixi run build-core-mavsdk` followed by
 mainline SITL job is the live Phase A regression gate; the larger SITL suite stays
 nightly/on-demand because it exercises later safety and parity behavior.
 
+The Phase A build task now measures configure time, target-build time, build-tree
+bytes, smoke-executable bytes and selected static-archive bytes in one record.
+Hosted Linux and Windows jobs upload that JSON record as a required artifact.
+This makes samples reviewable but does not make a warm build a clean benchmark or
+approve a budget. The live smoke job records connect/status elapsed time and
+per-process-tree peak RSS on Linux and Windows, and retains its output artifact.
+An unavailable RSS sample is explicit rather than silently omitted.
+
+Two local warm Windows runs on 2026-09-10 against the pre-existing dirty vendor
+checkout `34b417d4` reproduced a 445,271,541-byte tree, 2,033,664-byte executable,
+six selected archives totalling 12,073,548 bytes, with configure/target-build
+times of 42.074/175.365 s and 29.701/169.367 s. The provenance check failed
+because that checkout's MAVLink patch lacks the reviewed pinned-generator marker.
+These measurements validate the collector only; they are not accepted dependency
+or release evidence and do not supersede the published `9884f109` graph.
+
+A separate recursive Windows checkout at NOMAD `610215f` and MAVSDK
+`9884f109533f564bc6250e5471e6301d3a62f4a7` passed the provenance audit,
+28 focused Phase A tests, all three deterministic peer cases, 10 CTests and the
+full Python suite (345 passed, 3 environment skips) on 2026-09-10. Its clean
+first build completed, but its requested evidence file used an unwritable output
+location, so no first-build duration is claimed. A subsequent measured warm run
+recorded a 422,952,646-byte build tree, 2,032,640-byte executable, six selected
+archives totalling 12,070,896 bytes, 32.695 s configure and 165.748 s target
+build. This is clean-source local Windows evidence, not a hosted sample, CI-time
+measurement, runtime/SITL result, approved budget or flight qualification.
+
 ## Phase B — Vehicle and output parity
 
 Implement the existing connection boundary using only required MAVSDK APIs.

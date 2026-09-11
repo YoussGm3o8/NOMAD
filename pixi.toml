@@ -52,7 +52,7 @@ test-core = "cmake -S . -B build/core -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_CO
 sitl = "pixi run dev-build && pixi run dev-up && pixi run sitl-scenario"
 # Optional MAVSDK Phase A build. The default `build-core` remains the legacy
 # codec until the MAVSDK parity and deletion gates close.
-build-core-mavsdk = "cmake -S . -B build/mavsdk-phase-a -DCMAKE_BUILD_TYPE=Release -DNOMAD_ENABLE_MAVSDK=ON -DBUILD_TESTING=OFF && cmake --build build/mavsdk-phase-a --config Release --target nomad_mavsdk_phase_a_smoke"
+build-core-mavsdk = "python scripts/dev/mavsdk_phase_a_metrics.py --build"
 mavsdk-phase-a-smoke = "pixi run build-core-mavsdk && python scripts/dev/mavsdk_phase_a_smoke.py"
 test-mavsdk-phase-a = "pytest tests/test_mavsdk_phase_a_smoke.py tests/test_mavsdk_provenance.py -q && python scripts/dev/mavsdk_phase_a_fixture.py"
 check-mavsdk-phase-a = "python scripts/dev/check_mavsdk_phase_a.py"

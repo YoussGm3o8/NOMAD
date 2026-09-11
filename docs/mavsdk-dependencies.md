@@ -63,6 +63,22 @@ budgets or clean-build benchmarks. Current build-tree, executable, runtime memor
 startup and CI-time measurements still need repeatable collection and explicit
 budget approval before Phase A closes.
 
+The build task now emits configure/build durations and footprint values together,
+and the hosted Linux/Windows jobs retain the JSON record. Local collector checks
+on 2026-09-10 used a dirty `34b417d4` vendor checkout and therefore remain
+diagnostic; its provenance check failed the pinned-generator marker. Accepted
+samples must come from the reviewed gitlink in a recursive clean checkout.
+Live smoke metrics now report per-process-tree peak RSS instead of the previous
+cumulative child-process maximum, and their hosted output is retained separately.
+
+Clean local Windows verification on 2026-09-10 used NOMAD `610215f`, the reviewed
+MAVSDK gitlink `9884f109533f564bc6250e5471e6301d3a62f4a7`, MAVSDK-Proto
+`1fd0bc7a05c21336227b1eab266b8b610401cf38`, ArduPilot MAVLink `288b907c` and
+pymavlink `ec06837a`. Provenance, build, deterministic peer cases, 10 CTests and
+345 Python tests passed; three ROS/SITL environment cases skipped. The measured
+warm build values are recorded in the adoption decision. Hosted resource samples,
+live runtime metrics and approved thresholds remain open.
+
 ## Open release blockers
 
 - Collect repeatable build-tree, executable, runtime memory, startup and CI-time
