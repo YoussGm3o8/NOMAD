@@ -111,9 +111,14 @@ have not been independently re-established on this working tree. Historical
 MAVSDK build/footprint measurements remain in its decision record.
 
 Historical live containment and first Linux zero-delivery runs were explicitly
-open despite stronger wording elsewhere. Preserve them as open until artifacts
-resolve the discrepancy. No hardware evidence was supplied for this review;
-hardware availability beyond the user's stated selections is not inferred.
+open despite stronger wording elsewhere. Hosted run `34648914427` at NOMAD
+`6a3e970` on 2026-09-11 resolved the zero-delivery discrepancy: an independent
+pymavlink observer recorded the ordered nonzero then all-zero setpoints, and the
+vehicle held hover afterward. The full run later stopped at SR-LNK-04 because the
+GCS-heartbeat harness measured 2.5 Hz against its documented 1 Hz ceiling, so the
+remaining scenarios and containment gate stay open. No hardware evidence was
+supplied for this review; hardware availability beyond the user's stated
+selections is not inferred.
 
 ## Gate sequence and accountable roles
 
