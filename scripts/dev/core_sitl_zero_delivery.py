@@ -126,9 +126,12 @@ class SetpointObserver:
                 continue
             except OSError:
                 return
-            for message in self._mav.parse_char(data):
-                if message.get_type() == "SET_POSITION_TARGET_LOCAL_NED":
-                    self._record(message)
+            self._record_datagram(data)
+
+    def _record_datagram(self, data: bytes) -> None:
+        for message in self._mav.parse_buffer(data) or []:
+            if message.get_type() == "SET_POSITION_TARGET_LOCAL_NED":
+                self._record(message)
 
     def _record(self, message) -> None:
         with self._lock:

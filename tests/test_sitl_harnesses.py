@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from pymavlink import mavutil
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts" / "dev"
 sys.path.insert(0, str(SCRIPTS))
@@ -44,6 +45,43 @@ def test_zero_delivery_relay_ports_allow_only_safe_boundaries(port: str, expecte
 def test_zero_delivery_relay_ports_fail_closed(port: str) -> None:
     with pytest.raises(ValueError):
         zero_delivery.get_relay_ports(port)
+
+
+def make_velocity_packet(vx: float, vy: float, vz: float, yaw_rate: float) -> bytes:
+    encoder = mavutil.mavlink.MAVLink(None, srcSystem=1, srcComponent=1)
+    message = encoder.set_position_target_local_ned_encode(
+        0,
+        1,
+        1,
+        mavutil.mavlink.MAV_FRAME_LOCAL_NED,
+        0,
+        0.0,
+        0.0,
+        0.0,
+        vx,
+        vy,
+        vz,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        yaw_rate,
+    )
+    return message.pack(encoder)
+
+
+def test_zero_delivery_observer_decodes_nonzero_and_zero_datagrams() -> None:
+    observer = zero_delivery.SetpointObserver(0)
+    try:
+        observer._record_datagram(make_velocity_packet(0.3, 0.0, 0.0, 0.0))
+        observer._record_datagram(make_velocity_packet(0.0, 0.0, 0.0, 0.0))
+        points = observer.setpoints_in(1.0)
+    finally:
+        observer.close()
+
+    assert len(points) == 2
+    assert zero_delivery.is_nonzero(points[0])
+    assert zero_delivery.is_zero(points[1])
 
 
 def test_containment_converts_latitude_and_longitude_to_local_metres() -> None:

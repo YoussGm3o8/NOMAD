@@ -9,7 +9,7 @@ close its integration or release gate.
 
 ## Current work
 
-- [~] G-M Phase A resource qualification: the published MAVSDK graph now has
+- [ ] G-M Phase A resource qualification: the published MAVSDK graph now has
   recursive clean-checkout provenance/build evidence, hosted Linux/Windows/ROS
   qualification and a live ArduPilot Copter SITL connect/status pass. The build
   task now records configure/build timing and footprint metrics, while live smoke
@@ -21,6 +21,14 @@ close its integration or release gate.
   CI-time budget approval before closing Phase A.
   Falsification: the reviewed pins stop reproducing, live qualification regresses,
   or measured resources exceed an approved threshold.
+
+- [~] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
+  datagram parsing, prove nonzero-then-zero ordering independently, and rerun the
+  complete hosted Copter SITL suite. This repairs evidence collection only; it
+  does not weaken the core watchdog or substitute command acknowledgements for
+  wire evidence. Falsification: the observer misses a valid packed setpoint,
+  accepts zero without a preceding nonzero command, or live wire capture remains
+  empty.
 
 ## Ordered implementation backlog
 
