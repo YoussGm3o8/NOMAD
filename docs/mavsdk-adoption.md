@@ -149,7 +149,11 @@ Copter 4.7.1 SITL system and retained `mavsdk-phase-a-runtime`: connect complete
 in 0.731 s at 9,584,640-byte peak process-tree RSS; status completed in 2.534 s
 at 9,940,992 bytes and returned six fresh samples for system 1. These are hosted
 dependency and live-SITL integration samples, not approved resource budgets,
-aircraft-specific evidence or flight qualification.
+aircraft-specific evidence or flight qualification. The same full workflow
+failed twice later in the legacy C++ zero-delivery scenario because its observer
+captured no wire setpoints (`wire=[]`); subsequent full-suite scenarios were
+skipped. That separate SR-LNK-03 evidence gap remains open and is not counted as
+a Phase A MAVSDK regression or as a successful full-SITL run.
 
 ## Phase B — Vehicle and output parity
 

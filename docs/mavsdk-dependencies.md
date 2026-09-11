@@ -88,7 +88,9 @@ configure/build time. Both provenance audits and deterministic peer suites
 passed. Live Copter 4.7.1 SITL run `34550529273` retained 0.731 s connect and
 2.534 s status measurements with 9,584,640 and 9,940,992-byte peak process-tree
 RSS respectively. Budget approval, aircraft evidence and flight qualification
-remain open.
+remain open. The enclosing full workflow failed twice afterward in the legacy
+C++ zero-delivery observer with `wire=[]`; this does not invalidate the earlier
+MAVSDK connect/status sample, but it leaves the full SITL safety gate open.
 
 ## Open release blockers
 
