@@ -53,6 +53,8 @@ sys.path.insert(0, str(ROOT / "scripts" / "dev"))
 
 from core_sitl_status import find_binary, print_watch_hint  # noqa: E402
 
+MIN_ANNOUNCEMENT_INTERVAL_S = 0.9
+
 
 class ScenarioError(AssertionError):
     """A scenario assertion failed (the SC behaviour was not observed)."""
@@ -81,7 +83,7 @@ class GatedRelay:
         self._gate_opens = gate_opens
         self._saw_client = False
         self._running = True
-        self.announcements: list[bytes] = []
+        self.announcements: list[tuple[float, bytes]] = []
         self.forwarded = 0
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -99,7 +101,7 @@ class GatedRelay:
                     continue
                 return
             if sender == self._client:
-                self.announcements.append(data)
+                self.announcements.append((_now_s(), data))
                 self._saw_client = True
                 continue
             if self._gate_opens and self._saw_client:
@@ -124,11 +126,11 @@ def parse_mavlink_heartbeat(frame: bytes) -> dict[str, int] | None:
     }
 
 
-def verify_announcements(announced: list[bytes], elapsed: float) -> None:
-    """Every announcement must be a standard ~1 Hz GCS heartbeat."""
+def verify_announcements(announced: list[tuple[float, bytes]], require_cadence: bool) -> None:
+    """Require standard GCS heartbeats and, when requested, their cadence."""
     if not announced:
         raise ScenarioError("no announcements captured; cannot prove the GCS heartbeat opened the gate")
-    for frame in announced:
+    for _, frame in announced:
         heartbeat = parse_mavlink_heartbeat(frame)
         if heartbeat is None:
             raise ScenarioError(f"announced frame is not a heartbeat: {frame.hex()}")
@@ -136,9 +138,20 @@ def verify_announcements(announced: list[bytes], elapsed: float) -> None:
             raise ScenarioError(f"heartbeat is not GCS-sourced: {heartbeat}")
         if heartbeat["type"] != 6 or heartbeat["autopilot"] != 8:
             raise ScenarioError(f"heartbeat is not MAV_TYPE_GCS/MAV_AUTOPILOT_INVALID: {heartbeat}")
-    rate = len(announced) / max(elapsed, 1e-6)
-    if rate > 2.0:
-        raise ScenarioError(f"announcement rate {rate:.1f} Hz exceeds the documented 1 Hz")
+    if not require_cadence:
+        return
+    if len(announced) < 2:
+        raise ScenarioError("fewer than two announcements captured; cannot prove heartbeat cadence")
+    intervals = [current[0] - previous[0] for previous, current in zip(announced, announced[1:])]
+    if min(intervals) < MIN_ANNOUNCEMENT_INTERVAL_S:
+        raise ScenarioError(f"announcement interval {min(intervals):.3f}s is faster than the 1 Hz tolerance")
+
+
+def measured_rate(announced: list[tuple[float, bytes]]) -> float | None:
+    if len(announced) < 2:
+        return None
+    elapsed = announced[-1][0] - announced[0][0]
+    return (len(announced) - 1) / max(elapsed, 1e-6)
 
 
 def run_status(binary: Path, endpoint: str, relay_address: str) -> subprocess.CompletedProcess[str]:
@@ -169,11 +182,10 @@ def run_gate_open(binary: Path, upstream_port: int, client_port: int, relay_addr
             # announcement cadence and gate-open behaviour may be healthy even
             # when a lossy relay starves the telemetry itself.
             if relay.announcements:
-                verify_announcements(relay.announcements, elapsed)
+                verify_announcements(relay.announcements, require_cadence=False)
                 print(
-                    f"diagnostic: {len(relay.announcements)} announcements at ~"
-                    f"{len(relay.announcements) / max(elapsed, 1e-6):.1f} Hz and {relay.forwarded} datagrams "
-                    "relayed, but status failed (lossy relay?)",
+                    f"diagnostic: {len(relay.announcements)} valid announcements and "
+                    f"{relay.forwarded} datagrams relayed, but status failed (lossy relay?)",
                     flush=True,
                 )
             raise ScenarioError(
@@ -182,11 +194,10 @@ def run_gate_open(binary: Path, upstream_port: int, client_port: int, relay_addr
             )
         if relay.forwarded == 0:
             raise ScenarioError("status succeeded but no vehicle datagrams were relayed")
-        verify_announcements(relay.announcements, elapsed)
-        rate = len(relay.announcements) / max(elapsed, 1e-6)
+        verify_announcements(relay.announcements, require_cadence=False)
         print(
             f"gate open: status succeeded in {elapsed:.1f}s; {relay.forwarded} vehicle datagrams relayed; "
-            f"{len(relay.announcements)} GCS heartbeat announcements at ~{rate:.1f} Hz",
+            f"{len(relay.announcements)} valid GCS heartbeat announcements",
             flush=True,
         )
     finally:
@@ -202,12 +213,15 @@ def run_gate_closed(binary: Path, upstream_port: int, client_port: int, relay_ad
         elapsed = _now_s() - started
         if not relay.announcements:
             raise ScenarioError("CLI announced nothing on the closed gate; the negative control proves nothing")
+        verify_announcements(relay.announcements, require_cadence=True)
         if result.returncode == 0:
             raise ScenarioError("status succeeded through a closed gate; the gate is not actually heartbeat-gated")
         if "timed out waiting for ArduPilot heartbeat" not in result.stderr:
             raise ScenarioError(f"unexpected failure through the closed gate: {result.stderr.strip()}")
+        rate = measured_rate(relay.announcements)
+        assert rate is not None
         print(
-            f"gate closed: {len(relay.announcements)} announcements captured then dropped; "
+            f"gate closed: {len(relay.announcements)} announcements at ~{rate:.1f} Hz captured then dropped; "
             f"status failed closed after {elapsed:.1f}s",
             flush=True,
         )
