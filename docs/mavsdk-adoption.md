@@ -152,8 +152,10 @@ dependency and live-SITL integration samples, not approved resource budgets,
 aircraft-specific evidence or flight qualification. The same full workflow
 failed twice later in the legacy C++ zero-delivery scenario because its observer
 captured no wire setpoints (`wire=[]`); subsequent full-suite scenarios were
-skipped. That separate SR-LNK-03 evidence gap remains open and is not counted as
-a Phase A MAVSDK regression or as a successful full-SITL run.
+skipped. The observer's `parse_char` misuse was repaired in `6a3e970`; hosted run
+`34648914427` then observed the ordered nonzero/all-zero sequence and post-stop
+hover. That run later failed the separate SR-LNK-04 heartbeat-cadence gate and is
+not counted as a successful full-SITL run.
 
 ## Phase B — Vehicle and output parity
 

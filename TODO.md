@@ -9,7 +9,7 @@ close its integration or release gate.
 
 ## Current work
 
-- [~] G-M Phase A resource qualification: the published MAVSDK graph now has
+- [ ] G-M Phase A resource qualification: the published MAVSDK graph now has
   recursive clean-checkout provenance/build evidence, hosted Linux/Windows/ROS
   qualification and a live ArduPilot Copter SITL connect/status pass. The build
   task now records configure/build timing and footprint metrics, while live smoke
@@ -21,6 +21,20 @@ close its integration or release gate.
   CI-time budget approval before closing Phase A.
   Falsification: the reviewed pins stop reproducing, live qualification regresses,
   or measured resources exceed an approved threshold.
+
+- [x] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
+  datagram parsing, prove nonzero-then-zero ordering independently, and rerun the
+  complete hosted Copter SITL suite. This repairs evidence collection only; it
+  does not weaken the core watchdog or substitute command acknowledgements for
+  wire evidence. Falsification: the observer misses a valid packed setpoint,
+  accepts zero without a preceding nonzero command, or live wire capture remains
+  empty.
+
+- [~] G2 / SR-LNK-04 GCS-heartbeat evidence: diagnose the hosted Copter SITL
+  rejection of a measured 2.5 Hz announcement rate against the documented 1 Hz,
+  preserve the dropped-announcement negative control, and rerun the remaining
+  complete suite. Falsification: cadence exceeds the owned limit, the relay opens
+  without valid GCS heartbeats, or the complete suite still stops at this gate.
 
 ## Ordered implementation backlog
 
@@ -69,8 +83,9 @@ gates. Do not mark multiple work items active or bypass predecessor safety gates
   Copter vehicle/mission operations exist.
 - [x] Velocity configuration, watchdog, VIO source validation, fence and
   dedicated payload safety paths with unit tests exist.
-- [x] Wire-level zero-delivery tests and named SITL harnesses exist; live
-  zero-delivery and containment gate evidence remains open.
+- [x] Wire-level zero-delivery tests and named SITL harnesses exist; hosted run
+  `34648914427` independently observed the ordered nonzero/zero wire sequence and
+  hover on Copter 4.7.1. Containment gate evidence remains open.
 - [x] Mission Planner core client for goto/discrete outputs and ROS adapter exist;
   full command ownership migration remains open.
 - [x] MAVSDK optional Phase A build/smoke target and fork wiring exist;
