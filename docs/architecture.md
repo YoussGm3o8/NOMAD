@@ -2,33 +2,70 @@
 
 Target design reconciled to CONOPS v1.0, 2026-09-10. Requirements and pending decisions are in
 [PRD](prd.md); current implementation and discrepancies are in [migration](migration.md).
+The AEAC-specific external contract is in [AEAC 2027 integration](aeac-2027.md).
 The working tree already removes Edge Core. Removal is not proof of a complete
 replacement deployment.
 
 ## Ownership and runtime boundary
 
-~~~text
-Mission Planner / CLI ---- authenticated client requests ------+
-                                                               v
-ROS 2 / Python compute ---- validated observations ----> one C++ command owner
-Competition web adapter --- validated traffic ---------> mission / safety / vehicle
-                        <-- ownship telemetry ----------+       |
-                                                               v
-                                                    MAVLink implementation
-                                                               |
-                                                               v
-                                                            ArduPilot
-~~~
+```mermaid
+flowchart LR
+    subgraph Clients["Operators and independent clients"]
+        MP["Mission Planner"]
+        CLI["CLI"]
+        ROS["ROS 2 adapter"]
+        PY["Python CV / ML / tools"]
+    end
 
-ArduPilot owns stabilization, motor control, EKF, low-level navigation and
-failsafes. The competition termination mechanism belongs on the aircraft, with
-independently qualified safety hardware/ArduPilot behavior even when the C++ core
-or ground link is unavailable. C++ verifies configuration/readiness and exposes
-outcomes; Mission Planner requests and displays, never owns parallel termination
-parameter policy. All-mode containment, 100 m AGL and five-second termination
-entry require separate evidence. Hard-boundary violation is the termination trigger (U-FEN-01); Q02 still
-blocks final aircraft-phase termination design;
-this architecture does not prescribe a new kill command or failsafe override.
+    subgraph Modules["Optional application modules"]
+        AEACMOD["AEAC 2027 module"]
+    end
+
+    AEAC["AEAC competition server"]
+
+    subgraph Runtime["NOMAD C++ runtime"]
+        OWNER["Composition root / single command owner"]
+        TEL["Telemetry model"]
+        MISSION["Mission state"]
+        SAFETY["Safety / traffic deconfliction"]
+        VEH["Vehicle / command validation"]
+    end
+
+    MAV["MAVSDK / MAVLink boundary"]
+    AP["ArduPilot"]
+
+    MP -->|"operator requests / status"| OWNER
+    CLI -->|"typed requests"| OWNER
+    ROS -->|"validated observations / requests"| OWNER
+    PY -->|"validated observations"| OWNER
+
+    OWNER --> TEL
+    OWNER --> MISSION
+    OWNER --> SAFETY
+    OWNER --> VEH
+    VEH --> MAV
+    MAV -->|"commands"| AP
+    AP -->|"telemetry / state"| MAV
+    MAV --> TEL
+
+    TEL -->|"read-only generic snapshot"| AEACMOD
+    AEAC -->|"competition traffic"| AEACMOD
+    AEACMOD -->|"validated generic traffic observations"| OWNER
+    AEACMOD -->|"competition telemetry"| AEAC
+```
+
+The diagram is a target ownership view, not a claim that every boundary is
+implemented today. In particular, the persistent runtime and AEAC module remain
+future gates. ArduPilot owns stabilization, motor control, EKF, low-level
+navigation and failsafes. The competition termination mechanism belongs on the
+aircraft, with independently qualified safety hardware/ArduPilot behavior even
+when the C++ core or ground link is unavailable. C++ verifies
+configuration/readiness and exposes outcomes; Mission Planner requests and
+displays, never owns parallel termination parameter policy. All-mode containment,
+100 m AGL and five-second termination entry require separate evidence.
+Hard-boundary violation is the termination trigger (U-FEN-01); Q02 still blocks
+final aircraft-phase termination design. This architecture does not prescribe a
+new kill command or failsafe override.
 
 The C++ core owns high-level mission behavior, command validation,
 traffic response decisions, payload authorization and authoritative outcome
@@ -41,13 +78,34 @@ clients and payload state. It is not implemented yet. Keep ordinary value types,
 named functions and owned workers; do not add a broker, registry or general task
 framework. The current one-shot CLI remains useful for exclusive local use.
 
+### Modularity and dependency direction
+
+NOMAD is general-purpose. Event-, customer- or deployment-specific behavior must
+sit outside the reusable core unless it represents a genuinely generic vehicle
+capability. The AEAC 2027 integration is the first explicit application module:
+it owns the organizer protocol and scoring-facing behavior while depending only
+on narrow public NOMAD data/observation boundaries.
+
+Dependencies point inward. `aeac_2027` may depend on reusable NOMAD public types;
+NOMAD core must not include AEAC schemas, endpoints, token handling, scoring
+rules or module headers. The module must not bypass the command owner to call
+MAVSDK/MAVLink or actuate the aircraft. Competition-specific configuration stays
+with the module. Core types should not be expanded merely to mirror an external
+schema when translation can remain at the edge.
+
+This is modular composition, not a dynamic plugin framework. Do not add a plugin
+registry, service locator or event bus just to load one module. Prefer an opt-in
+CMake target and a small composition root. Future integrations can be separate
+modules that reuse the same narrow generic boundary without creating dependencies
+between modules.
+
 | Layer | Responsibility | Excluded responsibility |
 |---|---|---|
 | C++ telemetry | Typed state, validity, source identity, per-field timestamps and age | ROS types, UI rendering |
 | C++ vehicle/safety | Command policy, limits, verification, authority and payload interlocks | Packet layout |
 | C++ mission | Survey/task progress, pause/cancel/abort, traffic responses, recovery | Perception inference |
 | MAVLink implementation | Transport, target filtering, packing, ACK matching and protocol exchanges | Mission decisions |
-| Competition adapter | External schema/auth, cadence, retries, bounded queues, traffic translation | Choosing maneuvers |
+| Competition module | External schema/auth, cadence, retries, bounded queues, traffic translation and competition diagnostics | Choosing maneuvers or direct vehicle control |
 | ROS 2 adapter | Translate data and requests, validate transport metadata, enqueue | A second Vehicle owner in integrated mode |
 | Python CV/VIO/tools | Sensor processing, tracks, candidate observations, replay and analysis | Autonomous MAVLink command path |
 | Mission Planner | Operator review, maps, video, configuration, progress and diagnostics | Independent emergency/fence/payload policy |
@@ -139,9 +197,9 @@ placement below is recommended, not fixed by the user's profile definitions.
 
 | Profile | Aircraft | Ground | Core/control constraint |
 |---|---|---|---|
-| onboard_companion | ArduPilot plus Jetson/SBC sensor, ROS 2, VIO/CV and video workloads | Mission Planner; competition adapter; optional ground core | Exactly one core, ground initially or explicitly selected onboard |
-| groundstation_gpu | ArduPilot plus selected camera/IMU acquisition and transport; no Jetson | GPU laptop runs ROS 2/VIO/CV/video, Mission Planner, competition adapter and core | Ground core; sensor acquisition/transport hardware still required |
-| groundstation_minimal | ArduPilot and required command/telemetry link | C++ core, Mission Planner/CLI, lightweight competition adapter | No companion/perception dependency; optional features report unavailable |
+| onboard_companion | ArduPilot plus Jetson/SBC sensor, ROS 2, VIO/CV and video workloads | Mission Planner; AEAC module when required; optional ground core | Exactly one core, ground initially or explicitly selected onboard |
+| groundstation_gpu | ArduPilot plus selected camera/IMU acquisition and transport; no Jetson | GPU laptop runs ROS 2/VIO/CV/video, Mission Planner, optional modules and core | Ground core; sensor acquisition/transport hardware still required |
+| groundstation_minimal | ArduPilot and required command/telemetry link | C++ core, Mission Planner/CLI, lightweight optional modules | No companion/perception dependency; optional features report unavailable |
 
 Ground GPU compute cannot infer vehicle motion from a stationary laptop camera.
 If it processes aircraft VIO, the aircraft must deliver synchronized image and
@@ -200,15 +258,23 @@ qualify it at G3/G8. Overlay switches are not evidence of working detection.
 
 ## Competition telemetry and traffic
 
-Use one ground-side competition adapter, initially C++ as an application adapter
-outside the reusable core. The wire protocol, library, authentication and schema
-remain D07. A mock server can use Python because it is a test fixture.
+Implement competition integration as an opt-in `aeac_2027` application module
+outside the reusable core, following [AEAC 2027 integration](aeac-2027.md). The
+module owns the organizer wire contract, authentication, cadence, reconnects,
+wire validation and competition-facing diagnostics. It reads generic ownship
+telemetry and submits validated generic traffic observations. It does not choose
+maneuvers, own vehicle policy or call MAVSDK/MAVLink directly. A mock server can
+use Python because it is a test fixture.
+
+The exact official wire protocol, endpoint path, authentication placement and
+field keys remain D07/Q04 until transcribed from the interactive portal and
+verified. Do not infer a transport from the portal implementation.
 
 Outbound telemetry is required at 1 Hz whenever armed in Task 1. The confirmed
 fields are bidder UAV ID, Unix time, decimal-degree position, AGL metres,
 horizontal/vertical accuracy metres, battery percent, six-state official mode
 and normalized RC/telemetry link quality (AE27-NET-001 through AE27-NET-006).
-Core telemetry owns source validity, age and aircraft state; the adapter maps to
+Core telemetry owns source validity, age and aircraft state; the module maps to
 the versioned wire contract. Neither MSL nor home-relative altitude is AGL without
 a reviewed terrain/reference conversion. GPS fix/satellite count is not metre
 accuracy; a battery-valid flag must not validate an unknown percentage.
@@ -228,24 +294,23 @@ Inbound traffic is separate from ownship. Validate schema, vehicle identity,
 timestamp, coordinates, datum, velocity, validity and sequence where supplied.
 Record receive age and uncertainty; handle duplicates, gaps, reordering, stale
 tracks, server errors and reconnects. Simulated-UAV cooperation currently means
-receiving traffic and avoiding its
-exclusion zones; no additional cooperation-event contract is confirmed.
+receiving traffic and avoiding its exclusion zones; no additional
+cooperation-event contract is confirmed.
 
-C++ deconfliction starts as deterministic advisory logic (initial D05 scope confirmed): compare
-ownship plan/state with server-supplied cylindrical exclusion zones, account
-for age/uncertainty, and report conflict interval, source and reason. A stale feed
-means traffic unknown, not clear. Server radial/vertical keepaway values must
-be respected; do not invent a
-constant separation radius. Vertical extent/datum semantics, freshness,
-prediction horizon, right-of-way and loss-of-feed response are Q04/D08.
-A proposed prediction horizon is an engineering choice requiring evidence.
-Advisories must produce demonstrably timely operator avoidance; displaying a
-warning alone does not satisfy AE27-NET-008. Manual operation is permitted by
-AE27-OPS-028, but that permission does not waive the exclusion zones.
-Automatic reroute/hold/RTL/land needs feasibility, fence, terrain,
-energy and command-authority checks plus separate evidence. A zero velocity
-command or RTL is not universally collision-safe. Simulated traffic is not
-real-world detect-and-avoid certification.
+C++ deconfliction starts as deterministic advisory logic (initial D05 scope
+confirmed): compare ownship plan/state with server-supplied cylindrical exclusion
+zones, account for age/uncertainty, and report conflict interval, source and
+reason. A stale feed means traffic unknown, not clear. Server radial/vertical
+keepaway values must be respected; do not invent a constant separation radius.
+Vertical extent/datum semantics, freshness, prediction horizon, right-of-way and
+loss-of-feed response are Q04/D08. A proposed prediction horizon is an
+engineering choice requiring evidence. Advisories must produce demonstrably
+timely operator avoidance; displaying a warning alone does not satisfy
+AE27-NET-008. Manual operation is permitted by AE27-OPS-028, but that permission
+does not waive the exclusion zones. Automatic reroute/hold/RTL/land needs
+feasibility, fence, terrain, energy and command-authority checks plus separate
+evidence. A zero velocity command or RTL is not universally collision-safe.
+Simulated traffic is not real-world detect-and-avoid certification.
 
 ## Tracker and sampling payloads
 
@@ -273,9 +338,9 @@ C++ payload operations bind authorization to task, target, output and expiry.
 Proposed states: safe, authorized, executing, verified, failed/unknown. Cancel,
 restart or takeover invalidates permission. Battery-swap recovery is conditional
 on organizer permission Q03; no plan assumes it is allowed. Require observed
-attachment/sample
-feedback or explicit operator confirmation; an ACK only establishes command
-acceptance. Never automatically retry an uncertain irreversible action.
+attachment/sample feedback or explicit operator confirmation; an ACK only
+establishes command acceptance. Never automatically retry an uncertain
+irreversible action.
 
 Generic servo/relay/user-command paths currently bypass the dedicated
 release_payload interlock. G2/G6 must reserve hazardous channels and route all
