@@ -16,6 +16,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import core_sitl_command_flow as command_flow  # noqa: E402
 import core_sitl_containment as containment  # noqa: E402
+import core_sitl_gcs_heartbeat as gcs_heartbeat  # noqa: E402
 import core_sitl_zero_delivery as zero_delivery  # noqa: E402
 
 
@@ -82,6 +83,34 @@ def test_zero_delivery_observer_decodes_nonzero_and_zero_datagrams() -> None:
     assert len(points) == 2
     assert zero_delivery.is_nonzero(points[0])
     assert zero_delivery.is_zero(points[1])
+
+
+def make_gcs_heartbeat_frame() -> bytes:
+    frame = bytearray(21)
+    frame[0] = 0xFD
+    frame[5] = 255
+    frame[6] = 190
+    frame[7] = 0
+    frame[14] = 6
+    frame[15] = 8
+    return bytes(frame)
+
+
+def test_gcs_heartbeat_cadence_uses_intervals_not_short_command_duration() -> None:
+    frame = make_gcs_heartbeat_frame()
+    announcements = [(10.0, frame), (11.0, frame), (12.0, frame)]
+
+    gcs_heartbeat.verify_announcements(announcements, require_cadence=True)
+
+    assert gcs_heartbeat.measured_rate(announcements) == pytest.approx(1.0)
+
+
+def test_gcs_heartbeat_cadence_rejects_fast_or_single_samples() -> None:
+    frame = make_gcs_heartbeat_frame()
+    with pytest.raises(gcs_heartbeat.ScenarioError, match="fewer than two"):
+        gcs_heartbeat.verify_announcements([(10.0, frame)], require_cadence=True)
+    with pytest.raises(gcs_heartbeat.ScenarioError, match="faster than the 1 Hz tolerance"):
+        gcs_heartbeat.verify_announcements([(10.0, frame), (10.5, frame)], require_cadence=True)
 
 
 def test_containment_converts_latitude_and_longitude_to_local_metres() -> None:
