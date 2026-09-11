@@ -45,8 +45,10 @@ close its integration or release gate.
   truthful final outcomes; migrate direct plugin policy and hazardous outputs.
 - [ ] G3: runtime capability and profile tests; Task 1 GPU-groundstation video/CV
   path, Task 2 optional onboard path, minimal operation without perception.
-- [ ] G4: official armed telemetry and traffic cylinders after Q04; independent timing
-  mock, demonstrated operator avoidance, outage/replay and official-server acceptance.
+- [ ] G4: opt-in AEAC 2027 module: transcribe/version the official portal wire
+  contract, then implement armed telemetry and traffic cylinders with an
+  independent timing mock, demonstrated operator avoidance, outage/replay and
+  official-server acceptance.
 - [ ] G5: VTOL 3-5 km lap route, single-battery reserve, deer/cluster/tag/anomaly
   report and timed TXT upload, traffic avoidance and verified flight-line landing.
 - [ ] G6: under-250-g/8-cm tracker, single placement and continued 100 m offset,
