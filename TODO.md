@@ -15,9 +15,10 @@ close its integration or release gate.
   task now records configure/build timing and footprint metrics, while live smoke
   records per-process-tree startup/RSS metrics; hosted jobs retain both artifacts.
   A clean local Windows checkout at the reviewed gitlink passes provenance,
-  build, core/Python suites and deterministic peer cases. Collect hosted samples,
-  then obtain explicit build-tree, executable, memory, startup and CI-time budget
-  approval before closing Phase A.
+  build, core/Python suites and deterministic peer cases. Hosted Linux/Windows
+  build samples and a live Linux Copter SITL runtime sample are retained against
+  commit `219133e`. Obtain explicit build-tree, executable, memory, startup and
+  CI-time budget approval before closing Phase A.
   Falsification: the reviewed pins stop reproducing, live qualification regresses,
   or measured resources exceed an approved threshold.
 

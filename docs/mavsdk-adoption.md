@@ -135,6 +135,22 @@ archives totalling 12,070,896 bytes, 32.695 s configure and 165.748 s target
 build. This is clean-source local Windows evidence, not a hosted sample, CI-time
 measurement, runtime/SITL result, approved budget or flight qualification.
 
+Hosted run `34550522657` against commit `219133e` on 2026-09-11 retained the
+following clean recursive-checkout samples and passed provenance plus all three
+deterministic peer cases on both runners:
+
+| Runner | Tree bytes | Executable bytes | Archives | Archive bytes | Configure | Target build |
+|---|---:|---:|---:|---:|---:|---:|
+| `ubuntu-latest` | 213,615,930 | 4,719,032 | 6 | 1,552,468 | 43.020 s | 172.291 s |
+| `windows-latest` | 430,393,315 | 2,015,744 | 6 | 12,051,864 | 187.318 s | 326.074 s |
+
+Hosted run `34550529273` against the same commit connected to the configured
+Copter 4.7.1 SITL system and retained `mavsdk-phase-a-runtime`: connect completed
+in 0.731 s at 9,584,640-byte peak process-tree RSS; status completed in 2.534 s
+at 9,940,992 bytes and returned six fresh samples for system 1. These are hosted
+dependency and live-SITL integration samples, not approved resource budgets,
+aircraft-specific evidence or flight qualification.
+
 ## Phase B — Vehicle and output parity
 
 Implement the existing connection boundary using only required MAVSDK APIs.

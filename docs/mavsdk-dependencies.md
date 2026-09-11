@@ -79,11 +79,21 @@ pymavlink `ec06837a`. Provenance, build, deterministic peer cases, 10 CTests and
 warm build values are recorded in the adoption decision. Hosted resource samples,
 live runtime metrics and approved thresholds remain open.
 
+Hosted run `34550522657` at commit `219133e` then retained clean Linux and
+Windows build records. Linux measured a 213,615,930-byte tree, 4,719,032-byte
+executable, 1,552,468 selected-archive bytes and 43.020/172.291 s
+configure/build time. Windows measured a 430,393,315-byte tree, 2,015,744-byte
+executable, 12,051,864 selected-archive bytes and 187.318/326.074 s
+configure/build time. Both provenance audits and deterministic peer suites
+passed. Live Copter 4.7.1 SITL run `34550529273` retained 0.731 s connect and
+2.534 s status measurements with 9,584,640 and 9,940,992-byte peak process-tree
+RSS respectively. Budget approval, aircraft evidence and flight qualification
+remain open.
+
 ## Open release blockers
 
-- Collect repeatable build-tree, executable, runtime memory, startup and CI-time
-  measurements on the selected qualification environments and approve explicit
-  Phase A budgets.
+- Collect repeat samples for variance and profile-specific CI time; approve
+  explicit build-tree, executable, runtime memory, startup and CI-time budgets.
 - Re-run the selected dependency and licence audit whenever production parity
   enables another plugin, server, curl or test dependency.
 - Requalify the hosted Linux/Windows, selected ROS and live ArduPilot SITL matrix
