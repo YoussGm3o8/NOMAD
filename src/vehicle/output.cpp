@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "nomad/vehicle/vehicle.hpp"
 
+#include "command_ids.hpp"
 #include "nomad/safety/payload.hpp"
 
 #include <algorithm>
@@ -9,20 +10,6 @@
 
 namespace nomad::vehicle {
 namespace {
-
-// MAV_CMD identifiers. Nothing at a call site says whether the autopilot
-// defines an id, so a wrong one survives review until someone exercises the
-// verb against real firmware; tests/test_command_ids.py resolves every id here
-// against the pinned dialect definition instead.
-constexpr std::uint16_t kSetServoCommand = 183;       // MAV_CMD_DO_SET_SERVO
-constexpr std::uint16_t kSetRelayCommand = 181;       // MAV_CMD_DO_SET_RELAY
-constexpr std::uint16_t kMotorTestCommand = 209;      // MAV_CMD_DO_MOTOR_TEST
-constexpr std::uint16_t kMountConfigureCommand = 204; // MAV_CMD_DO_MOUNT_CONFIGURE
-constexpr std::uint16_t kUserCommand = 31010;         // MAV_CMD_USER_1
-
-mavlink::Command make_command(std::uint16_t id, std::array<float, 7> parameters = {}) {
-    return mavlink::Command{id, parameters};
-}
 
 CommandResult verified(const CommandResult &result, const char *message) {
     return result.success ? CommandResult{true, message} : result;
@@ -43,8 +30,8 @@ CommandResult Vehicle::set_servo(int channel, int pwm_microseconds) {
 }
 
 CommandResult Vehicle::set_relay(int relay_number, bool on) {
-    if (relay_number < 0 || relay_number > 15) {
-        return {false, "relay number must be between zero and fifteen"};
+    if (!relay_number_is_valid(relay_number)) {
+        return {false, kRelayRangeMessage};
     }
     const auto result = send_command(make_command(kSetRelayCommand,
                                                   {static_cast<float>(relay_number), on ? 1.0F : 0.0F, 0, 0, 0, 0, 0}),

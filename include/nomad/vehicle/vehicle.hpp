@@ -11,6 +11,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -42,6 +43,15 @@ class Vehicle {
     Vehicle &operator=(const Vehicle &) = delete;
 
     std::optional<telemetry::VehicleState> wait_for_state(std::chrono::milliseconds timeout);
+
+    // Polls for up to @p timeout and returns the freshest state that satisfies
+    // @p is_complete. When none does, returns the freshest state seen at all so
+    // a caller can still report partial telemetry; nullopt means no telemetry
+    // arrived inside the window.
+    std::optional<telemetry::VehicleState>
+    wait_for_telemetry(std::chrono::milliseconds timeout,
+                       const std::function<bool(const telemetry::VehicleState &)> &is_complete);
+
     CommandResult arm();
     CommandResult disarm();
     CommandResult set_mode(std::uint32_t custom_mode);
@@ -66,11 +76,19 @@ class Vehicle {
     CommandResult verify_fence_uploaded(const std::vector<safety::GlobalPoint> &expected_boundary);
 
   private:
+    // A waiter's verdict: nullopt keeps polling, a result stops the wait.
+    using StateVerdict = std::function<std::optional<CommandResult>(const telemetry::VehicleState &)>;
+
     CommandResult send_command(const mavlink::Command &command, const char *name);
+    CommandResult wait_for_state_until(std::chrono::milliseconds timeout, std::string timeout_message,
+                                       const StateVerdict &verdict);
     CommandResult wait_for_armed_state(bool expected, const char *name);
     CommandResult wait_for_mode(std::uint32_t expected, const char *name);
     CommandResult wait_for_altitude(float minimum_altitude_m, const char *name);
     CommandResult wait_for_location(const Location &location);
+    // A fresh heartbeat does not imply a fresh position: callers fail closed
+    // when this is true rather than trusting a stale fix.
+    bool position_is_stale(const telemetry::VehicleState &state) const;
     safety::FlightConditions get_flight_conditions(const telemetry::VehicleState &state,
                                                    std::chrono::steady_clock::time_point now) const;
     safety::WatchdogInput get_watchdog_input(const telemetry::VehicleState &state,

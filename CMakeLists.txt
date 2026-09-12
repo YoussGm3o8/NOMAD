@@ -67,6 +67,9 @@ add_library(nomad_core
     src/util/parse.cpp
     src/vehicle/output.cpp
     src/vehicle/vehicle.cpp
+    src/vehicle/vehicle_fence.cpp
+    src/vehicle/vehicle_payload.cpp
+    src/vehicle/vehicle_velocity.cpp
 )
 
 # MAVLink dialect tables come from the pinned third_party/ardupilot-mavlink
