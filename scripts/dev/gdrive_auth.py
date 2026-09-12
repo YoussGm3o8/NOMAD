@@ -73,7 +73,8 @@ def exchange_code(code: str, client_id: str, client_secret: str) -> dict:
         return json.loads(resp.read())
 
 
-def main():
+def parse_secret_path() -> Path:
+    """Return the client-secret path from argv, exiting with usage on misuse."""
     if len(sys.argv) < 2:
         print("Usage: python gdrive_auth.py <path-to-client_secret.json>")
         print("Download the client secret from Google Cloud Console (Desktop app type).")
@@ -83,19 +84,23 @@ def main():
     if not secret_path.exists():
         print(f"File not found: {secret_path}")
         sys.exit(1)
+    return secret_path
 
+
+def load_client_credentials(secret_path: Path) -> tuple[str, str]:
     raw = json.loads(secret_path.read_text())
     # Supports both {"installed": {...}} and flat format
     creds = raw.get("installed") or raw.get("web") or raw
-    client_id = creds["client_id"]
-    client_secret = creds["client_secret"]
+    return creds["client_id"], creds["client_secret"]
 
-    # Start local callback server
+
+def start_callback_server() -> http.server.HTTPServer:
     server = http.server.HTTPServer(("localhost", REDIRECT_PORT), _Handler)
-    t = threading.Thread(target=server.serve_forever, daemon=True)
-    t.start()
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
 
-    # Build auth URL
+
+def build_auth_url(client_id: str) -> str:
     params = urllib.parse.urlencode(
         {
             "client_id": client_id,
@@ -106,30 +111,17 @@ def main():
             "prompt": "consent",  # force refresh_token to be issued
         }
     )
-    url = f"https://accounts.google.com/o/oauth2/auth?{params}"
+    return f"https://accounts.google.com/o/oauth2/auth?{params}"
 
-    print("\nOpening browser for Google auth...")
-    print(f"If it doesn't open, visit:\n  {url}\n")
-    webbrowser.open(url)
 
-    server_done.wait(timeout=120)
+def wait_for_auth_code(server: http.server.HTTPServer, timeout: float = 120) -> str | None:
+    """Block until the redirect carries a code, then stop the server."""
+    server_done.wait(timeout=timeout)
     server.shutdown()
+    return auth_code
 
-    if not auth_code:
-        print("ERROR: No auth code received (timed out).")
-        sys.exit(1)
 
-    print("Auth code received, exchanging for tokens...")
-    tokens = exchange_code(auth_code, client_id, client_secret)
-
-    if "refresh_token" not in tokens:
-        print(
-            "ERROR: No refresh_token in response. Try revoking access at "
-            "https://myaccount.google.com/permissions and re-running."
-        )
-        print("Response:", json.dumps(tokens, indent=2))
-        sys.exit(1)
-
+def write_token_file(tokens: dict, client_id: str, client_secret: str) -> Path:
     token_data = {
         "access_token": tokens["access_token"],
         "refresh_token": tokens["refresh_token"],
@@ -141,10 +133,38 @@ def main():
         "folder_id": TASK1_FOLDER_ID,
         "task2_folder_id": TASK2_FOLDER_ID,
     }
-
     TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
     TOKEN_PATH.write_text(json.dumps(token_data, indent=2))
-    print(f"\nToken saved to: {TOKEN_PATH}")
+    return TOKEN_PATH
+
+
+def main():
+    secret_path = parse_secret_path()
+    client_id, client_secret = load_client_credentials(secret_path)
+
+    server = start_callback_server()
+    url = build_auth_url(client_id)
+    print("\nOpening browser for Google auth...")
+    print(f"If it doesn't open, visit:\n  {url}\n")
+    webbrowser.open(url)
+
+    code = wait_for_auth_code(server)
+    if not code:
+        print("ERROR: No auth code received (timed out).")
+        sys.exit(1)
+
+    print("Auth code received, exchanging for tokens...")
+    tokens = exchange_code(code, client_id, client_secret)
+    if "refresh_token" not in tokens:
+        print(
+            "ERROR: No refresh_token in response. Try revoking access at "
+            "https://myaccount.google.com/permissions and re-running."
+        )
+        print("Response:", json.dumps(tokens, indent=2))
+        sys.exit(1)
+
+    token_path = write_token_file(tokens, client_id, client_secret)
+    print(f"\nToken saved to: {token_path}")
     print("Google Drive upload is now configured.")
 
 
