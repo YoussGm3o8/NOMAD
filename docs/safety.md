@@ -124,6 +124,7 @@ mappings when implemented; do not invent entries in the existing checked block.
 | H-16 Mass, energy or navigation deficit | SR-OPS-01: qualify aircraft configuration and reserve | All-up weighing, endurance/transition energy and GNSS/RTK-loss evidence | G7 |
 | H-17 Network/compute overload | SR-RES-01: bounded queues and safety execution | Video/server flood, dead worker, thermal throttling and disk-full cannot starve command deadlines | G3/G8 |
 | H-18 Untrusted messages/replay | SR-SEC-04: authenticate, authorize and reject replay | Wrong/expired credentials, old session and malformed server/DDS/IPC input are refused and audited | G2/G8 |
+| H-19 Unavailable or wrong actuation from a bad command identifier | SR-CMD-01: every actuation command carries an identifier the pinned dialect defines | An id no handler matches makes a capability unavailable in flight (C23: motor test sent 139, an undefined `MAV_CMD`, so ArduPilot answered `MAV_RESULT_UNSUPPORTED`; nothing exercised the verb, so it survived review), and a wrong-but-defined id could command something else entirely. Every hand-typed id now resolves against the pinned dialect definition (`tests/test_command_ids.py`); live acceptance evidence exists for motor test only | G2 |
 
 Traffic advisories and explicit payload authorization remain project scope.
 CONOPS permits manual flight but requires actual traffic cylinder avoidance.
@@ -192,6 +193,8 @@ SR-SEC-01 | src/main.cpp:run_command | tests/test_cpp_command_surface.py::test_c
 SR-SEC-02 | src/main.cpp:run_command | tests/test_core_client_contract.py::test_every_actuation_verb_refused_without_key_before_any_socket_work
 SR-SEC-03 | src/main.cpp:audit_command | tests/test_core_client_contract.py::test_actuation_with_key_reaches_transport_and_audits
 SR-TEL-01 | src/vehicle/vehicle.cpp:wait_for_location | tests/safety_test.cpp::test_vehicle_goto_location_rejects_stale_position
+SR-CMD-01 | src/vehicle/output.cpp:motor_test | tests/output_command_test.cpp::test_vehicle_motor_test_validates_and_clamps_timeout
+SR-CMD-01 | src/vehicle/output.cpp:make_command | tests/test_command_ids.py::test_command_id_matches_the_dialect
 ```
 
 ## Operational release rule

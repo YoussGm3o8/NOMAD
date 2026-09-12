@@ -53,10 +53,12 @@ void test_vehicle_relay_rejection_is_reported() {
     CHECK(!result.success);
 }
 
+// 209 is MAV_CMD_DO_MOTOR_TEST in the pinned dialect; the id is part of the
+// contract, so it is asserted rather than inferred (see tests/test_command_ids.py).
 void test_vehicle_motor_test_validates_and_clamps_timeout() {
     FakeConnection connection;
     connection.connect();
-    connection.acknowledgement = nomad::mavlink::CommandAck{139, 0};
+    connection.acknowledgement = nomad::mavlink::CommandAck{209, 0};
     nomad::vehicle::Vehicle vehicle(connection);
 
     CHECK(!vehicle.motor_test(0, 1000, 1.0F).success);
@@ -65,11 +67,14 @@ void test_vehicle_motor_test_validates_and_clamps_timeout() {
     CHECK(!vehicle.motor_test(1, 1000, std::numeric_limits<float>::quiet_NaN()).success);
 
     CHECK(vehicle.motor_test(2, 1200, 5.0F).success);
-    CHECK(connection.last_command.id == 139);
+    CHECK(connection.last_command.id == 209);  // MAV_CMD_DO_MOTOR_TEST
+    // MAV_CMD_DO_MOTOR_TEST: instance, throttle type (1 = PWM), throttle value,
+    // timeout, motor count, test order, empty.
     CHECK(connection.last_command.parameters[0] == 2.0F);
     CHECK(connection.last_command.parameters[1] == 1.0F);
     CHECK(connection.last_command.parameters[2] == 1200.0F);
     CHECK(connection.last_command.parameters[3] == 3.0F);
+    CHECK(connection.last_command.parameters[4] == 1.0F);
 
     CHECK(vehicle.motor_test(2, 0, 0.01F).success);
     CHECK(connection.last_command.parameters[3] == 0.05F);

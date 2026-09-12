@@ -10,11 +10,15 @@
 namespace nomad::vehicle {
 namespace {
 
-constexpr std::uint16_t kSetServoCommand = 183;
-constexpr std::uint16_t kSetRelayCommand = 181;
-constexpr std::uint16_t kMotorTestCommand = 139;
-constexpr std::uint16_t kMountConfigureCommand = 204;
-constexpr std::uint16_t kUserCommand = 31010;
+// MAV_CMD identifiers. Nothing at a call site says whether the autopilot
+// defines an id, so a wrong one survives review until someone exercises the
+// verb against real firmware; tests/test_command_ids.py resolves every id here
+// against the pinned dialect definition instead.
+constexpr std::uint16_t kSetServoCommand = 183;       // MAV_CMD_DO_SET_SERVO
+constexpr std::uint16_t kSetRelayCommand = 181;       // MAV_CMD_DO_SET_RELAY
+constexpr std::uint16_t kMotorTestCommand = 209;      // MAV_CMD_DO_MOTOR_TEST
+constexpr std::uint16_t kMountConfigureCommand = 204; // MAV_CMD_DO_MOUNT_CONFIGURE
+constexpr std::uint16_t kUserCommand = 31010;         // MAV_CMD_USER_1
 
 mavlink::Command make_command(std::uint16_t id, std::array<float, 7> parameters = {}) {
     return mavlink::Command{id, parameters};

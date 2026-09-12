@@ -355,6 +355,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   shrinks to message unpacking and HTTP forwarding.
 
 ### Fixed
+- [core] [bug] `Vehicle::motor_test` sent MAVLink command ID 139, which is not a
+  `MAV_CMD` entry at all in the pinned dialect — `MAV_CMD_DO_MOTOR_TEST` is 209
+  — so no autopilot handler matched it and the verb could never work. Live A/B
+  against Copter 4.7.1: id 139 drew `MAV_RESULT_UNSUPPORTED`, id 209 drew
+  `MAV_RESULT_ACCEPTED` with the vehicle's own "starting motor test" /
+  "finished motor test" status texts. `tests/test_command_ids.py` now resolves
+  every hand-typed command id in `src/vehicle/` against the pinned dialect
+  definition, which is the check that would have caught it, and the MAVSDK peer
+  fixture covers the verb. See C23.
 - [mavlink] [bug] The 1 Hz GCS heartbeat that opens heartbeat-gated relays was
   emitted only once per `wait_for_heartbeat` call: the loop announced, then
   blocked in a single receive for the whole remaining timeout. A relay that
