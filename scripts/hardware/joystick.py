@@ -29,6 +29,7 @@ import argparse
 import signal
 import sys
 import time
+from dataclasses import dataclass
 
 try:
     import serial
@@ -44,6 +45,26 @@ except ImportError:
         "       (vgamepad also needs the ViGEmBus driver: https://github.com/ViGEm/ViGEmBus/releases)", file=sys.stderr
     )
     sys.exit(2)
+
+
+PRINT_EVERY = 0.5  # seconds between echoed frames when --verbose is off
+
+
+@dataclass(frozen=True)
+class Frame:
+    """One decoded wire frame, already scaled for the virtual gamepad."""
+
+    roll: int
+    pitch: int
+    yaw: int
+    throttle: int
+    gimbal_x: int
+    gimbal_y: int
+    sw1: int
+    sw2: int
+    sw3: int
+    mode: int
+    kill: int
 
 
 # =========================
@@ -69,147 +90,203 @@ def scale_trigger(v) -> int:
         return 0
 
 
+def parse_frame(line: str) -> Frame | None:
+    """Decode one CSV line into a Frame, or None when it is unusable."""
+    parts = line.split(",")[:11]  # truncate any extras safely
+    if len(parts) < 10:
+        return None
+
+    try:
+        sw1 = int(parts[6])
+        sw2 = int(parts[7])
+        sw3 = int(parts[8])
+        mode = int(parts[9])
+    except ValueError:
+        return None
+
+    kill = 0
+    if len(parts) > 10:
+        try:
+            kill = int(parts[10])
+        except ValueError:
+            kill = 0
+
+    return Frame(
+        roll=scale_stick(parts[0]),
+        pitch=scale_stick(parts[1]),
+        yaw=scale_trigger(parts[2]),
+        throttle=scale_trigger(parts[3]),
+        gimbal_x=scale_stick(parts[4]),
+        gimbal_y=scale_stick(parts[5]),
+        sw1=sw1,
+        sw2=sw2,
+        sw3=sw3,
+        mode=mode,
+        kill=kill,
+    )
+
+
 # =========================
-# MAIN LOOP
+# GAMEPAD OUTPUT
 # =========================
 
 
-def run(port: str, baud: int, verbose: bool) -> int:
+def create_gamepad():
+    """Create and neutralise the virtual gamepad before the first frame."""
     gamepad = vg.VX360Gamepad()
-
     # Initial neutral state so consumers don't see a stale frame from a
     # previous run (vgamepad keeps state until process exit, but a fresh
     # update() makes our intent explicit).
     gamepad.update()
+    return gamepad
 
-    ser = None
-    print(f"NOMAD bridge: opening {port} @ {baud}…", flush=True)
 
-    # Keep retrying on missing/disconnected port so the plugin can auto-launch
-    # us before the radio is plugged in.
-    while ser is None:
+def set_button(gamepad, pressed: bool, button) -> None:
+    if pressed:
+        gamepad.press_button(button)
+    else:
+        gamepad.release_button(button)
+
+
+def apply_mode(gamepad, mode: int) -> None:
+    """Drive the DPAD from the three-position mode switch (0 = neutral)."""
+    for button in (
+        vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_UP,
+        vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN,
+        vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT,
+        vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT,
+    ):
+        gamepad.release_button(button)
+    if mode == 1:
+        gamepad.press_button(vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN)
+    elif mode == 2:
+        gamepad.press_button(vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT)
+    elif mode == 3:
+        gamepad.press_button(vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT)
+
+
+def apply_frame(gamepad, frame: Frame) -> None:
+    """Translate one Frame into gamepad axes, buttons, and DPAD state."""
+    # Left stick = vehicle roll/pitch (flight)
+    # Right stick = gimbal pan/tilt (NomadJoystickService reads Rx/Ry)
+    # Left trigger = throttle, Right trigger = yaw
+    # Yaw lives on a slider so it doesn't fight the gimbal axes; vgamepad
+    # doesn't expose sliders directly, so yaw → right_trigger keeps it
+    # reachable through DirectInput as an axis.
+    gamepad.left_joystick(x_value=frame.roll, y_value=frame.pitch)
+    gamepad.right_joystick(x_value=frame.gimbal_x, y_value=frame.gimbal_y)
+    gamepad.left_trigger(value=frame.throttle)
+    gamepad.right_trigger(value=frame.yaw)
+
+    set_button(gamepad, frame.sw1 == 1, vg.XUSB_BUTTON.XUSB_GAMEPAD_A)
+    set_button(gamepad, frame.sw1 == 2, vg.XUSB_BUTTON.XUSB_GAMEPAD_B)
+    set_button(gamepad, frame.sw2 == 1, vg.XUSB_BUTTON.XUSB_GAMEPAD_X)
+    set_button(gamepad, frame.sw2 == 2, vg.XUSB_BUTTON.XUSB_GAMEPAD_Y)
+    set_button(gamepad, frame.sw3 == 1, vg.XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER)
+    set_button(gamepad, frame.sw3 == 2, vg.XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER)
+    set_button(gamepad, frame.kill == 1, vg.XUSB_BUTTON.XUSB_GAMEPAD_BACK)
+
+    apply_mode(gamepad, frame.mode)
+    gamepad.update()
+
+
+# =========================
+# SERIAL PORT
+# =========================
+
+
+def open_serial(port: str, baud: int):
+    """Open the serial port, retrying so the plugin can launch before the radio."""
+    while True:
         try:
-            ser = serial.Serial(port, baud, timeout=0.05)
+            return serial.Serial(port, baud, timeout=0.05)
         except serial.SerialException as e:
             print(f"NOMAD bridge: serial open failed ({e}); retrying in 2s…", flush=True)
             time.sleep(2)
 
+
+def prime_serial(ser) -> None:
+    """Discard in-flight bytes once the port is up and the MCU has settled."""
     time.sleep(2)
     try:
         ser.reset_input_buffer()
     except Exception:
         pass
 
+
+def close_serial(ser) -> None:
+    try:
+        ser.close()
+    except Exception:
+        pass
+
+
+def reopen_serial(ser, port: str, baud: int):
+    """Replace a failed port, waiting until the radio comes back."""
+    close_serial(ser)
+    while True:
+        try:
+            new_ser = serial.Serial(port, baud, timeout=0.05)
+            time.sleep(1)
+            new_ser.reset_input_buffer()
+            print("NOMAD bridge: serial reopened.", flush=True)
+            return new_ser
+        except serial.SerialException:
+            time.sleep(2)
+
+
+def read_line(ser) -> str | None:
+    """Return the next non-empty decoded frame, or None when there is none."""
+    raw = ser.readline()
+    if not raw:
+        return None
+    line = raw.decode(errors="ignore").strip()
+    return line or None
+
+
+def echo_line(line: str, verbose: bool, last_print: float) -> float:
+    """Print a frame (always in verbose mode, else rate-limited) and return the new stamp."""
+    if verbose:
+        print(line, flush=True)
+        return last_print
+    now = time.monotonic()
+    if now - last_print >= PRINT_EVERY:
+        print(line, flush=True)
+        return now
+    return last_print
+
+
+# =========================
+# MAIN LOOP
+# =========================
+
+
+def run(port: str, baud: int, verbose: bool) -> int:
+    gamepad = create_gamepad()
+    print(f"NOMAD bridge: opening {port} @ {baud}…", flush=True)
+
+    ser = open_serial(port, baud)
+    prime_serial(ser)
     print("NOMAD bridge: bridge active. Ctrl+C to quit.", flush=True)
 
     last_print = 0.0
-    PRINT_EVERY = 0.5  # seconds, when --verbose is off
-
     while True:
         try:
-            raw = ser.readline()
-            if not raw:
-                continue
-            line = raw.decode(errors="ignore").strip()
-            if not line:
+            line = read_line(ser)
+            if line is None:
                 continue
 
-            if verbose:
-                print(line, flush=True)
-            else:
-                now = time.monotonic()
-                if now - last_print >= PRINT_EVERY:
-                    print(line, flush=True)
-                    last_print = now
-
-            parts = line.split(",")
-            if len(parts) < 10:
-                continue
-            parts = parts[:11]  # truncate any extras safely
-
-            # -------- AXES --------
-            roll = scale_stick(parts[0])
-            pitch = scale_stick(parts[1])
-            yaw_raw = parts[2]  # mapped to right_trigger below so DirectInput sees yaw as an axis
-            throttle = scale_trigger(parts[3])
-
-            gimbal_x = scale_stick(parts[4])
-            gimbal_y = scale_stick(parts[5])
-
-            # -------- SWITCHES --------
-            try:
-                sw1 = int(parts[6])
-                sw2 = int(parts[7])
-                sw3 = int(parts[8])
-                mode = int(parts[9])
-            except ValueError:
+            last_print = echo_line(line, verbose, last_print)
+            frame = parse_frame(line)
+            if frame is None:
                 continue
 
-            kill = 0
-            if len(parts) > 10:
-                try:
-                    kill = int(parts[10])
-                except ValueError:
-                    kill = 0
-
-            # -------- AXES OUTPUT --------
-            # Left stick = vehicle roll/pitch (flight)
-            # Right stick = gimbal pan/tilt (NomadJoystickService reads Rx/Ry)
-            # Left trigger = throttle, Right trigger = unused
-            gamepad.left_joystick(x_value=roll, y_value=pitch)
-            gamepad.right_joystick(x_value=gimbal_x, y_value=gimbal_y)
-            gamepad.left_trigger(value=throttle)
-            # Yaw lives on a slider so it doesn't fight the gimbal axes.
-            # vgamepad doesn't expose sliders directly; map yaw → right_trigger
-            # so it's still reachable through DirectInput as an axis.
-            gamepad.right_trigger(value=scale_trigger(yaw_raw))
-
-            # -------- BUTTONS --------
-            def set_btn(cond, btn):
-                if cond:
-                    gamepad.press_button(btn)
-                else:
-                    gamepad.release_button(btn)
-
-            set_btn(sw1 == 1, vg.XUSB_BUTTON.XUSB_GAMEPAD_A)
-            set_btn(sw1 == 2, vg.XUSB_BUTTON.XUSB_GAMEPAD_B)
-            set_btn(sw2 == 1, vg.XUSB_BUTTON.XUSB_GAMEPAD_X)
-            set_btn(sw2 == 2, vg.XUSB_BUTTON.XUSB_GAMEPAD_Y)
-            set_btn(sw3 == 1, vg.XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER)
-            set_btn(sw3 == 2, vg.XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER)
-            set_btn(kill == 1, vg.XUSB_BUTTON.XUSB_GAMEPAD_BACK)
-
-            # -------- DPAD (mode) --------
-            gamepad.release_button(vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_UP)
-            gamepad.release_button(vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN)
-            gamepad.release_button(vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT)
-            gamepad.release_button(vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT)
-            if mode == 1:
-                gamepad.press_button(vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN)
-            elif mode == 2:
-                gamepad.press_button(vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT)
-            elif mode == 3:
-                gamepad.press_button(vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT)
-            # mode == 0 is the idle/neutral position — leave DPAD released.
-
-            gamepad.update()
+            apply_frame(gamepad, frame)
             time.sleep(0.005)
 
         except serial.SerialException as e:
             print(f"NOMAD bridge: serial error ({e}); reopening…", flush=True)
-            try:
-                ser.close()
-            except Exception:
-                pass
-            ser = None
-            while ser is None:
-                try:
-                    ser = serial.Serial(port, baud, timeout=0.05)
-                    time.sleep(1)
-                    ser.reset_input_buffer()
-                    print("NOMAD bridge: serial reopened.", flush=True)
-                except serial.SerialException:
-                    time.sleep(2)
+            ser = reopen_serial(ser, port, baud)
 
         except Exception as e:
             print(f"NOMAD bridge: error: {e}", flush=True)
