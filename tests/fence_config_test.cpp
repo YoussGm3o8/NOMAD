@@ -91,6 +91,52 @@ void test_local_polygon_with_nonfinite_vertex_fails_closed() {
     CHECK(decision.reason == "fence");
 }
 
+// Local containment geometry: point-in-polygon, inset margin and boundary
+// distance are independent of the parser and live here with the other
+// polygon-shape tests.
+void test_geofence_contains_only_safe_targets() {
+    const std::vector<nomad::safety::Point2d> square{
+        {-5.0, -5.0},
+        {5.0, -5.0},
+        {5.0, 5.0},
+        {-5.0, 5.0},
+    };
+    CHECK(nomad::safety::point_in_polygon({0.0, 0.0}, square));
+    CHECK(!nomad::safety::point_in_polygon({10.0, 0.0}, square));
+    CHECK(nomad::safety::is_contained({0.0, 0.0}, square, 2.0));
+    CHECK(!nomad::safety::is_contained({4.0, 0.0}, square, 2.0));
+    CHECK(nomad::safety::distance_to_boundary({0.0, 0.0}, square) == 5.0);
+}
+
+void test_geofence_rejects_invalid_configuration_and_targets() {
+    const auto malformed =
+        nomad::safety::evaluate_position({std::vector<nomad::safety::Point2d>{{0.0, 0.0}}, 0.0}, {0.0, 0.0});
+    CHECK(!malformed.allowed);
+    CHECK(malformed.reason == "fence");
+
+    const auto nonfinite =
+        nomad::safety::evaluate_position({std::nullopt, 0.0}, {std::numeric_limits<double>::quiet_NaN(), 0.0});
+    CHECK(!nonfinite.allowed);
+    CHECK(nonfinite.reason == "nonfinite");
+
+    const auto unconfigured = nomad::safety::evaluate_position({std::nullopt, 0.0}, {100.0, -100.0});
+    CHECK(unconfigured.allowed);
+}
+
+void test_global_geofence_projects_meters() {
+    const nomad::safety::GlobalFencePolicy policy{
+        std::vector<nomad::safety::GlobalPoint>{
+            {45.0, -73.0},
+            {45.0, -72.9999},
+            {45.0001, -72.9999},
+            {45.0001, -73.0},
+        },
+        1.0,
+    };
+    CHECK(nomad::safety::evaluate_global_position(policy, {45.00005, -72.99995}).allowed);
+    CHECK(!nomad::safety::evaluate_global_position(policy, {45.002, -72.99995}).allowed);
+}
+
 void test_empty_polygon_is_treated_as_unconfigured() {
     const auto policy = nomad::safety::load_fence_policy("", "2.0");
 
@@ -108,6 +154,9 @@ int main() {
     test_malformed_polygon_fails_closed();
     test_polygon_with_too_few_vertices_fails_closed();
     test_local_polygon_with_nonfinite_vertex_fails_closed();
+    test_geofence_contains_only_safe_targets();
+    test_geofence_rejects_invalid_configuration_and_targets();
+    test_global_geofence_projects_meters();
     test_empty_polygon_is_treated_as_unconfigured();
     } catch (const std::exception &error) {
         std::fprintf(stderr, "FAILED: %s\n", error.what());

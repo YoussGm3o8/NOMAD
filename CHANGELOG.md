@@ -32,6 +32,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   retired Python controller — the loop-closure evidence is fully C++-owned.
 
 ### Changed
+- [core] `VehicleState` carries steady-clock timestamps for position, battery, GPS,
+  and attitude samples; `Vehicle::wait_for_location` and `Vehicle::wait_for_altitude`
+  fail closed when the position sample is older than the configured
+  `position_freshness_timeout` (default 2000 ms) — closes hazard H-10 for the
+  position field. The other three timestamps are stamped but not yet gated.
 - [plugin,infra] Flight-controller-generic naming: `CubeOutputController` is
   renamed `OutputController` (it drives generic ArduPilot `DO_SET_SERVO` /
   `DO_SET_RELAY` outputs on any board); the services-status key

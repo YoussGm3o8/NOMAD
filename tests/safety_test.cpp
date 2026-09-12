@@ -174,49 +174,6 @@ void test_vehicle_stop_velocity_sends_zero() {
     CHECK(connection.last_velocity.vx == 0.0F);
 }
 
-void test_geofence_contains_only_safe_targets() {
-    const std::vector<nomad::safety::Point2d> square{
-        {-5.0, -5.0},
-        {5.0, -5.0},
-        {5.0, 5.0},
-        {-5.0, 5.0},
-    };
-    CHECK(nomad::safety::point_in_polygon({0.0, 0.0}, square));
-    CHECK(!nomad::safety::point_in_polygon({10.0, 0.0}, square));
-    CHECK(nomad::safety::is_contained({0.0, 0.0}, square, 2.0));
-    CHECK(!nomad::safety::is_contained({4.0, 0.0}, square, 2.0));
-    CHECK(nomad::safety::distance_to_boundary({0.0, 0.0}, square) == 5.0);
-}
-
-void test_geofence_rejects_invalid_configuration_and_targets() {
-    const auto malformed =
-        nomad::safety::evaluate_position({std::vector<nomad::safety::Point2d>{{0.0, 0.0}}, 0.0}, {0.0, 0.0});
-    CHECK(!malformed.allowed);
-    CHECK(malformed.reason == "fence");
-
-    const auto nonfinite =
-        nomad::safety::evaluate_position({std::nullopt, 0.0}, {std::numeric_limits<double>::quiet_NaN(), 0.0});
-    CHECK(!nonfinite.allowed);
-    CHECK(nonfinite.reason == "nonfinite");
-
-    const auto unconfigured = nomad::safety::evaluate_position({std::nullopt, 0.0}, {100.0, -100.0});
-    CHECK(unconfigured.allowed);
-}
-
-void test_global_geofence_projects_meters() {
-    const nomad::safety::GlobalFencePolicy policy{
-        std::vector<nomad::safety::GlobalPoint>{
-            {45.0, -73.0},
-            {45.0, -72.9999},
-            {45.0001, -72.9999},
-            {45.0001, -73.0},
-        },
-        1.0,
-    };
-    CHECK(nomad::safety::evaluate_global_position(policy, {45.00005, -72.99995}).allowed);
-    CHECK(!nomad::safety::evaluate_global_position(policy, {45.002, -72.99995}).allowed);
-}
-
 void test_vehicle_fence_rejects_target_before_transmission() {
     FakeConnection connection;
     connection.connect();
@@ -236,6 +193,42 @@ void test_vehicle_fence_rejects_target_before_transmission() {
 
     CHECK(!result.success);
     CHECK(connection.last_command.id == 0);
+}
+
+void test_vehicle_goto_location_rejects_stale_position() {
+    FakeConnection connection;
+    connection.connect();
+    connection.acknowledgement = nomad::mavlink::CommandAck{192, 0};
+    connection.auto_stamp_fresh_fields = false;
+    nomad::vehicle::Vehicle vehicle(connection);
+    connection.state->position_valid = true;
+    connection.state->position.latitude_deg = 45.5;
+    connection.state->position.longitude_deg = -73.6;
+    connection.state->position.relative_altitude_m = 5.0F;
+    connection.state->position_updated_at =
+        std::chrono::steady_clock::now() - std::chrono::seconds(10);
+
+    const auto result = vehicle.goto_location({45.5, -73.6, 5.0F});
+
+    CHECK(!result.success);
+    CHECK(result.message.find("stale") != std::string::npos);
+}
+
+void test_vehicle_takeoff_altitude_rejects_stale_position() {
+    FakeConnection connection;
+    connection.connect();
+    connection.acknowledgement = nomad::mavlink::CommandAck{22, 0};
+    connection.auto_stamp_fresh_fields = false;
+    nomad::vehicle::Vehicle vehicle(connection);
+    connection.state->position_valid = true;
+    connection.state->position.relative_altitude_m = 5.0F;
+    connection.state->position_updated_at =
+        std::chrono::steady_clock::now() - std::chrono::seconds(10);
+
+    const auto result = vehicle.takeoff(5.0F);
+
+    CHECK(!result.success);
+    CHECK(result.message.find("stale") != std::string::npos);
 }
 
 void test_vehicle_payload_commands_require_interlock_and_validate_ranges() {
@@ -475,10 +468,9 @@ int main() {
     test_vehicle_watchdog_stops_for_stale_vio_and_mode_loss();
     test_vehicle_watchdog_stops_for_link_loss();
     test_vehicle_stop_velocity_sends_zero();
-    test_geofence_contains_only_safe_targets();
-    test_geofence_rejects_invalid_configuration_and_targets();
-    test_global_geofence_projects_meters();
     test_vehicle_fence_rejects_target_before_transmission();
+    test_vehicle_goto_location_rejects_stale_position();
+    test_vehicle_takeoff_altitude_rejects_stale_position();
     test_vehicle_payload_commands_require_interlock_and_validate_ranges();
     test_vehicle_payload_on_failure_still_attempts_off();
     test_vehicle_payload_off_failure_is_reported();

@@ -3,6 +3,7 @@
 
 #include "generated.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -157,10 +158,12 @@ void update_system_status(const Message &message, telemetry::VehicleState &state
     if (status.voltage_battery != 0xffff) {
         state.battery.voltage_v = static_cast<float>(status.voltage_battery) / 1000.0F;
         state.battery_valid = true;
+        state.battery_updated_at = std::chrono::steady_clock::now();
     }
     if (status.battery_remaining >= 0) {
         state.battery.remaining_percent = static_cast<float>(status.battery_remaining);
         state.battery_valid = true;
+        state.battery_updated_at = std::chrono::steady_clock::now();
     }
 }
 
@@ -174,6 +177,9 @@ void update_gps(const Message &message, telemetry::VehicleState &state) {
     state.gps.fix_type = gps.fix_type;
     state.gps.satellites = gps.satellites_visible;
     state.gps_valid = state.gps.fix_type > 0;
+    if (state.gps_valid) {
+        state.gps_updated_at = std::chrono::steady_clock::now();
+    }
 }
 
 void update_position(const Message &message, telemetry::VehicleState &state) {
@@ -193,6 +199,9 @@ void update_position(const Message &message, telemetry::VehicleState &state) {
     state.velocity.groundspeed_mps = std::sqrt(state.velocity.north_mps * state.velocity.north_mps +
                                                state.velocity.east_mps * state.velocity.east_mps);
     state.position_valid = state.gps_valid || state.position.latitude_deg != 0.0 || state.position.longitude_deg != 0.0;
+    if (state.position_valid) {
+        state.position_updated_at = std::chrono::steady_clock::now();
+    }
 }
 
 void update_attitude(const Message &message, telemetry::VehicleState &state) {
@@ -207,6 +216,7 @@ void update_attitude(const Message &message, telemetry::VehicleState &state) {
     state.attitude.pitch_deg = attitude.pitch * kRadiansToDegrees;
     state.attitude.yaw_deg = attitude.yaw * kRadiansToDegrees;
     state.attitude_valid = true;
+    state.attitude_updated_at = std::chrono::steady_clock::now();
 }
 
 void update_vfr_hud(const Message &message, telemetry::VehicleState &state) {

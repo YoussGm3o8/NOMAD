@@ -53,11 +53,13 @@ float get_monotonic_seconds() {
 } // namespace
 
 Vehicle::Vehicle(mavlink::MavlinkConnection &connection, safety::WatchdogPolicy watchdog_policy,
-                 safety::GlobalFencePolicy fence_policy, safety::VelocityLimits velocity_limits)
+                 safety::GlobalFencePolicy fence_policy, safety::VelocityLimits velocity_limits,
+                 std::chrono::milliseconds position_freshness_timeout)
     : connection_(connection),
       watchdog_policy_(watchdog_policy),
       fence_policy_(std::move(fence_policy)),
-      velocity_limits_(velocity_limits) {}
+      velocity_limits_(velocity_limits),
+      position_freshness_timeout_(position_freshness_timeout) {}
 
 Vehicle::~Vehicle() {
     {
@@ -428,6 +430,12 @@ CommandResult Vehicle::wait_for_location(const Location &location) {
         if (!state.has_value() || !state->position_valid) {
             continue;
         }
+        // A fresh heartbeat does not imply a fresh position: fail closed if the
+        // GLOBAL_POSITION_INT feed has gone quiet rather than trusting a stale fix.
+        const auto now = std::chrono::steady_clock::now();
+        if (now - state->position_updated_at > position_freshness_timeout_) {
+            return {false, "goto location verification failed: position feed is stale"};
+        }
         const auto latitude_error = std::abs(state->position.latitude_deg - location.latitude_deg);
         const auto longitude_error = std::abs(state->position.longitude_deg - location.longitude_deg);
         // Location altitude is above home (the REPOSITION frame is
@@ -446,7 +454,16 @@ CommandResult Vehicle::wait_for_altitude(float minimum_altitude_m, const char *n
     const auto deadline = std::chrono::steady_clock::now() + kTakeoffStateTimeout;
     while (std::chrono::steady_clock::now() < deadline) {
         const auto state = connection_.wait_for_state(kStatePollTimeout);
-        if (state.has_value() && state->position_valid && state->position.relative_altitude_m >= minimum_altitude_m) {
+        if (!state.has_value() || !state->position_valid) {
+            continue;
+        }
+        // Altitude is derived from the same position feed, so a stale sample
+        // must fail closed even when it happens to sit above the target.
+        const auto now = std::chrono::steady_clock::now();
+        if (now - state->position_updated_at > position_freshness_timeout_) {
+            return {false, std::string(name) + " verification failed: position feed is stale"};
+        }
+        if (state->position.relative_altitude_m >= minimum_altitude_m) {
             return {true, std::string(name) + " verified"};
         }
     }

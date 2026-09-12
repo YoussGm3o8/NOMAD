@@ -34,7 +34,8 @@ struct CommandResult {
 class Vehicle {
   public:
     explicit Vehicle(mavlink::MavlinkConnection &connection, safety::WatchdogPolicy watchdog_policy = {},
-                     safety::GlobalFencePolicy fence_policy = {}, safety::VelocityLimits velocity_limits = {});
+                     safety::GlobalFencePolicy fence_policy = {}, safety::VelocityLimits velocity_limits = {},
+                     std::chrono::milliseconds position_freshness_timeout = std::chrono::milliseconds(2000));
     ~Vehicle();
 
     Vehicle(const Vehicle &) = delete;
@@ -82,6 +83,7 @@ class Vehicle {
     safety::WatchdogPolicy watchdog_policy_;
     safety::GlobalFencePolicy fence_policy_;
     safety::VelocityLimits velocity_limits_;
+    std::chrono::milliseconds position_freshness_timeout_{std::chrono::milliseconds(2000)};
     safety::ReleaseInterlock payload_interlock_;
     mutable std::mutex payload_mutex_;
     mutable std::mutex velocity_mutex_;

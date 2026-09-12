@@ -115,7 +115,7 @@ mappings when implemented; do not invent entries in the existing checked block.
 | Hazard | Proposed requirement | Mitigation / objective falsification test | Gate |
 |---|---|---|---|
 | H-09 Conflicting writers | SR-AUT-01: one active owner and explicit handover | Concurrent CLI/ROS/plugin commands, pilot takeover and reconnect cannot resume old action | G2 |
-| H-10 Stale position with fresh heartbeat | SR-TEL-01: per-field age and clock validity | Freeze position while heartbeats flow; position-dependent actions fail closed | G2 |
+| H-10 Stale position with fresh heartbeat | SR-TEL-01: per-field age and clock validity | Freeze position while heartbeats flow; position-dependent actions fail closed — implemented as a configurable position-freshness gate (`position_freshness_timeout`, default 2000 ms) enforced by the core | G2 |
 | H-11 Collision or missed traffic | SR-AIR-01: unknown/stale traffic never means clear | Crossing/head-on/reordered/expired tracks yield expected advisories with measured warning time | G4 |
 | H-12 Wrong aircraft mode/transition | SR-TYP-01: validate aircraft class and state | Copter mode constants refused for Plane; failed/aborted VTOL transitions use reviewed response | G2/G7 |
 | H-13 False identity or geolocation | SR-OBS-01: decisions retain evidence and uncertainty | Duplicate animals, occlusion, wrong datum and stale images cannot create unreviewed task actions | G5/G6 |
@@ -191,6 +191,7 @@ SR-SEC-01 | src/vehicle/vehicle.cpp:send_command | tests/core_test.cpp::test_com
 SR-SEC-01 | src/main.cpp:run_command | tests/test_cpp_command_surface.py::test_cpp_command_surface_has_no_failsafe_controls
 SR-SEC-02 | src/main.cpp:run_command | tests/test_core_client_contract.py::test_every_actuation_verb_refused_without_key_before_any_socket_work
 SR-SEC-03 | src/main.cpp:audit_command | tests/test_core_client_contract.py::test_actuation_with_key_reaches_transport_and_audits
+SR-TEL-01 | src/vehicle/vehicle.cpp:wait_for_location | tests/safety_test.cpp::test_vehicle_goto_location_rejects_stale_position
 ```
 
 ## Operational release rule
