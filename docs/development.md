@@ -25,6 +25,24 @@ format-check is read-only with respect to source; format rewrites source and is
 not appropriate for a documentation-only review of unrelated migration work.
 docs-build is the strict ProperDocs site check.
 
+complexity-check applies the source-size rules to new and modified files: 500
+lines per source file, 40 per Python function, and 120 columns per C/C++ line
+(ruff already enforces the Python limit through E501). It also rejects a baseline
+entry that no longer points at an oversized file, function or tolerated over-long
+line, so the baselines cannot silently widen the gate.
+`config/file_size_baseline.txt` lists only the oversized files that still exist;
+`config/function_size_baseline.txt` is empty; `config/line_length_baseline.txt`
+names the five legacy transport files whose existing over-length lines Phase E
+deletes instead of wrapping. Add an entry only for a genuine offender — the
+freshness check makes removing it when the file is split, the lines are wrapped,
+or the file is deleted non-optional. The C/C++ column limit is enforced through
+this reporter rather than clang-format because the formatter is not a pinned
+repository dependency. Shared helper code lives in exactly one place: C++ tests use
+`tests/test_harness.hpp` (assert/report/pass/fail plus the console-safe `main`)
+and `tests/loopback_socket.hpp`; `nomad::util` owns argv and environment number
+parsing; `infra/tailscale/shell.py` owns the command probe both monitors call. Do
+not copy one of those helpers back into a caller.
+
 `pixi run dev` and `dev-build` now build the C++ core. `pixi run test` measures
 coverage of retained Python tools and Tailscale helpers. The deleted API server,
 API smoke task and gimbal SITL task are removed.
@@ -37,6 +55,14 @@ ROS adapter. Direct Compose ROS use must set `NOMAD_SITL_ROS_OUTPUT` to
 `--out udp:nomad_vehicle_node:14552`. The simulator always emits the normal host
 stream on 14570 and a private relay copy on 14572; scenario tasks choose which
 stream to read through `NOMAD_CORE_SITL_PORT`.
+
+The stack seeds the vehicle from two parameter files: `docker/sitl-fence.parm`
+for the polygon fence and `docker/sitl-streams.parm` for the SERIAL0 MAVLink
+stream rates. ArduPilot streams position, attitude and extended status only
+after a GCS requests the group and the core deliberately never requests
+streams, so those rates are what make a host-side copy readable; a stack that
+drops them leaves the scenarios watching heartbeats. See C24 in
+[migration](migration.md).
 These paths have local configuration checks, but current live image/SITL/ROS
 qualification remains open at G1.
 
@@ -55,7 +81,7 @@ other optional compute services disabled until G3 qualification.
 
 | Layer | Current checks | Required expansion |
 |---|---|---|
-| C++ | Ten CTest targets: core, codec, safety, output, UDP, zero, VIO, limits, fence, MAVSDK qualification | Authority, per-field freshness, cancellation, MAVSDK and vehicle-class coverage |
+| C++ | Nine default CTest targets (core, codec, safety, output, UDP, zero, VIO, limits, fence) plus MAVSDK qualification and connection-contract targets in the `NOMAD_ENABLE_MAVSDK` build | Authority, per-field freshness, cancellation, MAVSDK and vehicle-class coverage |
 | Python | pytest includes client contracts, traceability, harnesses, profiles and video tools | Mock competition server/traffic, perception replay and tracker fixtures |
 | ROS | ros2/nomad_ros translation plus tests/ros integration | Bounded callbacks, acquisition-time/frame validation, command-owner integration |
 | Mission Planner | lint-plugin and test-plugin-* helper scripts | Ownership, capabilities, stale displays, action lifecycle and replay |
@@ -96,7 +122,27 @@ for basic unit or server-contract tests.
 MAVSDK build-core-mavsdk and mavsdk-phase-a-smoke are opt-in Phase A tasks; the
 latter requires live SITL. They do not switch production to MAVSDK. Follow
 [MAVSDK parity gates](mavsdk-adoption.md). The build task emits configure/build
-timing and footprint JSON to standard output. The hosted matrix also writes and
+timing and footprint JSON to standard output.
+
+The CLI can select the MAVSDK transport with `--transport mavsdk` in a
+`NOMAD_ENABLE_MAVSDK` build; `udp` remains the default and the flag fails closed
+in a legacy build. Run `pixi run test-mavsdk-phase-b` for the Phase B contract
+check: it builds the opt-in CLI, `nomad_mavsdk_connection_tests` and
+`nomad_mavsdk_zero_delivery_tests`, then runs
+`scripts/dev/mavsdk_connection_fixture.py`, which asserts accepted, denied,
+timeout, wire-form, stale-telemetry and wrong-identity behaviour plus
+per-command mode/takeoff/goto/land/RTL/servo/relay/gimbal-config/user-command
+parity against the deterministic vehicle in `scripts/dev/mavsdk_peer.py`; those
+command cases run the real CLI and assert its verified output against a peer
+whose starting state differs from the required result. The same task covers the
+link and zero-delivery cases in `scripts/dev/mavsdk_link_fixture.py`: the
+pre-latch GCS-heartbeat announcement, coalesced datagrams, live-to-stale link
+observation, the body-frame velocity setpoint with its zero on disconnect, and
+the SR-LNK-03 stop paths (watchdog, caller stop, destruction, link loss, VIO
+loss). `scripts/dev/mavsdk_fixture_harness.py` holds the shared binary, peer and
+assertion primitives; add a case to the module that owns its behaviour rather
+than to the entry point. Passing it is transport
+parity evidence, not a closed Phase B-E or G-M gate. The hosted matrix also writes and
 retains a JSON artifact; local output from a dirty vendor checkout is diagnostic,
 not clean-checkout qualification. Live smoke output includes per-process-tree
 peak RSS and elapsed connect/status time and is retained by the SITL workflow.

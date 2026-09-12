@@ -1,0 +1,327 @@
+// SPDX-License-Identifier: Apache-2.0
+// One-shot CLI argument parsing: global flags plus one small parser per verb
+// group. Any malformed or extra value rejects the whole invocation, so the
+// caller prints usage and fails before any socket work.
+#include "cli_command_table.hpp"
+#include "cli_commands.hpp"
+#include "nomad/util/parse.hpp"
+
+#include <array>
+#include <charconv>
+#include <cstdint>
+#include <cstdlib>
+#include <optional>
+#include <string_view>
+
+namespace {
+
+using nomad::util::parse_float;
+
+std::optional<std::uint32_t> parse_mode(std::string_view value) {
+    std::uint32_t mode{};
+    const auto result = std::from_chars(value.data(), value.data() + value.size(), mode);
+    if (result.ec != std::errc{} || result.ptr != value.data() + value.size()) {
+        return std::nullopt;
+    }
+    return mode;
+}
+
+// Non-negative integer for the output verbs, bounded by the caller.
+std::optional<int> parse_output_int(std::string_view value, std::uint32_t maximum) {
+    const auto parsed = parse_mode(value);
+    if (!parsed.has_value() || *parsed > maximum) {
+        return std::nullopt;
+    }
+    return static_cast<int>(*parsed);
+}
+
+bool is_transport(std::string_view value) {
+    return value == "udp" || value == "mavsdk";
+}
+
+// Fills the first unset slot; a second positional is rejected.
+bool assign_first(std::optional<float> &slot, std::string_view value) {
+    if (slot.has_value()) {
+        return false;
+    }
+    slot = parse_float(value);
+    return slot.has_value();
+}
+
+bool consume_takeoff(Arguments &arguments, std::string_view value) {
+    return assign_first(arguments.altitude, value);
+}
+
+bool consume_goto(Arguments &arguments, std::string_view value) {
+    std::optional<float> *slot = !arguments.latitude    ? &arguments.latitude
+                                 : !arguments.longitude ? &arguments.longitude
+                                                        : &arguments.altitude;
+    return assign_first(*slot, value);
+}
+
+bool consume_mode(Arguments &arguments, std::string_view value) {
+    if (arguments.mode.has_value()) {
+        return false;
+    }
+    arguments.mode = parse_mode(value);
+    return arguments.mode.has_value();
+}
+
+bool consume_servo(Arguments &arguments, std::string_view value) {
+    const auto parsed = parse_output_int(value, 65535);
+    if (!parsed.has_value()) {
+        return false;
+    }
+    if (!arguments.channel.has_value()) {
+        arguments.channel = *parsed;
+        return true;
+    }
+    if (!arguments.pwm_microseconds.has_value()) {
+        arguments.pwm_microseconds = *parsed;
+        return true;
+    }
+    return false;
+}
+
+bool consume_relay(Arguments &arguments, std::string_view value) {
+    if (!arguments.relay_number.has_value()) {
+        const auto parsed = parse_output_int(value, 15);
+        if (!parsed.has_value()) {
+            return false;
+        }
+        arguments.relay_number = *parsed;
+        return true;
+    }
+    if (!arguments.relay_on.has_value()) {
+        const auto parsed = parse_output_int(value, 1);
+        if (!parsed.has_value()) {
+            return false;
+        }
+        arguments.relay_on = *parsed == 1;
+        return true;
+    }
+    return false;
+}
+
+bool consume_motor_test(Arguments &arguments, std::string_view value) {
+    if (!arguments.motor_instance.has_value()) {
+        const auto parsed = parse_output_int(value, 65535);
+        if (!parsed.has_value()) {
+            return false;
+        }
+        arguments.motor_instance = *parsed;
+        return true;
+    }
+    if (!arguments.pwm_microseconds.has_value()) {
+        const auto parsed = parse_output_int(value, 65535);
+        if (!parsed.has_value()) {
+            return false;
+        }
+        arguments.pwm_microseconds = *parsed;
+        return true;
+    }
+    if (!arguments.timeout_seconds.has_value()) {
+        arguments.timeout_seconds = parse_float(value);
+        return arguments.timeout_seconds.has_value();
+    }
+    return false;
+}
+
+bool consume_gimbal_config(Arguments &arguments, std::string_view value) {
+    if (arguments.mount_mode.has_value()) {
+        return false;
+    }
+    const auto parsed = parse_output_int(value, 4);
+    if (!parsed.has_value()) {
+        return false;
+    }
+    arguments.mount_mode = *parsed;
+    return true;
+}
+
+bool consume_user_command(Arguments &arguments, std::string_view value) {
+    const auto parsed = parse_float(value);
+    if (!parsed.has_value() || arguments.user_parameter_count >= 7) {
+        return false;
+    }
+    if (!arguments.user_parameters.has_value()) {
+        arguments.user_parameters = std::array<float, 7>{};
+    }
+    (*arguments.user_parameters)[arguments.user_parameter_count++] = *parsed;
+    return true;
+}
+
+bool consume_payload_demo(Arguments &arguments, std::string_view value) {
+    if (!arguments.relay_number.has_value()) {
+        const auto parsed = parse_output_int(value, 15);
+        if (!parsed.has_value()) {
+            return false;
+        }
+        arguments.relay_number = *parsed;
+        return true;
+    }
+    if (!arguments.duration_seconds.has_value()) {
+        arguments.duration_seconds = parse_float(value);
+        return arguments.duration_seconds.has_value();
+    }
+    return false;
+}
+
+// velocity takes flags rather than positionals; each flag consumes the next
+// token, and a repeated flag keeps the last value as it always has.
+bool consume_velocity(Arguments &arguments, std::string_view flag, int argc, char **argv, int &index) {
+    if (index + 1 >= argc) {
+        return false;
+    }
+    std::optional<float> *slot = nullptr;
+    if (flag == "--vx") {
+        slot = &arguments.velocity_vx;
+    } else if (flag == "--vy") {
+        slot = &arguments.velocity_vy;
+    } else if (flag == "--vz") {
+        slot = &arguments.velocity_vz;
+    } else if (flag == "--yaw-rate") {
+        slot = &arguments.velocity_yaw_rate;
+    } else if (flag == "--duration") {
+        slot = &arguments.duration_seconds;
+    }
+    if (slot == nullptr) {
+        return false;
+    }
+    index += 1;
+    *slot = parse_float(argv[index]);
+    return slot->has_value();
+}
+
+bool consume_global_flag(Arguments &arguments, std::string_view flag, int argc, char **argv, int &index) {
+    if (index + 1 >= argc) {
+        return false;
+    }
+    if (flag == "--endpoint") {
+        arguments.endpoint = argv[++index];
+        return true;
+    }
+    if (flag == "--transport") {
+        arguments.transport = argv[++index];
+        return is_transport(arguments.transport);
+    }
+    if (flag == "--system-id") {
+        const auto parsed = parse_output_int(argv[++index], 255);
+        if (!parsed.has_value() || *parsed == 0) {
+            return false;
+        }
+        arguments.system_id = static_cast<std::uint8_t>(*parsed);
+        return true;
+    }
+    return false;
+}
+
+bool is_global_flag(std::string_view token) {
+    return token == "--endpoint" || token == "--transport" || token == "--system-id";
+}
+
+bool consume_verb_value(Arguments &arguments, std::string_view token, int argc, char **argv, int &index) {
+    const std::string_view command = arguments.command;
+    if (command == "velocity") {
+        return consume_velocity(arguments, token, argc, argv, index);
+    }
+    if (command == "takeoff") {
+        return consume_takeoff(arguments, token);
+    }
+    if (command == "goto") {
+        return consume_goto(arguments, token);
+    }
+    if (command == "mode") {
+        return consume_mode(arguments, token);
+    }
+    if (command == "servo") {
+        return consume_servo(arguments, token);
+    }
+    if (command == "relay") {
+        return consume_relay(arguments, token);
+    }
+    if (command == "motor-test") {
+        return consume_motor_test(arguments, token);
+    }
+    if (command == "gimbal-config") {
+        return consume_gimbal_config(arguments, token);
+    }
+    if (command == "user-command") {
+        return consume_user_command(arguments, token);
+    }
+    if (command == "payload-demo") {
+        return consume_payload_demo(arguments, token);
+    }
+    return false;
+}
+
+bool consume_token(Arguments &arguments, int argc, char **argv, int &index) {
+    const std::string_view token(argv[index]);
+    if (is_global_flag(token)) {
+        return consume_global_flag(arguments, token, argc, argv, index);
+    }
+    return consume_verb_value(arguments, token, argc, argv, index);
+}
+
+bool apply_transport_from_environment(Arguments &arguments) {
+    const char *transport = std::getenv("NOMAD_TRANSPORT");
+    if (transport == nullptr || transport[0] == '\0') {
+        return true;
+    }
+    arguments.transport = transport;
+    return is_transport(arguments.transport);
+}
+
+// Verbs that need every positional they declare refuse a partial invocation
+// with usage rather than acting on a default.
+bool has_required_arguments(const Arguments &arguments) {
+    const std::string_view command = arguments.command;
+    if (command == "servo") {
+        return arguments.channel.has_value() && arguments.pwm_microseconds.has_value();
+    }
+    if (command == "relay") {
+        return arguments.relay_number.has_value() && arguments.relay_on.has_value();
+    }
+    if (command == "motor-test") {
+        return arguments.motor_instance.has_value() && arguments.pwm_microseconds.has_value() &&
+               arguments.timeout_seconds.has_value();
+    }
+    if (command == "gimbal-config") {
+        return arguments.mount_mode.has_value();
+    }
+    if (command == "mode") {
+        return arguments.mode.has_value();
+    }
+    if (command == "user-command") {
+        return arguments.user_parameters.has_value() && arguments.user_parameter_count == 7;
+    }
+    if (command == "velocity") {
+        return arguments.velocity_vx.has_value() && arguments.duration_seconds.has_value();
+    }
+    if (command == "goto") {
+        return arguments.latitude.has_value() && arguments.longitude.has_value() && arguments.altitude.has_value();
+    }
+    return true;
+}
+
+} // namespace
+
+std::optional<Arguments> parse_arguments(int argc, char **argv) {
+    if (argc < 2 || !is_supported_command(argv[1])) {
+        return std::nullopt;
+    }
+
+    Arguments arguments{argv[1]};
+    if (!apply_transport_from_environment(arguments)) {
+        return std::nullopt;
+    }
+    for (int index = 2; index < argc; ++index) {
+        if (!consume_token(arguments, argc, argv, index)) {
+            return std::nullopt;
+        }
+    }
+    if (!has_required_arguments(arguments)) {
+        return std::nullopt;
+    }
+    return arguments;
+}

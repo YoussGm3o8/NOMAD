@@ -109,7 +109,10 @@ payload channel mapping, or transport has been qualified.
   automatic traffic/payload behavior only after reviewed evidence. CONOPS allows
   manual flight, requires actual traffic separation, and separately rewards autonomy.
 - MAVSDK must be used at competition: early adoption, unit/integration testing
-  and a focused merge request are required implementation work (D03 resolved).
+  and focused reviewable changes are required implementation work (D03 resolved).
+  The pinned MAVSDK fork owns ArduPilot command, mode and telemetry semantics; NOMAD
+  keeps safety policy, validation, verification of outcomes and the client
+  contract — see [MAVSDK adoption](mavsdk-adoption.md).
 - NOMAD remains general-purpose. AEAC 2027 and future event-specific behavior
   should be composed as optional modules at narrow generic boundaries rather than
   spread through the base core; minimize coupling and keep vehicle decisions in
@@ -187,7 +190,7 @@ but cannot authorize autonomous actions, runtime changes, or release acceptance.
 |---|---|---|---|
 | D01 | Exact VTOL/quad firmware, hardware and Task 2 core/Jetson placement | Task 1 ground GPU and two aircraft types now directed; exact integrations remain TBD | G3/G7 |
 | D02 | Core placement and client transport, groundstation OS | Persistent ground core for first integrated release; onboard authority only when required and remotely authenticated | G2/G3 |
-| D03 | MAVSDK cutover before competition | Resolved: mandatory and early priority, with tests and a focused merge request; G-M gates production cutover | G-M/G8 |
+| D03 | MAVSDK cutover before competition | Resolved: mandatory and early priority, with tests and focused reviewable changes; the pinned fork owns ArduPilot semantics and G-M gates production cutover | G-M/G8 |
 | D04 | Tracker/tagger/sample hardware and assessment interaction | Select mechanics and feedback before defining autonomous payload behavior; current generic outputs are insufficient | G6 |
 | D05 | Final traffic, approach and payload autonomy level | Retain advisories with demonstrated operator avoidance and explicit authorization; choose Task 2 bonus targets after Q06 | G4/G6 |
 | D06 | Is VIO for mapping/perception or required flight navigation? | GNSS/ArduPilot navigation baseline; external-navigation fusion only after end-to-end timing evidence | G3/G7 |

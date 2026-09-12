@@ -125,6 +125,7 @@ mappings when implemented; do not invent entries in the existing checked block.
 | H-17 Network/compute overload | SR-RES-01: bounded queues and safety execution | Video/server flood, dead worker, thermal throttling and disk-full cannot starve command deadlines | G3/G8 |
 | H-18 Untrusted messages/replay | SR-SEC-04: authenticate, authorize and reject replay | Wrong/expired credentials, old session and malformed server/DDS/IPC input are refused and audited | G2/G8 |
 | H-19 Unavailable or wrong actuation from a bad command identifier | SR-CMD-01: every actuation command carries an identifier the pinned dialect defines | An id no handler matches makes a capability unavailable in flight (C23: motor test sent 139, an undefined `MAV_CMD`, so ArduPilot answered `MAV_RESULT_UNSUPPORTED`; nothing exercised the verb, so it survived review), and a wrong-but-defined id could command something else entirely. Every hand-typed id now resolves against the pinned dialect definition (`tests/test_command_ids.py`); live acceptance evidence exists for motor test only | G2 |
+| H-20 Fork-owned ArduPilot semantic is wrong or unverified | SR-CMD-02: every ArduPilot semantic comes from the pinned, tested fork | A wrong mode, altitude or frame interpretation inside the fork is treated as NOMAD code: each patch carries a test and an independent wire or SITL observation, and NOMAD still refuses to trust its acknowledgement | G-M |
 
 Traffic advisories and explicit payload authorization remain project scope.
 CONOPS permits manual flight but requires actual traffic cylinder avoidance.
@@ -138,6 +139,10 @@ do not silently choose hold/RTL/descent as an assessment rule.
   boundaries, timeout, cancellation and failure paths.
 - Transport: negative ACK, missing/wrong/duplicate ACK, wrong aircraft, stale
   fields, loss/reorder, actual stop wire delivery and independent FC outcome.
+- Library/fork: ArduPilot command, mode and telemetry semantics live in the
+  pinned MAVSDK fork, so each patch needs a unit test, an independent wire or
+  SITL observation against the selected firmware and a provenance pin; a fork
+  acknowledgement is still not an aircraft outcome.
 - ROS/perception: acquisition versus receive time, clock skew, reset counters,
   frame axes, delayed/replayed data, callback starvation and process failure.
 - Payload: core permission plus physical timeout and attachment/sample evidence;
@@ -158,35 +163,39 @@ These mappings identify evidence locations; they do not assert full requirement
 closure. Remap them in the MAVSDK cutover while retaining equivalent fault proof.
 
 ```cpp_traceability
-SR-VEL-01 | src/vehicle/vehicle.cpp:set_velocity | tests/safety_test.cpp::test_safety_velocity_accepts_clamped_frd_command
+SR-VEL-01 | src/vehicle/vehicle_velocity.cpp:set_velocity | tests/safety_test.cpp::test_safety_velocity_accepts_clamped_frd_command
 SR-VEL-01 | src/safety/velocity_config.cpp:load_velocity_limits | tests/velocity_config_test.cpp::test_configured_limits_are_loaded
-SR-VEL-02 | src/vehicle/vehicle.cpp:set_velocity | tests/safety_test.cpp::test_safety_velocity_accepts_clamped_frd_command
+SR-VEL-02 | src/vehicle/vehicle_velocity.cpp:set_velocity | tests/safety_test.cpp::test_safety_velocity_accepts_clamped_frd_command
 SR-VEL-02 | src/safety/velocity_config.cpp:load_velocity_limits | tests/velocity_config_test.cpp::test_configured_limits_are_loaded
-SR-VEL-03 | src/vehicle/vehicle.cpp:set_velocity | tests/safety_test.cpp::test_safety_velocity_rejects_each_fault
+SR-VEL-03 | src/vehicle/vehicle_velocity.cpp:set_velocity | tests/safety_test.cpp::test_safety_velocity_rejects_each_fault
 SR-VEL-04 | src/mavlink/protocol.cpp:encode_velocity_setpoint | tests/core_test.cpp::test_velocity_frame_uses_expected_wire_layout
-SR-VEL-05 | src/vehicle/vehicle.cpp:set_velocity | tests/safety_test.cpp::test_safety_velocity_rejects_each_fault
+SR-VEL-05 | src/vehicle/vehicle_velocity.cpp:set_velocity | tests/safety_test.cpp::test_safety_velocity_rejects_each_fault
 SR-VEL-06 | src/mavlink/protocol.cpp:accepts_heartbeat | tests/core_test.cpp::test_heartbeat_filter_accepts_vehicle_only
 SR-VIO-01 | src/safety/velocity.cpp:evaluate_velocity | tests/safety_test.cpp::test_safety_velocity_rejects_each_fault
 SR-VIO-01 | src/safety/vio_source.cpp:VioSourceValidator::validate | tests/vio_source_test.cpp::test_vio_source_validator_rejects_wrong_source
 SR-VIO-01 | ros2/nomad_ros/src/node.cpp:on_velocity_command | tests/ros/test_nomad_ros_integration.py::test_vio_source_gate_blocks_mismatch
 SR-VIO-02 | src/safety/watchdog.cpp:evaluate_watchdog | tests/safety_test.cpp::test_vehicle_watchdog_stops_for_stale_vio_and_mode_loss
-SR-LNK-01 | src/vehicle/vehicle.cpp:set_velocity | tests/safety_test.cpp::test_vehicle_watchdog_stops_for_link_loss
+SR-LNK-01 | src/vehicle/vehicle_velocity.cpp:set_velocity | tests/safety_test.cpp::test_vehicle_watchdog_stops_for_link_loss
+SR-LNK-01 | src/mavlink/mavsdk_mavlink_connection.cpp:wait_for_heartbeat | tests/test_mavsdk_connection.py::test_arm_acknowledgement_paths
 SR-LNK-02 | src/safety/watchdog.cpp:evaluate_watchdog | tests/safety_test.cpp::test_vehicle_watchdog_stops_for_command_timeout
 SR-LNK-03 | src/mavlink/udp_connection.cpp:send_velocity | tests/safety_test.cpp::test_vehicle_stop_velocity_sends_zero
 SR-LNK-04 | src/mavlink/protocol.cpp:encode_gcs_heartbeat | tests/codec_golden_test.cpp::test_gcs_heartbeat_encoder_matches_mavlink_reference
 SR-LNK-04 | src/mavlink/udp_connection.cpp:send_gcs_heartbeat_locked | tests/udp_connection_test.cpp::test_unlatched_connection_sends_gcs_heartbeats
 SR-LNK-04 | src/mavlink/udp_connection.cpp:announcement_override | tests/udp_connection_test.cpp::test_relay_address_override_targets_prelatch_announcements
-SR-FEN-01 | src/vehicle/vehicle.cpp:upload_fence | tests/safety_test.cpp::test_vehicle_upload_fence_validates_boundary
-SR-FEN-01 | src/vehicle/vehicle.cpp:verify_fence_uploaded | tests/safety_test.cpp::test_vehicle_verifies_fence_status_and_fails_closed
+SR-FEN-01 | src/vehicle/vehicle_fence.cpp:upload_fence | tests/safety_test.cpp::test_vehicle_upload_fence_validates_boundary
+SR-FEN-01 | src/vehicle/vehicle_fence.cpp:verify_fence_uploaded | tests/safety_test.cpp::test_vehicle_verifies_fence_status_and_fails_closed
 SR-FEN-01 | src/mavlink/fence.cpp:upload_fence_plan | tests/safety_test.cpp::test_vehicle_upload_fence_rejects_transport_failure
 SR-FEN-01 | src/mavlink/fence.cpp:download_fence_plan | tests/safety_test.cpp::test_vehicle_verifies_fence_status_and_fails_closed
 SR-FEN-01 | src/mavlink/params.cpp:read_param | tests/safety_test.cpp::test_vehicle_verifies_fence_status_and_fails_closed
+SR-FEN-01 | src/mavlink/mavsdk_fence.cpp:upload_fence_plan | tests/test_mavsdk_connection.py::test_fence_uploads_reads_back_and_refuses_invalid_boundaries
+SR-FEN-01 | src/mavlink/mavsdk_fence.cpp:download_fence_plan | tests/test_mavsdk_connection.py::test_fence_uploads_reads_back_and_refuses_invalid_boundaries
+SR-FEN-01 | src/mavlink/mavsdk_mavlink_connection.cpp:read_param | tests/test_mavsdk_connection.py::test_disabled_fence_never_verifies
 SR-FEN-02 | src/safety/geofence.cpp:evaluate_global_position | tests/safety_test.cpp::test_vehicle_fence_rejects_target_before_transmission
 SR-FEN-02 | src/safety/geofence.cpp:evaluate_position | tests/fence_config_test.cpp::test_local_polygon_with_nonfinite_vertex_fails_closed
 SR-PAY-01 | src/safety/payload.cpp:validate_servo_command | tests/safety_test.cpp::test_vehicle_payload_commands_require_interlock_and_validate_ranges
 SR-PAY-02 | src/safety/payload.cpp:clamp_release_duration | tests/safety_test.cpp::test_payload_validation_and_interlock
-SR-PAY-02 | src/vehicle/vehicle.cpp:release_payload | tests/safety_test.cpp::test_vehicle_payload_on_failure_still_attempts_off
-SR-PAY-02 | src/vehicle/vehicle.cpp:release_payload | tests/safety_test.cpp::test_vehicle_payload_off_failure_is_reported
+SR-PAY-02 | src/vehicle/vehicle_payload.cpp:release_payload | tests/safety_test.cpp::test_vehicle_payload_on_failure_still_attempts_off
+SR-PAY-02 | src/vehicle/vehicle_payload.cpp:release_payload | tests/safety_test.cpp::test_vehicle_payload_off_failure_is_reported
 SR-PAY-03 | src/safety/payload.cpp:ReleaseInterlock::evaluate_release | tests/safety_test.cpp::test_payload_validation_and_interlock
 SR-SEC-01 | src/vehicle/vehicle.cpp:send_command | tests/core_test.cpp::test_command_frame_has_expected_header
 SR-SEC-01 | src/main.cpp:run_command | tests/test_cpp_command_surface.py::test_cpp_command_surface_has_no_failsafe_controls
@@ -195,6 +204,7 @@ SR-SEC-03 | src/main.cpp:audit_command | tests/test_core_client_contract.py::tes
 SR-TEL-01 | src/vehicle/vehicle.cpp:wait_for_location | tests/safety_test.cpp::test_vehicle_goto_location_rejects_stale_position
 SR-CMD-01 | src/vehicle/output.cpp:motor_test | tests/output_command_test.cpp::test_vehicle_motor_test_validates_and_clamps_timeout
 SR-CMD-01 | src/vehicle/output.cpp:make_command | tests/test_command_ids.py::test_command_id_matches_the_dialect
+SR-CMD-01 | src/vehicle/output.cpp:motor_test | tests/test_mavsdk_connection.py::test_output_commands_reach_the_wire
 ```
 
 ## Operational release rule

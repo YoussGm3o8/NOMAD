@@ -14,8 +14,11 @@ Its [source requirements](conops-requirements.md) define the acceptance context:
 ## Current status
 
 The production core still uses UdpMavlinkConnection and generated ArduPilot
-dialect headers. CMake NOMAD_ENABLE_MAVSDK defaults OFF; enabling it builds a
-separate connect/status smoke executable, not a MAVSDK-backed Vehicle.
+dialect headers, and CMake NOMAD_ENABLE_MAVSDK still defaults OFF. Enabling it
+now builds both the connect/status smoke executable and a MAVSDK-backed
+`MavlinkConnection` (`src/mavlink/mavsdk_mavlink_connection.cpp`) that the CLI
+can select with `--transport mavsdk`; `udp` remains the default and the legacy
+codec is untouched.
 
 Phase A source exists: opt-in subbuild, telemetry smoke consumer, deterministic
 ArduPilot-like UDP fixture, pure qualification tests, Linux/Windows CI jobs,
@@ -43,21 +46,50 @@ for comparison but are not themselves approved thresholds.
 
 ## Ownership and rationale
 
-MAVSDK supplies wire protocol, transport and its internal workers. NOMAD retains
-Vehicle, safety policy, mission decisions, target identity, authoritative
-verification, application deadlines, audit and client contract. Internal library
-threads do not by themselves prove bounded watchdog behavior.
+User-confirmed ownership split (2026-09-12): the pinned fork owns ArduPilot
+command, mode and telemetry semantics — how a verb is encoded, which command and
+frame it uses, what a result code means, and how vehicle modes and telemetry
+fields are interpreted. NOMAD retains safety policy, command validation,
+authoritative verification of outcomes, mission decisions, target identity,
+application deadlines, audit and the client contract. Internal library threads do
+not by themselves prove bounded watchdog behavior, and a library acknowledgement
+never proves an aircraft outcome.
+
+This supersedes the earlier small-patch-set framing, which left ArduPilot gaps in
+NOMAD's transport adapter. NOMAD must not add further ArduPilot command
+construction: the raw-frame paths in `MavsdkMavlinkConnection` are transitional
+and must shrink as the fork supplies each missing semantic.
 
 The adoption supersedes the 2026-09-05 own-codec decision before its original
 revisit triggers (new vehicle ecosystem, direct serial/TCP need, upstream quirks)
 were met. The recorded rationale was maintained transport ownership and upstream
 contribution. The user now explicitly makes adoption a competition deliverable.
 
-Keep the fork patch set small, pin reviewed dependencies, record firmware/library
-pairs and rerun qualification on every pin change. The old firmware-matched
+Keep every fork patch individually reviewable and upstreamable, pin reviewed
+dependencies, record firmware/library pairs and rerun qualification on every pin
+change. The old firmware-matched
 dialect property must be replaced by tested compatibility with both Copter and
 the chosen ArduPlane/QuadPlane firmware. The library API/quirks below must be
 verified against the pinned source; they are not claims about latest upstream.
+
+## ArduPilot gaps measured at the pinned revision
+
+Read from `cpp/src/mavsdk` at pin `9884f1095` (2026-09-12). MAVSDK's ArduPilot
+support is strong on the read side and thin on the command side, which is why the
+fork owns the semantics above:
+
+| Gap | Evidence at the pin |
+|---|---|
+| No way to set a mode | `Action` exposes no mode-setting call; only NOMAD's `DO_SET_MODE` path exists today |
+| Guided goto is absolute-only | `Action::goto_location(latitude_deg, longitude_deg, float absolute_altitude_m, yaw_deg)` has no relative-altitude variant, so NOMAD builds COMMAND_INT frame 6 itself |
+| Missing output verbs | No `DO_MOTOR_TEST`; `Action::set_actuator` is command 187, not `DO_SET_SERVO`; no user-command passthrough; no `COMMAND_ACK` result-code exposure |
+| Mode handling is read-only | `core/ardupilot_custom_mode.hpp` and `core/flight_mode.cpp` translate Copter/Plane/Rover modes for reading; nothing sets one |
+| Documentation is PX4-centric | Public comments link to `docs.px4.io` even where ArduPilot behaves differently |
+| Telemetry parity items | AGL, metre accuracy, per-field freshness, link quality and the official mode mapping are required by this document and are not all present |
+
+Recheck each entry against the pin before patching (the Phase F rule): the
+historical findings above were recorded against earlier revisions, and upstream
+moves.
 
 ## Phase A — Build, dependencies and telemetry
 
@@ -163,10 +195,37 @@ Implement the existing connection boundary using only required MAVSDK APIs.
 Keep public safety/Vehicle semantics, CLI spelling, client errors and argument
 validation stable unless a reviewed correction changes an unsafe contract.
 
+Partial implementation (2026-09-11, local only): `MavsdkMavlinkConnection`
+implements `MavlinkConnection` against pin `9884f109`, issuing commands as raw
+COMMAND_LONG/COMMAND_INT (so the result-code and relative-altitude-frame
+contracts are preserved) and mapping telemetry into `VehicleState` with the same
+per-field validity flags and steady-clock timestamps, so the position-freshness
+gate still applies. The CLI selects it with `--transport udp|mavsdk` (default
+udp) and `--system-id`. `nomad_mavsdk_connection_tests` and
+`scripts/dev/mavsdk_connection_fixture.py` (driving the deterministic vehicle
+in `scripts/dev/mavsdk_peer.py`) cover accepted, denied, timeout,
+no-peer, stale-telemetry, COMMAND_INT frame and wrong-identity cases, plus
+per-command parity for mode, takeoff, goto, land, RTL, servo, relay,
+gimbal-config and user-command. In those cases the peer applies the state change
+each accepted command asks for and its initial state is observably different
+from the required result, so they assert the core's state verification rather
+than the acknowledgement alone. Live Copter SITL evidence (2026-09-11): with
+`NOMAD_TRANSPORT=mavsdk` the `core-sitl-command-flow` and `core-sitl-payload`
+scenarios pass against Copter 4.7.1 — GUIDED mode, 3D GPS fix, arm, takeoff to
+5 m, guided goto sent as COMMAND_INT, RTL, land and disarm, every step verified
+against reported state. This is not the end of Phase B: motor-test is unproven
+because `Vehicle::motor_test` sends command ID 139, which is not a `MAV_CMD`
+entry in the pinned dialect (`MAV_CMD_DO_MOTOR_TEST` is 209); that is recorded
+as C23 in the migration contradictions. Explicit vehicle-class identification
+and QuadPlane coverage are still open, and Phases C-E remain, so production
+continues to use the current codec.
+
 Cover arm/disarm, mode, takeoff, land/RTL, goto, servo, relay, motor-test,
-gimbal-config and user-command. Evaluate passthrough or a narrow fork extension
-for unsupported commands. Verify COMMAND_INT location semantics and altitude
-datum rather than assuming a generic goto call is equivalent.
+gimbal-config and user-command. Unsupported verbs now belong in the fork: add the
+missing semantic there with its own test rather than a new NOMAD adapter path, and
+retire the transitional raw-frame route for each verb as it lands. Verify
+COMMAND_INT location semantics and altitude datum rather than assuming a generic
+goto call is equivalent.
 
 Add explicit vehicle-class identification and reject incompatible operations.
 Task 1 requires Plane/QuadPlane coverage, not a renamed Copter test. Pin mode
@@ -227,21 +286,26 @@ adapter and SITL matrix passes for supported firmware; dependency notices and
 packaging verified. The old path cannot be a hidden runtime fallback. Competition
 release G8 cannot pass with MAVSDK limited to a smoke executable.
 
-## Phase F — Upstream work and maintenance
+## Phase F — ArduPilot semantics in the fork, and upstreaming
 
-Prepare focused upstream changes with reproductions for confirmed ArduPilot
-issues: GUIDED mode interpretation, battery units, location command semantics,
-and any stop/heartbeat/fence/QuadPlane fixes. Recheck each historical finding
-against pinned/upstream source before patching.
+Under the 2026-09-12 ownership split this is prerequisite work for Phases B-D,
+not post-cutover maintenance. The fork gains every ArduPilot semantic NOMAD needs,
+taken from the measured gap list above: mode setting, relative-altitude location
+commands, the output verbs, and the telemetry fields this document requires.
+Recheck each historical finding against pinned/upstream source before patching;
+GUIDED mode interpretation, battery units and location command semantics are the
+named candidates.
 
-Required local fixes must have tests and an accountable maintainer even if
+Required fork changes must have tests, a wire or SITL observation against the
+selected firmware, an accountable maintainer and a provenance update even while
 upstream review is pending. Each reviewable change should contain problem/
 behavior, requirements, exact pins, unit/integration evidence and residual
-limitations.
+limitations, and should be raised upstream when publication is authorized.
 
-debt: only required ArduPilot fork patches; revisit on each upstream release or
-quarterly maintenance review; then upstream/drop resolved patches and requalify
-the firmware/library matrix. Numeric patch/footprint ceilings require D08/D10;
+debt: the fork carries every ArduPilot semantic NOMAD needs, each patch with its
+own test and upstream change; revisit on each upstream MAVSDK release or quarterly
+maintenance review; then drop the patches upstream accepts and requalify the
+firmware/library matrix. Numeric patch/footprint ceilings require D08/D10;
 no unspecified threshold is treated as a passed gate.
 
 ## Risks to keep visible

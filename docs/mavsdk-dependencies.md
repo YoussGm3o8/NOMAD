@@ -44,8 +44,15 @@ The project MAVSDK fork is pinned at
 PicoSHA2 branch with an immutable commit, adds SHA-256 archive checks for
 liblzma and nlohmann JSON, handles deterministic archive extraction on both
 pre-3.24 and newer CMake, and removes MAVLink's build-time network package
-resolution in favor of its pinned nested pymavlink generator source. NOMAD pins
-that revision directly so a recursive clean checkout resolves the reviewed graph.
+resolution in favor of its pinned nested pymavlink generator source.NOMAD
+pins that revision directly so a recursive clean checkout resolves the reviewed
+graph.
+
+The fork's scope is not limited to dependencies: since 2026-09-12 it also owns
+ArduPilot command, mode and telemetry semantics, so the pinned revision changes
+only when that work lands with its own tests and a requalification — see
+[MAVSDK adoption](mavsdk-adoption.md). No ArduPilot source change exists in the
+fork yet; the three commits above are the entire difference from upstream `main`.
 
 Recursive hosted test run `34535620056` passed the optional MAVSDK build,
 provenance checker and deterministic expected/wrong/absent-peer fixture on both

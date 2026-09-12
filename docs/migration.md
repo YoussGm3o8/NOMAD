@@ -23,7 +23,7 @@ cutover inventory and gate evidence. [PRD](prd.md) owns requirements and decisio
 | ROS 2 | ros2/nomad_ros/src/node.cpp, translation.cpp; tests/ros | Owns a Vehicle, telemetry topics, VIO health/source gate and Trigger services; blocking callbacks, no selected estimator or navigation fusion |
 | Video | python/tools/simple_video_bridge.py, video_bridge_server.py; test_simple_video_bridge.py | ROS image to GStreamer/RTSP; control HTTP is loopback-only; no validated capture/CV/VIO product pipeline |
 | Profiles | scripts/profile.py; three product profile files; test_deployment_profiles.py | Canonical endpoint and stale-setting checks exist; optional workloads and hardware remain unqualified |
-| MAVSDK | CMake opt-in target; qualified telemetry smoke; deterministic peer fixture; provenance and CI gates | Published Phase A pin plus hosted Linux/Windows/ROS and live Copter SITL evidence exist; resource-budget approval remains; production still uses current codec |
+| MAVSDK | CMake opt-in target; Phase B MAVSDK `MavlinkConnection` (commands, telemetry, deterministic peer fixture); qualified telemetry smoke; provenance and CI gates | Phase B transport parity passes its peer fixture (accepted/denied/timeout ACKs, COMMAND_LONG/COMMAND_INT, wrong identity, command parity for mode/takeoff/goto/land/RTL/servo/relay/gimbal-config/user-command, unlatched GCS-heartbeat announcement, coalesced-datagram handling, live-to-stale link observation, body-frame velocity parity with the zero setpoint on disconnect, a wire-confirmed data-stream request, and the core fence upload/readback/enable-verification of Phase D) and the CLI can select it with `--transport mavsdk`; mission parity and production cutover (Phase E) remain open, and production still uses the current codec |
 | Competition | No dedicated implementation found in src/include/ROS/Python/plugin scans | Official telemetry, traffic model/deconfliction, herd survey, tracker/path and sampling workflows are open; events await contract |
 
 The working tree removes the Edge Core source/service/API and many camera/
@@ -58,6 +58,8 @@ for missing workflows.
 | C20 | Generic link-loss recovery and fence upload could be mistaken for competition termination compliance | Independent all-mode termination, C2-path loss, 100 m AGL and verified hard-polygon containment are G7 gates; internal soft inset remains unchanged per U-FEN-01 |
 | C21 | Profile README still claimed template credentials/endpoint defects; SITL README retained removed task; CONTRIBUTING described existing Edge Core | Local summaries reconciled to repaired source; no runtime code changed |
 | C22 | GeofenceConfig.MaxAltitudeAglMeters and NOMADBoundaryView default to 122 m; preset display checks 122 m; optional soft-from-hard inset uses a project buffer | CONOPS ceiling is 100 m AGL; qualify core-owned limits and truthful UI, reject old competition presets, preserve the plugin internal inset unchanged per U-FEN-01; no second official polygon required (GAP-05/G7) |
+| C23 | `Vehicle::motor_test` sent MAVLink command ID 139, which is not a `MAV_CMD` entry in the pinned dialect (`MAV_CMD_DO_MOTOR_TEST` is 209), so no autopilot handler matched it; `tests/output_command_test.cpp` pinned 139 and no SITL scenario exercised the verb, so nothing caught it. Now sends 209, with the parameter layout confirmed on live SITL (`MAV_RESULT_ACCEPTED`), the unit test repinned, `tests/test_command_ids.py` resolving every hand-typed command id against the pinned dialect definition, and a motor-test parity case in the MAVSDK fixture | Keep the dialect-id gate green when a verb is added or the pinned submodule moves; the acceptance is an acknowledgement plus status text, so obtain an independent observation of motor behaviour before relying on it for a flight clearance |
+| C24 | The `core-sitl-*` scenarios verify against a host-side SITL copy fed by MAVProxy, but ArduPilot streams position, attitude and extended status only after a GCS requests the group while the C++ core deliberately never requests streams (measured: a passive vehicle link delivered ~1 Hz heartbeats and no position/attitude until `REQUEST_DATA_STREAM`), so with the Python edge service removed nothing asked for the streams the copy is read for and it carried heartbeats only. The SITL stack now applies `docker/sitl-streams.parm` (SERIAL0 group rates) at startup via `--add-param-file`, and the host copy carries heartbeat at 1.00 Hz plus position/GPS/attitude/status at ~4 Hz | Keep the SITL copy self-sufficient for the streams the core consumes when the stack or its service inventory changes, and re-run the scenarios when either moves |
 
 ## Official CONOPS gap analysis
 
@@ -222,9 +224,10 @@ and the chosen QuadPlane firmware as support is introduced; existing Copter
 tests alone cannot qualify Task 1.
 
 Create focused, reviewable implementation changes with unit tests, integration
-evidence, requirement mapping and limitations. Upstream ArduPilot fixes need
-reproducible tests and separately tracked upstream changes when publication is
-authorized.
+evidence, requirement mapping and limitations. Under the 2026-09-12 ownership
+split, ArduPilot command, mode and telemetry semantics are delivered in the pinned
+fork and NOMAD does not grow new ArduPilot paths; fork patches need reproducible
+tests and separately tracked upstream changes when publication is authorized.
 
 Exit: phases A-E in [MAVSDK adoption](mavsdk-adoption.md) pass; default production
 runtime demonstrably uses MAVSDK; legacy deletion passes gates below; transitive
@@ -406,6 +409,223 @@ budgets. Repeatable current build-tree, executable, runtime memory, startup and
 CI-time measurements plus explicit budget approval remain the sole Phase A gate
 items. Production continues to use the legacy transport; command/telemetry parity
 and cutover belong to later G-M phases.
+
+### MAVSDK ArduPilot ownership - 2026-09-12
+
+Requirement: project MAVSDK decision / GAP-16 and G-M. Falsification: introduce a
+new ArduPilot-specific command path, mode interpretation or telemetry
+interpretation inside NOMAD that the pinned fork should own, and require review to
+reject it; or change a fork patch without a provenance and requalification update.
+
+Decision (user-confirmed): the pinned fork owns ArduPilot command, mode and
+telemetry semantics; NOMAD keeps safety policy, validation, authoritative
+verification, deadlines, audit and the client contract. This widens the scope
+recorded in [MAVSDK adoption](mavsdk-adoption.md), which had limited the fork to
+dependency patches and left the gaps in NOMAD's adapter. The measured gap list at
+`9884f109` sits in that document, and the raw-frame paths in
+`MavsdkMavlinkConnection` become transitional rather than the intended shape.
+
+Sequencing effect: the ArduPilot completeness work in fork Phase F is prerequisite
+work for Phases B-D, not post-cutover maintenance. Unknown work remains large —
+mode setting, relative-altitude location commands, the output verbs and the
+telemetry parity fields are all unstarted in the fork, and no fork change has been
+made beyond dependency pinning.
+
+Evidence effect: fork code becomes safety-relevant code outside this repository.
+Each patch needs its own test, an independent wire or SITL observation against the
+selected firmware, provenance pinning and an upstream change when publication is
+authorized. Existing NOMAD verification evidence is unaffected because outcome
+authority does not move.
+
+### MAVSDK Phase B transport parity - 2026-09-11
+
+Requirement: project MAVSDK decision / GAP-16 (command parity). Falsification:
+run `pixi run test-mavsdk-phase-b`; a denied ACK, a missing ACK or a wrong
+autopilot system ID must make the CLI or probe report failure (never success),
+and `goto` must leave the host as COMMAND_INT with the GLOBAL_RELATIVE_ALT_INT
+frame.
+
+The opt-in MAVSDK transport now implements `MavlinkConnection` against the
+reviewed pin `9884f109533f564bc6250e5471e6301d3a62f4a7` (the submodule was
+reconciled from a dirty newer checkout, and provenance passes again). Commands
+are issued as raw COMMAND_LONG/COMMAND_INT so NOMAD keeps its MAVLink
+result-code contract and relative-altitude command frame. The CLI gains
+`--transport udp|mavsdk` (default udp) and `--system-id`; the legacy codec is
+untouched and remains the default.
+
+Local evidence (2026-09-11, MSVC Release, Copter-oriented peer fixture):
+`nomad_mavsdk_connection_tests` passes its no-peer configuration and
+fail-closed cases; `scripts/dev/mavsdk_connection_fixture.py` passes status
+telemetry, accepted, denied, timeout, COMMAND_INT frame 6, COMMAND_LONG and
+wrong-identity cases, and per-command parity for mode, takeoff, goto, land, RTL,
+servo, relay, gimbal-config and user-command. The command cases drive the real
+CLI against a peer whose initial state is observably different from each
+command's required result, so a pass means the core's state verification
+observed the change rather than trusting the acknowledgement. motor-test parity
+was added once C23 was fixed, and asserts the corrected id on the wire.
+mission parity remains open, so this is transport parity evidence and not a
+closed Phase E gate; the live SITL runs below complete Phase B's stated exit for
+Copter without closing G-M.
+
+Link parity was added on 2026-09-12 by porting the legacy transport's link-level
+cases onto the same peer fixture:
+
+- `case_gcs_heartbeat_announces_to_a_silent_peer` points NOMAD at a bound,
+silent peer with `udpout:` and requires the announcements to arrive while no
+vehicle is latched: four GCS heartbeats (`MAV_TYPE_GCS`,
+`MAV_AUTOPILOT_INVALID`, component 190, system 245) in a 3 s discovery window
+that discovers nothing. This is the pre-latch announcement a heartbeat-gated
+relay needs, and the behavior `safety/gcs-heartbeat-cadence` protects. A
+`udpin:` link has no pre-latch destination at all, because MAVSDK only learns
+one from traffic it receives, so a relay setup must name the relay with
+`udpout:` — the successor to the legacy `NOMAD_RELAY_ADDRESS` override, which
+the MAVSDK transport does not implement separately.
+- `case_coalesced_telemetry_is_verified` drives the CLI against a peer that
+joins every telemetry frame and the command acknowledgement into one datagram,
+the shape MAVProxy and router links produce, and still requires the arm to be
+verified from reported state.
+- `case_link_loss_is_observed_as_stale` streams telemetry, stops it while the
+socket stays open, and requires `heartbeat_fresh` and `connected` to become
+false through the probe's `--staleness` mode. That is the link-observation half
+of SR-LNK-01.
+
+Phase C (velocity) landed in the same pass. `send_velocity` queues
+SET_POSITION_TARGET_LOCAL_NED through MAVSDK's passthrough using
+`queue_message()` (so MAVSDK owns sequence numbering) with the legacy codec's
+body-frame mask 0x07C7 and frame 9, refuses a non-finite rate, requires a live
+latched peer for a non-zero setpoint, and zeros the vehicle before tearing the
+link down. `case_velocity_setpoint_reaches_the_wire` proves all of that on the
+wire rather than from the transport's own report: the peer decodes the frames it
+received and the case requires the requested rates with that mask and frame and
+the right target system, requires that no non-finite frame ever left, and
+requires the all-zero setpoint after the stream when the transport disconnects.
+Both guards were confirmed load-bearing by removing them and watching the case
+fail, and the non-finite probe runs on a live link so a check that only held on
+a dead link could not pass for an enforced one.
+
+The core-level half of SR-LNK-03 followed in the same pass.
+`tests/mavsdk_zero_delivery_test.cpp` is the MAVSDK successor to the legacy
+`tests/zero_delivery_test.cpp`: it builds a real `Vehicle` on the MAVSDK
+transport, feeds VIO, arms and selects GUIDED, then streams the setpoint. The
+fixture drives five scenarios against the same peer — the watchdog stopping a
+dead command stream, `Vehicle::stop_velocity()`, vehicle destruction
+mid-stream, heartbeat loss, and VIO-feed loss — and each must report its own
+watchdog reason while the peer observes the all-zero setpoint as the newest
+setpoint on the wire. The binary also covers the no-link failure path under
+CTest without a peer, so a declined command cannot masquerade as a stopped
+stream. `zero_delivery_test.cpp` can therefore be deleted with the legacy codec
+at Phase E instead of being ported under pressure; until then both proofs exist
+and the SITL scenario `core-sitl-velocity-watchdog` covers the same behavior on
+the default transport.
+
+Phase D (fence/params) landed on 2026-09-12 and closes the last functional gap
+before the cutover decision. MAVSDK's `Geofence` and `Param` plugins implement
+the transport's fence and parameter surface, and the two plugins are enabled in
+the CMake MAVSDK options (`ENABLED_PLUGINS telemetry geofence param`) — without
+that the plugin headers compile but the library link fails. Single-vertex fence
+transfer (`send_fence_point`, `request_fence_point`, `wait_for_fence_point`)
+stays fail-closed, because MAVSDK moves whole polygons and the core only ever
+uploads a plan and then reads the autopilot's own copy back, so a partial
+transfer would have no caller to serve.
+
+`case_fence_upload_and_readback` and `case_disabled_fence_does_not_verify` are
+the SR-FEN-01 evidence on this transport. They drive a real `Vehicle` through
+`upload_fence` and `verify_fence_uploaded` with the probe's `--fence` mode
+against a peer that stores the fence mission items it is sent, so the polygon
+the peer decoded is the proof the upload happened and the readback cannot come
+from the transport's own bookkeeping. The enabled case requires the verified
+result plus the refusal paths — a boundary below the three-vertex minimum, a
+non-finite vertex, and an expected boundary the autopilot does not hold. The
+disabled case requires the upload to succeed while verification fails, because a
+plan on the autopilot is not an enforced fence: `verify_fence_uploaded` reads
+`FENCE_ENABLE` back and fails closed when it is not 1. Both guards were confirmed
+load-bearing by breaking them and watching the case fail — a fabricated
+`FENCE_ENABLE` made the disabled case verify wrongly, and a no-op upload left
+the peer holding no polygon.
+
+One fabricated success was found and fixed while reviewing the cutover surface.
+`MavsdkMavlinkConnection::request_data_stream` returned `is_connected()`, so it
+reported success for a `REQUEST_DATA_STREAM` it never put on the wire, while the
+legacy transport genuinely encodes and sends that frame. It now queues the
+frame through MAVSDK's passthrough with the legacy fields (stream id, requested
+rate, `start_stop = 1`) and requires a live latched peer, so a request on a dead
+link fails closed. `case_data_stream_request_reaches_the_wire` proves both
+halves: the peer decodes the frame and the case requires stream 1 at 4 Hz
+targeting the autopilot. The case was confirmed load-bearing by restoring the
+fabricated success, which reported `requested=1` while the peer decoded nothing.
+No production caller requests a stream today — the core reads the telemetry
+MAVSDK's own subscriptions deliver, and the SITL stack supplies stream rates
+through `docker/sitl-streams.parm` (C24) — so this is transport-honesty parity,
+not a behavior change on the current path.
+
+What Phase D does not yet claim: `read_param` applies MAVSDK's own request
+timeout instead of the caller's budget (the core's ten-second readback timeout is
+not stacked on it), and no parameter write path exists because the core only
+reads. Phase E (production cutover) remains open, and production still uses the
+current codec.
+
+One candidate fix was measured and withdrawn rather than shipped: setting
+`Mavsdk::Configuration::set_always_send_heartbeats(true)`, which MAVSDK
+documents as sending heartbeats without a connected system, changed nothing (four
+heartbeats either way), so the transport keeps MAVSDK's `GroundStation`
+default and the fixture pins the observable behavior instead.
+
+SITL exit criterion met later the same day, after fixing the feed rather than
+the transport. Two captures on passive vehicle links inside the container (no
+host relay involved) delivered ~1 Hz heartbeats and no position/attitude stream
+until a GCS sent `REQUEST_DATA_STREAM`, after which ATTITUDE/
+GLOBAL_POSITION_INT/GPS_RAW_INT/SYS_STATUS arrived at roughly 5 Hz. ArduPilot
+behaves that way by design and the core deliberately never requests streams, so
+with the Python edge service deleted nothing requested them for the host-side
+copy the scenarios read; see C24. `docker/sitl-streams.parm` now sets
+`SR0_POSITION`, `SR0_EXT_STAT`, `SR0_EXTRA1` and `SR0_EXTRA2` at SITL startup,
+and a 20 s capture of the host copy then delivered HEARTBEAT at 1.00 Hz with
+GLOBAL_POSITION_INT, GPS_RAW_INT, ATTITUDE and SYS_STATUS each at ~4 Hz.
+
+With that feed: the legacy baseline passes `pixi run core-sitl-status`,
+`core-sitl-command-flow` and `core-sitl-payload`, and the MAVSDK transport
+passes the command flow (GUIDED mode, 3D GPS fix, arm, takeoff to 5 m, guided
+goto sent as COMMAND_INT, RTL, land, disarm, every step verified against
+reported state) and the payload acceptance run with `NOMAD_TRANSPORT=mavsdk`.
+One earlier observation is withdrawn: this document first recorded the
+container-to-host UDP relay as losing roughly three quarters of datagrams. That
+reading came from the pre-fix stack, whose container had been running six days
+with a stale environment and was still initialising when captured; the
+recreated stack delivers heartbeats at exactly 1.00 Hz, so no relay loss is
+claimed and the cause of that earlier rate is left unexplained rather than
+guessed. Remaining Phase B gaps are unchanged: vehicle-class identification and
+QuadPlane coverage. Phases C, D and E stay open, and production still uses the
+current codec. C23 (the undefined motor-test command id) is fixed and carries
+live evidence: on 2026-09-12 against Copter 4.7.1, `nomad motor-test 1 0 0.1`
+sent `COMMAND_LONG cmd=139` and ArduPilot answered `result=3
+(MAV_RESULT_UNSUPPORTED)`, and after the id was corrected the same run sent
+`cmd=209` and received `result=0 (MAV_RESULT_ACCEPTED)` with the vehicle's own
+"starting motor test" / "finished motor test" status texts, which also confirms
+the parameter layout (`param2` is the throttle type). That acceptance is a
+command acknowledgement and a status text rather than an independent state
+measurement, so the verb stays out of the state-verified evidence set.
+
+Full legacy sweep on that feed (2026-09-12, Copter 4.7.1): `core-sitl-status`,
+`core-sitl-command-flow`, `core-sitl-mission`, `core-sitl-velocity-watchdog`,
+`core-sitl-geofence`, `core-sitl-payload`, `core-sitl-link-loss`,
+`core-sitl-link-recovery`, `core-sitl-zero-delivery`, `sitl-scenario` and
+`sitl-fence` pass. Two harness defects surfaced while running them, neither in
+the core. `sitl-fence` could never pass: it was the only scenario task without
+the development API key, and every step is an actuation command the CLI refuses
+without one (`audit command=... result=refused auth=none
+reason=missing_api_key`); the task now sets it like its siblings. Separately,
+the geofence scenario leaves its uploaded polygon fence active and ArduPilot
+then refuses guided targets outside that polygon (observed: the same reposition
+accepted with `FENCE_ENABLE=0`, rejected with the polygon loaded), so
+scenario ordering now matters and is recorded in `tests/sitl/README.md`.
+
+`core-sitl-gcs-heartbeat` passed once the transport kept announcing for the whole
+wait: its negative control requires at least two captured announcements, but the
+UDP transport announced once and then blocked in a receive until the deadline, so
+a closed gate yielded exactly one. The receive is now capped at a short slice
+(measured 2026-09-12: the closed gate captured three announcements at ~1.0 Hz
+before status failed closed, and the open gate relayed the stream). `SR-LNK-04`
+still asks for MAVSDK requalification of this requirement, which remains open.
 
 ### Boundary clarification - 2026-09-10
 

@@ -166,9 +166,13 @@ that connection. Existing routers can bridge them to UDP.
 
 User-confirmed direction: adopt the pinned MAVSDK fork as an early competition
 prerequisite after parity, with tests and a focused merge request, as detailed in
-[MAVSDK adoption](mavsdk-adoption.md). The opt-in Phase A smoke target does not
-replace the production transport. Preserve Vehicle, safety and outcome semantics
-through adoption. Do not trust library ACKs, Offboard mode, background resends,
+[MAVSDK adoption](mavsdk-adoption.md). The pinned fork owns ArduPilot command,
+mode and telemetry semantics; NOMAD keeps safety policy, validation, verification
+of outcomes, deadlines and the client contract. Owning a semantic never transfers
+outcome authority, and new ArduPilot command construction belongs in the fork
+rather than in a NOMAD adapter. The opt-in Phase A smoke target does not replace
+the production transport. Preserve Vehicle, safety and outcome semantics through
+adoption. Do not trust library ACKs, Offboard mode, background resends,
 GCS heartbeats, or default identity without tests against the selected firmware.
 Pin firmware/dialect/library combinations and requalify each changed combination.
 

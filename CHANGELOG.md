@@ -24,6 +24,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `test_client_contract.py` were deleted with it. (Deletion gate 1, 2026-09-05)
 
 ### Added
+- [core,mavsdk] Opt-in MAVSDK-backed `MavlinkConnection`
+  (`src/mavlink/mavsdk_mavlink_connection.cpp`, built only with
+  `NOMAD_ENABLE_MAVSDK=ON`): commands go out as raw COMMAND_LONG/COMMAND_INT to
+  preserve NOMAD's result-code and relative-altitude-frame contracts, telemetry
+  is mapped into `VehicleState` with the same per-field validity flags and
+  steady-clock timestamps. The CLI gains `--transport udp|mavsdk` (default
+  `udp`; the flag fails closed in a legacy build) and `--system-id`.
+- [test] `pixi run test-mavsdk-phase-b` builds the opt-in CLI and
+  `nomad_mavsdk_connection_tests`, then runs
+  `scripts/dev/mavsdk_connection_fixture.py` against a deterministic peer
+  (accepted, denied, timeout, no-peer, stale-telemetry, COMMAND_INT frame,
+  wrong-identity, and per-command mode/takeoff/goto/land/RTL/servo/relay/
+  gimbal-config/user-command cases where the peer applies the requested state
+  change so the core's verification is exercised). Live Copter SITL evidence:
+  with `NOMAD_TRANSPORT=mavsdk` the `core-sitl-command-flow` and
+  `core-sitl-payload` scenarios pass against Copter 4.7.1 (GUIDED mode, 3D GPS
+  fix, arm, takeoff, guided goto sent as COMMAND_INT, RTL, land, disarm, all
+  state-verified). Motor-test parity was added once C23 was fixed, so the
+  command matrix is complete; Phase B remains open on vehicle-class
+  identification and QuadPlane coverage.
 - [cli] New `nomad velocity` verb: streams velocity setpoints through the C++
   core (armed + GUIDED + fresh VIO gates) for a duration, then reports the
   watchdog stop (`velocity_active`, `watchdog_reason`).
@@ -373,6 +393,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   receive is now capped at a 20 ms slice — the same pattern `wait_for_state`
   already used — and the unit test drives one long 6 s wait as the CLI does, so
   the cadence is pinned inside a single blocking call.
+- [dev,sitl] [bug] The `sitl-fence` task could never pass. It was the only
+  scenario task without the development API key, and every step of the
+  containment scenario is an actuation command the CLI refuses without one
+  (`audit command=... result=refused auth=none reason=missing_api_key`), so
+  local runs and the `sitl.yml` step both failed at the first `mode` command.
+  The task now sets the key like the other `core-sitl-*` runners.
+- [sitl,infra] [bug] The dev SITL stack no longer starves the C++ core of
+  telemetry. ArduPilot streams position, attitude and extended status only
+  after a GCS requests the group, and the core deliberately never requests
+  streams, so with the Python edge service deleted the host-side copy the
+  `core-sitl-*` scenarios read carried little more than heartbeats — status,
+  takeoff and goto verification could not pass. `docker/sitl-streams.parm` now
+  sets `SR0_POSITION`, `SR0_EXT_STAT`, `SR0_EXTRA1` and `SR0_EXTRA2` at startup
+  via `--add-param-file`, and the host copy delivers heartbeat at 1.00 Hz with
+  position/GPS/attitude/status at ~4 Hz.
 - [core] [bug] The UDP MAVLink transport was single-consumer: with a
   concurrent telemetry pump (the ROS node's 10 Hz timer) a command
   acknowledgement could be consumed before `send_command`'s waiter saw it,

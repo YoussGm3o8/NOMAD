@@ -23,7 +23,10 @@ function(add_nomad_mavsdk)
     set(BUILD_WITHOUT_CURL ON)
     set(BUILD_SHARED_LIBS OFF)
     set(SUPERBUILD ON)
-    set(ENABLED_PLUGINS telemetry)
+    # mavlink_passthrough is not an ENABLED_PLUGINS option: MAVSDK's plugin
+    # CMakeLists always adds it, so it is available without listing it here.
+    # geofence and param are Phase D: fence upload/download and parameter read.
+    set(ENABLED_PLUGINS telemetry geofence param)
     set(MAVLINK_DIALECT ardupilotmega)
     add_subdirectory("${NOMAD_MAVSDK_SOURCE_DIR}/cpp" "${CMAKE_BINARY_DIR}/mavsdk")
 endfunction()
@@ -109,8 +112,23 @@ if(WIN32)
     target_link_libraries(nomad_core PRIVATE ws2_32)
 endif()
 
-add_executable(nomad src/main.cpp src/cli_commands.cpp)
+add_executable(nomad
+    src/main.cpp
+    src/cli_arguments.cpp
+    src/cli_command_table.cpp
+    src/cli_commands.cpp
+    src/cli_demos.cpp
+    src/cli_velocity.cpp
+)
 target_link_libraries(nomad PRIVATE nomad_core)
+# The CLI can select the MAVSDK transport only in a build that was configured
+# with NOMAD_ENABLE_MAVSDK=ON; otherwise a stub keeps `--transport mavsdk` an
+# explicit failure instead of an undefined symbol.
+if(NOMAD_ENABLE_MAVSDK)
+    target_link_libraries(nomad PRIVATE nomad_mavsdk_connection)
+else()
+    target_sources(nomad PRIVATE src/mavlink/mavsdk_transport_stub.cpp)
+endif()
 
 if(NOMAD_ENABLE_MAVSDK)
     # MAVSDK's embedded fmt target is directory-scoped and is not a reliable
@@ -124,10 +142,17 @@ if(NOMAD_ENABLE_MAVSDK)
         IMPORTED_LOCATION "${NOMAD_MAVSDK_FMT_LIBRARY}"
         INTERFACE_INCLUDE_DIRECTORIES "${NOMAD_MAVSDK_INSTALL_DIR}/include")
 
-    add_library(nomad_mavsdk_connection src/mavlink/mavsdk_connection.cpp)
+    add_library(nomad_mavsdk_connection
+        src/mavlink/mavsdk_connection.cpp
+        src/mavlink/mavsdk_fence.cpp
+        src/mavlink/mavsdk_mavlink_connection.cpp
+        src/mavlink/mavsdk_system.cpp)
     target_include_directories(nomad_mavsdk_connection PUBLIC include PRIVATE
         "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/core/include"
+        "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/geofence/include"
+        "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/param/include"
         "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/telemetry/include"
+        "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/mavlink_passthrough/include"
     )
     target_compile_features(nomad_mavsdk_connection PUBLIC cxx_std_20)
     add_dependencies(nomad_mavsdk_connection mavsdk)
@@ -199,4 +224,19 @@ if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_link_libraries(nomad_fence_config_tests PRIVATE nomad_core)
     target_compile_definitions(nomad_fence_config_tests PRIVATE NOMAD_TESTS)
     add_test(NAME nomad_fence_config_tests COMMAND nomad_fence_config_tests)
+
+    if(NOMAD_ENABLE_MAVSDK)
+        add_executable(nomad_mavsdk_connection_tests tests/mavsdk_connection_test.cpp)
+        target_link_libraries(nomad_mavsdk_connection_tests PRIVATE nomad_mavsdk_connection nomad_core)
+        target_compile_definitions(nomad_mavsdk_connection_tests PRIVATE NOMAD_TESTS)
+        add_test(NAME nomad_mavsdk_connection_tests COMMAND nomad_mavsdk_connection_tests)
+
+        # SR-LNK-03 on the MAVSDK transport. The peer-driven scenarios run from
+        # scripts/dev/mavsdk_connection_fixture.py; CTest covers the no-link
+        # failure paths, which need no peer.
+        add_executable(nomad_mavsdk_zero_delivery_tests tests/mavsdk_zero_delivery_test.cpp)
+        target_link_libraries(nomad_mavsdk_zero_delivery_tests PRIVATE nomad_mavsdk_connection nomad_core)
+        target_compile_definitions(nomad_mavsdk_zero_delivery_tests PRIVATE NOMAD_TESTS)
+        add_test(NAME nomad_mavsdk_zero_delivery_tests COMMAND nomad_mavsdk_zero_delivery_tests)
+    endif()
 endif()
