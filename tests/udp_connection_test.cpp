@@ -141,6 +141,9 @@ std::vector<std::uint8_t> coalesce(std::initializer_list<std::vector<std::uint8_
 }
 
 // Read every datagram currently pending on a socket without blocking.
+// FIONREAD is only a "data is pending" probe here: when several datagrams are
+// queued at once it need not equal the next datagram's size, so read every
+// datagram into a full-size buffer instead of trusting the exact value.
 std::vector<std::vector<std::uint8_t>> drain_pending(Socket peer) {
     std::vector<std::vector<std::uint8_t>> datagrams;
     for (;;) {
@@ -153,10 +156,11 @@ std::vector<std::vector<std::uint8_t>> drain_pending(Socket peer) {
         if (pending == 0) {
             return datagrams;
         }
-        std::vector<std::uint8_t> buffer(pending);
+        std::vector<std::uint8_t> buffer(2048);
         const auto count = recvfrom(peer, reinterpret_cast<char *>(buffer.data()), static_cast<int>(buffer.size()), 0,
                                     nullptr, nullptr);
-        CHECK(count == static_cast<int>(pending));
+        CHECK(count > 0);
+        buffer.resize(static_cast<std::size_t>(count));
         datagrams.push_back(std::move(buffer));
     }
 }
@@ -326,33 +330,16 @@ void test_unlatched_connection_sends_gcs_heartbeats() {
     const Socket peer = open_peer_on_port(peer_port);
 
     // The peer stays silent so the connection never latches it and must keep
-    // announcing to the configured endpoint. The heartbeats are only emitted
-    // while the caller is waiting on the link, so keep making short
-    // wait_for_heartbeat calls (as a real client would) and collect what
-    // arrives on the peer socket between waits.
-    std::vector<std::vector<std::uint8_t>> received;
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-    while (received.size() < 2 && std::chrono::steady_clock::now() < deadline) {
-        static_cast<void>(connection.wait_for_heartbeat(std::chrono::milliseconds(300)));
-        for (;;) {
-            u_long pending = 0;
-#ifdef _WIN32
-            CHECK(ioctlsocket(peer, FIONREAD, &pending) == 0);
-#else
-            CHECK(ioctl(peer, FIONREAD, &pending) == 0);
-#endif
-            if (pending == 0) {
-                break;
-            }
-            std::vector<std::uint8_t> buffer(pending);
-            const auto count = recvfrom(peer, reinterpret_cast<char *>(buffer.data()), static_cast<int>(buffer.size()),
-                                        0, nullptr, nullptr);
-            CHECK(count == static_cast<int>(pending));
-            received.emplace_back(std::move(buffer));
-        }
-    }
+    // announcing to the configured endpoint. One long wait, exactly as the CLI
+    // status verb performs it: a single blocking receive announces once and
+    // then stalls, so a heartbeat-gated relay never opens. Collect what arrives
+    // on the peer socket over that whole wait.
+    static_cast<void>(connection.wait_for_heartbeat(std::chrono::seconds(3)));
 
-    CHECK(received.size() >= 2);  // 1 Hz cadence maintained
+    const auto received = drain_pending(peer);
+
+    // At least one per second across the 3 s wait, and never a burst.
+    CHECK(received.size() >= 2 && received.size() <= 4);
     const auto message = nomad::mavlink::decode_message(received.front());
     CHECK(message.has_value());
     CHECK(message->message_id == 0);      // HEARTBEAT

@@ -32,6 +32,7 @@ namespace {
 constexpr std::uint8_t kSourceSystem = 255;
 constexpr std::uint8_t kSourceComponent = 190;
 constexpr auto kHeartbeatTimeout = std::chrono::seconds(3);
+constexpr auto kReceivePollInterval = std::chrono::milliseconds(20); // lets the 1 Hz GCS heartbeat keep flowing
 constexpr std::size_t kReceiveBufferSize = 2048;
 
 #ifdef _WIN32
@@ -340,9 +341,8 @@ std::optional<Heartbeat> UdpMavlinkConnection::wait_for_heartbeat(std::chrono::m
 }
 
 void UdpMavlinkConnection::send_gcs_heartbeat_locked() {
-    // Many MAVLink relays and routers only start streaming a UDP leg once the
-    // endpoint announces itself; a 1 Hz GCS heartbeat opens that gate without
-    // touching vehicle state (it is a status frame, not a command).
+    // Relays start streaming a UDP leg only once the endpoint announces itself;
+    // the 1 Hz GCS heartbeat opens that gate without touching vehicle state.
     const auto now = std::chrono::steady_clock::now();
     if (now - last_gcs_heartbeat_ < std::chrono::seconds(1)) {
         return;
@@ -384,7 +384,8 @@ std::optional<Heartbeat> UdpMavlinkConnection::wait_for_heartbeat_locked(std::ch
     while (std::chrono::steady_clock::now() < deadline) {
         send_gcs_heartbeat_locked();
         const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
-        const auto message = receive_message_locked((std::max)(std::chrono::milliseconds(1), remaining));
+        // Cap each wait so the announcement keeps flowing while the gate is closed.
+        const auto message = receive_message_locked((std::min)(remaining, kReceivePollInterval));
         if (!message.has_value()) {
             continue;
         }
@@ -437,10 +438,9 @@ std::optional<telemetry::VehicleState> UdpMavlinkConnection::wait_for_state(std:
                 return current_state;
             }
         }
-        // Nothing usable yet: wait briefly for the next datagram and retry.
-        // Announce ourselves as a GCS so heartbeat-gated relays start streaming.
+        // Nothing usable yet: announce, then wait a short slice and retry.
         send_gcs_heartbeat_locked();
-        wait_for_socket(implementation_->socket, std::chrono::milliseconds(20));
+        wait_for_socket(implementation_->socket, kReceivePollInterval);
     }
     return std::nullopt;
 }
