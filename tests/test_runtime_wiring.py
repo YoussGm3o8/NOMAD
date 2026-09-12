@@ -129,6 +129,25 @@ def test_compose_has_valid_sitl_only_and_ros_output_paths() -> None:
     assert "COPY edge_core/" not in dockerfile
 
 
+def test_compose_feeds_sitl_the_parameter_files_its_entrypoint_requires() -> None:
+    """ArduPilot streams position/attitude/status only once asked, and the core
+    never asks, so the stack must seed the SERIAL0 group rates itself."""
+    yaml = pytest.importorskip("yaml")
+    compose = yaml.safe_load((ROOT / "docker" / "docker-compose.dev.yml").read_text(encoding="utf-8"))
+    sitl = compose["services"]["sitl"]
+    entrypoint = (ROOT / "docker" / "sitl-entrypoint.sh").read_text(encoding="utf-8")
+
+    mounts = [mount.split(":")[1] for mount in sitl["volumes"]]
+    for variable in ("SITL_FENCE_DEFAULTS", "SITL_STREAM_DEFAULTS"):
+        assert f'--add-param-file="${{{variable}}}"' in entrypoint, f"entrypoint does not apply {variable}"
+        container_path = sitl["environment"][variable]
+        assert container_path in mounts, f"{container_path} is not mounted into the container"
+
+    stream_params = (ROOT / "docker" / "sitl-streams.parm").read_text(encoding="utf-8")
+    for parameter in ("SR0_POSITION", "SR0_EXT_STAT", "SR0_EXTRA1", "SR0_EXTRA2"):
+        assert re.search(rf"^{parameter} [1-9]", stream_params, re.MULTILINE), parameter
+
+
 @pytest.mark.parametrize(
     "task_name",
     [

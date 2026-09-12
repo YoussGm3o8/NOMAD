@@ -26,6 +26,25 @@ disarmed isolated simulator; never reuse a hardware endpoint for fault injection
 A configured passive observer link can feed Mission Planner without issuing
 commands.
 
+Scenarios share one vehicle, and two of them leave state that changes what a
+later one can do. `core_sitl_geofence.py` uploads a polygon fence that stays
+active even after it restores `FENCE_ENABLE`, and an active polygon makes
+ArduPilot refuse guided targets outside it (observed: the same reposition
+accepted with `FENCE_ENABLE=0` and rejected with the polygon loaded), so run
+guided-flight scenarios before the fence scenario or reset the vehicle between
+groups. `velocity_loop_closure.py` returns the vehicle with RTL without waiting
+for the landing disarm, so a scenario that requires a disarmed vehicle can start
+while it is still armed; wait for disarm or reset between those two.
+
+One unexplained failure is recorded here rather than explained away: on
+2026-09-12 `core-sitl-link-recovery` failed on a fresh stack immediately after
+`core-sitl-link-loss`, timing out on `wait_for_status({"armed": "true"})` while
+its own `arm` command had exited zero, so the CLI believed it had verified the
+armed state and the following 15 s of status reads did not agree. Re-running the
+same pair, and the same four-scenario order, passed twice afterwards, so the
+cause is not identified: treat a repeat as a real signal and capture the arm
+step's full output before retrying.
+
 Existing scenarios are Copter-oriented. Add separate QuadPlane takeoff,
 transition, cruise, return and VTOL landing evidence for Task 1. Required gate
 artifacts and historical/current distinctions live in
