@@ -24,64 +24,14 @@
 #include <thread>
 #include <vector>
 
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#endif
+#include "loopback_socket.hpp"
 
 namespace {
 
-#ifdef _WIN32
-using Socket = SOCKET;
-constexpr Socket kInvalidSocket = INVALID_SOCKET;
-#else
-using Socket = int;
-constexpr Socket kInvalidSocket = -1;
-#endif
-
-void close_socket(Socket socket) {
-#ifdef _WIN32
-    closesocket(socket);
-#else
-    close(socket);
-#endif
-}
-
-// A failing assert on Windows opens a dialog that blocks unattended CI runs,
-// so the checks below throw instead of calling assert().
-void check_impl(bool ok, const char *condition, int line) {
-    if (!ok) {
-        throw std::runtime_error(std::string("check failed at line ") + std::to_string(line) + ": " + condition);
-    }
-}
-
-#define CHECK(condition) check_impl(static_cast<bool>(condition), #condition, __LINE__)
-
-// Bind to an ephemeral loopback port, read the assigned number, and release
-// it. The connection under test then binds that port.
-std::uint16_t find_free_udp_port() {
-    const Socket probe = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    CHECK(probe != kInvalidSocket);
-    sockaddr_in address{};
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    address.sin_port = 0;
-    CHECK(bind(probe, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) == 0);
-    sockaddr_in bound{};
-#ifdef _WIN32
-    int length = sizeof(bound);
-#else
-    socklen_t length = sizeof(bound);
-#endif
-    CHECK(getsockname(probe, reinterpret_cast<sockaddr *>(&bound), &length) == 0);
-    const auto port = ntohs(bound.sin_port);
-    close_socket(probe);
-    return port;
-}
+using nomad::test::close_socket;
+using nomad::test::find_free_udp_port;
+using nomad::test::kInvalidSocket;
+using nomad::test::Socket;
 
 std::vector<std::uint8_t> vehicle_heartbeat_frame(std::uint8_t sequence) {
     std::vector<std::uint8_t> payload(9, 0);
@@ -448,29 +398,15 @@ void test_vehicle_destructor_delivers_zero_while_streaming() {
 
 } // namespace
 
-#ifdef _WIN32
-struct WinsockGuard {
-    WinsockGuard() {
-        WSADATA data{};
-        WSAStartup(MAKEWORD(2, 2), &data);
-    }
-    ~WinsockGuard() { WSACleanup(); }
-};
-#endif
-
 int main() {
 #ifdef _WIN32
-    WinsockGuard winsock;
+    nomad::test::WinsockGuard winsock;
 #endif
-    try {
+    return nomad::test::run_tests([] {
         test_watchdog_stop_delivers_zero_setpoint_on_the_wire();
         test_stop_velocity_and_disconnect_deliver_zero_on_the_wire();
         test_stale_heartbeat_delivers_zero_on_the_wire();
         test_vehicle_destructor_delivers_zero_while_streaming();
         std::fputs("[zero-delivery] all checks passed\n", stderr);
-    } catch (const std::exception &error) {
-        std::fprintf(stderr, "FAILED: %s\n", error.what());
-        return 1;
-    }
-    return 0;
+    });
 }

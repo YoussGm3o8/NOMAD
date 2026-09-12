@@ -64,6 +64,7 @@ add_library(nomad_core
     src/safety/velocity_config.cpp
     src/safety/vio_source.cpp
     src/safety/watchdog.cpp
+    src/util/parse.cpp
     src/vehicle/output.cpp
     src/vehicle/vehicle.cpp
 )

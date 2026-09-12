@@ -13,71 +13,19 @@
 #include <thread>
 #include <vector>
 
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <arpa/inet.h>
+#include "loopback_socket.hpp"
+
+#ifndef _WIN32
 #include <netdb.h>
 #include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <unistd.h>
 #endif
 
 namespace {
 
-#ifdef _WIN32
-using Socket = SOCKET;
-constexpr Socket kInvalidSocket = INVALID_SOCKET;
-#else
-using Socket = int;
-constexpr Socket kInvalidSocket = -1;
-#endif
-
-void close_socket(Socket socket) {
-#ifdef _WIN32
-    closesocket(socket);
-#else
-    close(socket);
-#endif
-}
-
-// A failing assert on Windows opens a dialog that blocks unattended CI runs,
-// so the checks below throw instead of calling assert().
-void check_impl(bool ok, const char *condition, int line) {
-    if (!ok) {
-        throw std::runtime_error(std::string("check failed at line ") + std::to_string(line) + ": " + condition);
-    }
-}
-
-#define CHECK(condition) check_impl(static_cast<bool>(condition), #condition, __LINE__)
-
-// Bind to an ephemeral loopback port, read the assigned number, and release
-// it. The connection under test then binds that port. The reuse race window
-// is negligible for a unit test.
-std::uint16_t find_free_udp_port() {
-#ifdef _WIN32
-    WSADATA data{};
-    CHECK(WSAStartup(MAKEWORD(2, 2), &data) == 0);
-#endif
-    const Socket probe = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    CHECK(probe != kInvalidSocket);
-    sockaddr_in address{};
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    address.sin_port = 0;
-    CHECK(bind(probe, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) == 0);
-    sockaddr_in bound{};
-#ifdef _WIN32
-    int length = sizeof(bound);
-#else
-    socklen_t length = sizeof(bound);
-#endif
-    CHECK(getsockname(probe, reinterpret_cast<sockaddr *>(&bound), &length) == 0);
-    const auto port = ntohs(bound.sin_port);
-    close_socket(probe);
-    return port;
-}
+using nomad::test::close_socket;
+using nomad::test::find_free_udp_port;
+using nomad::test::kInvalidSocket;
+using nomad::test::Socket;
 
 // A plain loopback UDP socket that plays the role of the remote MAVLink link.
 // Bind to an explicit port when the test needs the connection's pre-latch
@@ -411,16 +359,12 @@ void test_invalid_relay_address_fails_closed() {
 } // namespace
 
 int main() {
-    try {
+    return nomad::test::run_tests([] {
         test_coalesced_heartbeat_is_found();
         test_unlatched_connection_sends_gcs_heartbeats();
         test_relay_address_override_targets_prelatch_announcements();
         test_invalid_relay_address_fails_closed();
         test_coalesced_ack_is_received();
         test_slow_sampler_keeps_heartbeat_fresh();
-    } catch (const std::exception &error) {
-        std::fprintf(stderr, "FAILED: %s\n", error.what());
-        return 1;
-    }
-    return 0;
+    });
 }

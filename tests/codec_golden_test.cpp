@@ -4,6 +4,7 @@
 // what MAVLink and ArduPilot expect. Keep the frames in sync with any codec
 // change. Split from core_test.cpp to keep files under the 500-line policy.
 #include "nomad/mavlink/protocol.hpp"
+#include "test_harness.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -13,16 +14,6 @@
 #include <vector>
 
 namespace {
-
-// A failing assert on Windows opens a dialog that blocks unattended CI runs,
-// so main() runs the tests inside a try/catch and reports failures on stderr.
-void check_impl(bool ok, const char *condition, int line) {
-    if (!ok) {
-        throw std::runtime_error(std::string("check failed at line ") + std::to_string(line) + ": " + condition);
-    }
-}
-
-#define CHECK(condition) check_impl(static_cast<bool>(condition), #condition, __LINE__)
 
 void run_codec_golden_tests();
 
@@ -162,11 +153,5 @@ void run_codec_golden_tests() {
 } // namespace
 
 int main() {
-    try {
-        run_codec_golden_tests();
-    } catch (const std::exception &error) {
-        std::fprintf(stderr, "FAILED: %s\n", error.what());
-        return 1;
-    }
-    return 0;
+    return nomad::test::run_tests([] { run_codec_golden_tests(); });
 }

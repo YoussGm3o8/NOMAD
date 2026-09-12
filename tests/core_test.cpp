@@ -3,6 +3,7 @@
 #include "nomad/mavlink/protocol.hpp"
 #include "nomad/mission/executor.hpp"
 #include "nomad/vehicle/vehicle.hpp"
+#include "test_harness.hpp"
 
 #ifdef NDEBUG
 #undef NDEBUG
@@ -19,16 +20,6 @@
 #include <vector>
 
 namespace {
-
-// A failing assert on Windows opens a dialog that blocks unattended CI runs,
-// so main() runs the tests inside a try/catch and reports failures on stderr.
-void check_impl(bool ok, const char *condition, int line) {
-    if (!ok) {
-        throw std::runtime_error(std::string("check failed at line ") + std::to_string(line) + ": " + condition);
-    }
-}
-
-#define CHECK(condition) check_impl(static_cast<bool>(condition), #condition, __LINE__)
 
 void test_state_is_available_through_vehicle() {
     FakeConnection connection;
@@ -381,33 +372,29 @@ void test_gps_raw_int_updates_fix_type() {
 } // namespace
 
 int main() {
-    try {
-    test_state_is_available_through_vehicle();
-    test_state_requires_connection();
-    test_arm_sends_arm_command();
-    test_takeoff_rejects_invalid_altitude();
-    test_mode_and_takeoff_are_verified();
-    test_land_and_rtl_are_verified();
-    test_disarm_is_verified();
-    test_goto_location_validates_and_verifies();
-    test_goto_location_rejects_invalid_coordinates();
-    test_command_rejects_failed_acknowledgement();
-    test_command_requires_connection();
-    test_mission_executor_runs_steps_and_reports_progress();
-    test_mission_executor_rejects_unknown_action();
-    test_command_frame_has_expected_header();
-    test_velocity_frame_uses_expected_wire_layout();
-    test_heartbeat_filter_accepts_vehicle_only();
-    test_v2_heartbeat_updates_state();
-    test_global_position_updates_state();
-    test_vfr_hud_updates_groundspeed_and_climb_rate();
-    test_bad_crc_is_rejected();
-    test_coalesced_datagram_decodes_every_frame();
-    test_gps_raw_int_updates_fix_type();
-    test_trimmed_v2_payload_is_zero_padded();
-    } catch (const std::exception &error) {
-        std::fprintf(stderr, "FAILED: %s\n", error.what());
-        return 1;
-    }
-    return 0;
+    return nomad::test::run_tests([] {
+        test_state_is_available_through_vehicle();
+        test_state_requires_connection();
+        test_arm_sends_arm_command();
+        test_takeoff_rejects_invalid_altitude();
+        test_mode_and_takeoff_are_verified();
+        test_land_and_rtl_are_verified();
+        test_disarm_is_verified();
+        test_goto_location_validates_and_verifies();
+        test_goto_location_rejects_invalid_coordinates();
+        test_command_rejects_failed_acknowledgement();
+        test_command_requires_connection();
+        test_mission_executor_runs_steps_and_reports_progress();
+        test_mission_executor_rejects_unknown_action();
+        test_command_frame_has_expected_header();
+        test_velocity_frame_uses_expected_wire_layout();
+        test_heartbeat_filter_accepts_vehicle_only();
+        test_v2_heartbeat_updates_state();
+        test_global_position_updates_state();
+        test_vfr_hud_updates_groundspeed_and_climb_rate();
+        test_bad_crc_is_rejected();
+        test_coalesced_datagram_decodes_every_frame();
+        test_gps_raw_int_updates_fix_type();
+        test_trimmed_v2_payload_is_zero_padded();
+    });
 }

@@ -4,20 +4,13 @@
 #include "fake_connection.hpp"
 #include "nomad/safety/velocity_config.hpp"
 #include "nomad/vehicle/vehicle.hpp"
+#include "test_harness.hpp"
 
 #include <cstdio>
 #include <stdexcept>
 #include <string>
 
 namespace {
-
-void check_impl(bool ok, const char *condition, int line) {
-    if (!ok) {
-        throw std::runtime_error(std::string("check failed at line ") + std::to_string(line) + ": " + condition);
-    }
-}
-
-#define CHECK(condition) check_impl(static_cast<bool>(condition), #condition, __LINE__)
 
 nomad::safety::FlightConditions healthy_conditions() {
     return {true, true, true, nomad::safety::kGuidedMode, true, true, 1.0F, 0.3F};
@@ -89,15 +82,11 @@ void test_malformed_limits_fail_closed() {
 }  // namespace
 
 int main() {
-    try {
+    return nomad::test::run_tests([] {
         test_unset_limits_use_reviewed_defaults();
         test_configured_limits_are_loaded();
         test_vehicle_uses_configured_velocity_limits();
         test_typed_malformed_limits_fail_closed();
         test_malformed_limits_fail_closed();
-    } catch (const std::exception &error) {
-        std::fprintf(stderr, "FAILED: %s\n", error.what());
-        return 1;
-    }
-    return 0;
+    });
 }
