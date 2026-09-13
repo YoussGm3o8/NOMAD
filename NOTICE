@@ -8,12 +8,12 @@ and contributors (https://github.com/McGill-Aerial-Design/NOMAD).
 Third-party components
 ----------------------
 
-MAVSDK (optional C++ MAVLink implementation)
+MAVSDK (C++ MAVLink implementation used as NOMAD's transport)
 Copyright (c) 2016-2023, MAVSDK Development Team
 BSD 3-Clause License. The complete license is in
 licenses/mavsdk-phase-a/MAVSDK-BSD-3-Clause.txt.
 
-The optional MAVSDK Phase A build also fetches Asio (Boost-1.0), fmt (MIT),
+The MAVSDK build also fetches Asio (Boost-1.0), fmt (MIT),
 libevents (BSD-3-Clause), libmavlike (BSD-3-Clause), MAVLink ((L)GPL-3.0
 generator with an MIT output exception), nlohmann JSON (MIT), PicoSHA2 (MIT),
 tinyxml2 (Zlib), and liblzma from XZ Utils (public domain for liblzma; the XZ

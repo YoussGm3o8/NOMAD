@@ -25,7 +25,6 @@ def run_build(build_dir: Path = DEFAULT_BUILD_DIR) -> dict[str, float]:
         "-B",
         str(build_dir),
         "-DCMAKE_BUILD_TYPE=Release",
-        "-DNOMAD_ENABLE_MAVSDK=ON",
         "-DBUILD_TESTING=OFF",
     ]
     build = [

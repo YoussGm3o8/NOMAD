@@ -1,7 +1,8 @@
 # Examples
 
-mavsdk_phase_a_smoke.cpp demonstrates optional MAVSDK connect/status only.
-It does not replace the production transport or qualify vehicle commands.
+mavsdk_phase_a_smoke.cpp demonstrates MAVSDK connect/status only. It is the
+qualification consumer of the transport the core uses; it does not qualify
+vehicle commands by itself.
 
 Use the core CLI and scripts/dev/core_sitl_* runners for current command-flow
 examples after isolated SITL startup is qualified. See

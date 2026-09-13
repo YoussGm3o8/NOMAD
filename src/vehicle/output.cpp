@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "nomad/vehicle/vehicle.hpp"
 
+#include "command_ids.hpp"
 #include "nomad/safety/payload.hpp"
 
 #include <algorithm>
@@ -9,16 +10,6 @@
 
 namespace nomad::vehicle {
 namespace {
-
-constexpr std::uint16_t kSetServoCommand = 183;
-constexpr std::uint16_t kSetRelayCommand = 181;
-constexpr std::uint16_t kMotorTestCommand = 139;
-constexpr std::uint16_t kMountConfigureCommand = 204;
-constexpr std::uint16_t kUserCommand = 31010;
-
-mavlink::Command make_command(std::uint16_t id, std::array<float, 7> parameters = {}) {
-    return mavlink::Command{id, parameters};
-}
 
 CommandResult verified(const CommandResult &result, const char *message) {
     return result.success ? CommandResult{true, message} : result;
@@ -39,8 +30,8 @@ CommandResult Vehicle::set_servo(int channel, int pwm_microseconds) {
 }
 
 CommandResult Vehicle::set_relay(int relay_number, bool on) {
-    if (relay_number < 0 || relay_number > 15) {
-        return {false, "relay number must be between zero and fifteen"};
+    if (!relay_number_is_valid(relay_number)) {
+        return {false, kRelayRangeMessage};
     }
     const auto result = send_command(make_command(kSetRelayCommand,
                                                   {static_cast<float>(relay_number), on ? 1.0F : 0.0F, 0, 0, 0, 0, 0}),

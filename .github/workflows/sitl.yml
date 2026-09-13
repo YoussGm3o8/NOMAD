@@ -110,8 +110,8 @@ jobs:
     env:
       NOMAD_CORE_SITL_PORT: "14570"
     steps:
-      # The C++ codec compiles against headers generated from the pinned
-      # third_party/ardupilot-mavlink submodule (see scripts/dev/generate_mavlink.py).
+      # The transport is the pinned third_party/MAVSDK submodule, so the checkout
+      # must be recursive for the core to configure at all.
       - uses: actions/checkout@v5
         with:
           submodules: recursive
@@ -169,11 +169,6 @@ jobs:
       - name: C++ mission executor scenario (Phase 5)
         run: pixi run core-sitl-mission
 
-      # Runs while the vehicle is still disarmed (the mission executor waits for
-      # disarm) because the geofence scenario requires a disarmed start.
-      - name: C++ geofence upload/readback scenario (H-05, SR-FEN-01)
-        run: pixi run core-sitl-geofence
-
       - name: C++ velocity watchdog scenario (H-01..H-04)
         run: pixi run core-sitl-velocity-watchdog
 
@@ -204,6 +199,12 @@ jobs:
 
       - name: Geofence containment scenario (H-05, SR-FEN-02; C++ CLI drives the vehicle)
         run: pixi run sitl-fence
+
+      # Upload/readback leaves an ArduPilot polygon active. Keep it after the
+      # guided-flight containment check so that persisted autopilot state cannot
+      # reject the containment scenario's in-fence target.
+      - name: C++ geofence upload/readback scenario (H-05, SR-FEN-01)
+        run: pixi run core-sitl-geofence
 
       - name: SITL logs on failure
         if: failure()

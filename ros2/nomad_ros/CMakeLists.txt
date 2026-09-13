@@ -42,9 +42,12 @@ add_executable(nomad_vehicle_node
   src/node.cpp
 )
 target_include_directories(nomad_vehicle_node PRIVATE include)
+# nomad_mavsdk_connection is the core's transport: the adapter builds a
+# connection through the factory in nomad/mavlink/mavsdk_transport.hpp.
 target_link_libraries(nomad_vehicle_node
   nomad_ros_translation
   nomad_core
+  nomad_mavsdk_connection
 )
 ament_target_dependencies(nomad_vehicle_node
   rclcpp

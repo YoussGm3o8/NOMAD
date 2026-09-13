@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
+import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -16,6 +18,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import core_sitl_command_flow as command_flow  # noqa: E402
 import core_sitl_containment as containment  # noqa: E402
+import core_sitl_gcs_heartbeat as gcs_heartbeat  # noqa: E402
 import core_sitl_zero_delivery as zero_delivery  # noqa: E402
 
 
@@ -82,6 +85,83 @@ def test_zero_delivery_observer_decodes_nonzero_and_zero_datagrams() -> None:
     assert len(points) == 2
     assert zero_delivery.is_nonzero(points[0])
     assert zero_delivery.is_zero(points[1])
+
+
+def make_gcs_heartbeat_frame() -> bytes:
+    frame = bytearray(21)
+    frame[0] = 0xFD
+    frame[5] = gcs_heartbeat.GCS_SYSTEM_ID
+    frame[6] = 190
+    frame[7] = 0
+    frame[14] = 6
+    frame[15] = 8
+    return bytes(frame)
+
+
+def test_gcs_heartbeat_cadence_uses_intervals_not_short_command_duration() -> None:
+    frame = make_gcs_heartbeat_frame()
+    announcements = [(10.0, frame), (11.0, frame), (12.0, frame), (13.0, frame)]
+
+    gcs_heartbeat.verify_announcements(announcements, require_cadence=True)
+
+    assert gcs_heartbeat.measured_rate(announcements) == pytest.approx(1.0)
+
+
+def test_gcs_heartbeat_cadence_rejects_fast_or_single_samples() -> None:
+    frame = make_gcs_heartbeat_frame()
+    with pytest.raises(gcs_heartbeat.ScenarioError, match="fewer than 4"):
+        gcs_heartbeat.verify_announcements([(10.0, frame), (11.0, frame), (12.0, frame)], require_cadence=True)
+    with pytest.raises(gcs_heartbeat.ScenarioError, match="faster than the 1 Hz tolerance"):
+        gcs_heartbeat.verify_announcements(
+            [(10.0, frame), (10.5, frame), (11.5, frame), (12.5, frame)], require_cadence=True
+        )
+    with pytest.raises(gcs_heartbeat.ScenarioError, match="slower than the 1 Hz tolerance"):
+        gcs_heartbeat.verify_announcements(
+            [(10.0, frame), (11.0, frame), (12.0, frame), (13.4, frame)], require_cadence=True
+        )
+
+
+def test_gcs_heartbeat_cadence_accepts_tolerance_boundaries() -> None:
+    frame = make_gcs_heartbeat_frame()
+    announcements = [(10.0, frame), (10.9, frame), (12.2, frame), (13.5, frame)]
+
+    gcs_heartbeat.verify_announcements(announcements, require_cadence=True)
+
+
+def test_gcs_heartbeat_cadence_rejects_non_finite_intervals() -> None:
+    frame = make_gcs_heartbeat_frame()
+
+    with pytest.raises(gcs_heartbeat.ScenarioError, match="non-finite"):
+        gcs_heartbeat.verify_announcements(
+            [(10.0, frame), (11.0, frame), (float("nan"), frame), (13.0, frame)], require_cadence=True
+        )
+
+
+def test_gcs_heartbeat_relay_learns_mavsdk_udpout_source() -> None:
+    relay_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    relay_socket.bind(("127.0.0.1", 0))
+    relay_port = relay_socket.getsockname()[1]
+    relay_socket.close()
+    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sender.bind(("127.0.0.1", 0))
+    sender.settimeout(1.0)
+    upstream = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    relay = gcs_heartbeat.GatedRelay(relay_port, gate_opens=True)
+    try:
+        sender.sendto(make_gcs_heartbeat_frame(), ("127.0.0.1", relay_port))
+        deadline = time.monotonic() + 1.0
+        while not relay.announcements and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert relay.announcements
+
+        payload = b"vehicle telemetry"
+        upstream.sendto(payload, ("127.0.0.1", relay_port))
+        received, _ = sender.recvfrom(1024)
+        assert received == payload
+    finally:
+        relay.close()
+        upstream.close()
+        sender.close()
 
 
 def test_containment_converts_latitude_and_longitude_to_local_metres() -> None:

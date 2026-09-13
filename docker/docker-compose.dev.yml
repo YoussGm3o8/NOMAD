@@ -38,6 +38,7 @@ services:
     volumes:
       - ./sitl-entrypoint.sh:/nomad/sitl-entrypoint.sh:ro
       - ./sitl-fence.parm:/nomad/sitl-fence.parm:ro
+      - ./sitl-streams.parm:/nomad/sitl-streams.parm:ro
     # sim_vehicle.py launches MAVProxy on a console; without a TTY it exits
     # immediately and the container restart-loops. Allocate a pseudo-TTY.
     tty: true
@@ -50,6 +51,11 @@ services:
       # mission-fence upload/readback acceptance scenario runs against an
       # enabled fence. Applied by docker/sitl-entrypoint.sh via --add-param-file.
       SITL_FENCE_DEFAULTS: "/nomad/sitl-fence.parm"
+      # ArduPilot streams position, attitude and extended status only after a GCS
+      # requests the group, and the C++ core deliberately does not request
+      # streams, so the vehicle is configured to emit them on SERIAL0 - the link
+      # MAVProxy forwards to every host-side copy. See docker/sitl-streams.parm.
+      SITL_STREAM_DEFAULTS: "/nomad/sitl-streams.parm"
       INSTANCE: "0"
       LAT: "42.3898"
       LON: "-71.1476"

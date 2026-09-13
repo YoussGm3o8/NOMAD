@@ -3,6 +3,8 @@
 
 #include "nomad/mavlink/mavsdk_connection.hpp"
 
+#include "mavsdk_system.hpp"
+
 #include <mavsdk/mavsdk.hpp>
 #include <plugins/telemetry/telemetry.hpp>
 
@@ -11,7 +13,6 @@
 #include <optional>
 #include <thread>
 #include <utility>
-#include <vector>
 
 namespace nomad::mavlink {
 namespace {
@@ -32,16 +33,6 @@ struct SubscriptionHandles {
     mavsdk::Telemetry::GpsInfoHandle gps;
     mavsdk::Telemetry::FlightModeHandle mode;
 };
-
-std::vector<std::shared_ptr<mavsdk::System>> connected_autopilots(const mavsdk::Mavsdk &sdk) {
-    std::vector<std::shared_ptr<mavsdk::System>> systems;
-    for (const auto &system : sdk.systems()) {
-        if (system->is_connected() && system->has_autopilot()) {
-            systems.push_back(system);
-        }
-    }
-    return systems;
-}
 
 MavsdkConnectionError selection_error(mavsdk_phase_a::SystemSelection selection) {
     if (selection == mavsdk_phase_a::SystemSelection::WrongPeer) {
@@ -128,19 +119,15 @@ struct MavsdkConnection::Implementation {
     }
 
     bool select_system() {
-        const auto systems = connected_autopilots(sdk);
-        std::vector<std::uint8_t> ids;
-        for (const auto &candidate : systems) {
-            ids.push_back(candidate->get_system_id());
-        }
-        const auto selection = mavsdk_phase_a::classify_system_ids(ids, options.expected_system_id);
-        if (selection != mavsdk_phase_a::SystemSelection::Selected) {
+        mavsdk_phase_a::SystemSelection selection{};
+        const auto candidate = mavsdk_system::select_expected_autopilot(sdk, options.expected_system_id, selection);
+        if (candidate == nullptr) {
             if (selection != mavsdk_phase_a::SystemSelection::NoAutopilot) {
                 error = selection_error(selection);
             }
             return false;
         }
-        system = systems.front();
+        system = candidate;
         subscribe();
         return true;
     }
@@ -207,10 +194,10 @@ MavsdkStatusSnapshot MavsdkConnection::get_status() const {
     const auto &observation = implementation_->observation;
     MavsdkStatusSnapshot snapshot{observation.values, observation.position_updates, 0, 0};
     if (observation.position_updates > 0) {
-        snapshot.observation_ms =
-            std::chrono::duration_cast<std::chrono::milliseconds>(observation.last_position - observation.first_position)
-                .count();
-        snapshot.age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - observation.last_position).count();
+        const auto window = observation.last_position - observation.first_position;
+        snapshot.observation_ms = std::chrono::duration_cast<std::chrono::milliseconds>(window).count();
+        const auto age = now - observation.last_position;
+        snapshot.age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(age).count();
     }
     return snapshot;
 }

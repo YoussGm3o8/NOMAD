@@ -27,11 +27,18 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
         return connected;
     }
 
+    nomad::mavlink::ConnectFailure get_connect_failure() const override {
+        return nomad::mavlink::ConnectFailure::None;
+    }
+
     std::optional<nomad::mavlink::Heartbeat> wait_for_heartbeat(std::chrono::milliseconds) override {
         return nomad::mavlink::Heartbeat{1, 1, 0, 2, 3, 0};
     }
 
     std::optional<nomad::telemetry::VehicleState> wait_for_state(std::chrono::milliseconds) override {
+        if (auto_stamp_fresh_fields) {
+            stamp_fresh_fields();
+        }
         return get_state();
     }
 
@@ -120,6 +127,10 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     }
 
     bool connected{false};
+    // Most tests model a live telemetry feed, so polling refreshes the sample
+    // timestamps by default. Tests for stale-feed behavior clear this flag and
+    // set the relevant *_updated_at by hand.
+    bool auto_stamp_fresh_fields{true};
     std::optional<nomad::telemetry::VehicleState> state{
         nomad::telemetry::VehicleState{true, true, false, 1, 1, 4},
     };
@@ -157,6 +168,23 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
 
   private:
     mutable std::mutex state_mutex;
+
+    void stamp_fresh_fields() {
+        std::lock_guard lock(state_mutex);
+        const auto now = std::chrono::steady_clock::now();
+        if (state->position_valid) {
+            state->position_updated_at = now;
+        }
+        if (state->battery_valid) {
+            state->battery_updated_at = now;
+        }
+        if (state->gps_valid) {
+            state->gps_updated_at = now;
+        }
+        if (state->attitude_valid) {
+            state->attitude_updated_at = now;
+        }
+    }
 
     bool take_fence_send_result() {
         const bool result = fence_send_results.front();

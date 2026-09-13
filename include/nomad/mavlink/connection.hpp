@@ -68,6 +68,15 @@ struct ParamValue {
     float value{};
 };
 
+// Which half of connect() failed. Opening the endpoint and finding an expected
+// autopilot are different operator problems, so the caller reports the client
+// diagnostic that matches instead of collapsing both into one message.
+enum class ConnectFailure {
+    None,
+    LinkUnavailable, // the endpoint could not be opened as configured
+    NoAutopilot,     // the link opened but no expected autopilot answered
+};
+
 class MavlinkConnection {
   public:
     virtual ~MavlinkConnection() = default;
@@ -75,6 +84,9 @@ class MavlinkConnection {
     virtual bool connect() = 0;
     virtual void disconnect() = 0;
     virtual bool is_connected() const = 0;
+    // Reads back why the most recent connect() returned false; None once a
+    // connect() has succeeded.
+    virtual ConnectFailure get_connect_failure() const = 0;
     virtual std::optional<Heartbeat> wait_for_heartbeat(std::chrono::milliseconds timeout) = 0;
     virtual std::optional<telemetry::VehicleState> wait_for_state(std::chrono::milliseconds timeout) = 0;
     virtual telemetry::VehicleState get_state() const = 0;

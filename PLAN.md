@@ -62,9 +62,11 @@ own safety evidence inside G4/G7, even if advisory traffic or CV already works.
 User decision (2026-09-08): MAVSDK must be used during the competition and is an
 early prerequisite, including unit tests, integration evidence and focused,
 reviewable implementation changes. Complete G-M after baseline repair and before
-dependent integrated command work. Phase A is partial and the current codec still
-runs; switch only after parity. Isolated server/CV prototypes may proceed
-independently. Never run two production command owners as an adoption experiment.
+dependent integrated command work. Phases A-E have landed: MAVSDK is the only
+transport and the hand-written codec is deleted, so G-M now covers the firmware
+matrix and release evidence rather than the adoption itself. Isolated server/CV
+prototypes may proceed independently. Never run two production command owners as
+an adoption experiment.
 
 Task 1 targets a lightweight VTOL with groundstation_gpu, ground CV/video and
 Pi Zero LTE backup. Task 2 targets a heavier quad below 15 kg with optional onboard
@@ -96,9 +98,9 @@ The planning/migration baseline is recorded in commit `d31b0aa`. Focused
 implementation follows the single active item in TODO. Runtime/profile/setup
 repairs and MAVSDK Phase A evidence are recorded in migration. The CONOPS
 reconciliation was prepared from clean main at `fab9f46`; subsequent mainline
-commits added optional MAVSDK Phase A hardening and qualification without changing
-the production transport. Preserve unrelated work and follow AGENTS for
-publication and deployment authorization.
+commits added MAVSDK hardening, qualification and finally the Phase E cutover,
+which replaced the production transport outright. Preserve unrelated work and
+follow AGENTS for publication and deployment authorization.
 
 Gate closure requires a recorded artifact/configuration and independent observed
 outcome. A source file, a configured CI job, a mock response, or an old pass count

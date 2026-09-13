@@ -105,41 +105,41 @@ def _validated_profile_env(name: str, env: dict[str, str]) -> dict[str, str]:
     return normalized
 
 
-def _key_settings(path: Path) -> dict[str, str]:
-    keys = [
-        "NOMAD_PROFILE",
-        "NOMAD_PROFILE_DESCRIPTION",
-        "NOMAD_SIM_MODE",
-        "NOMAD_ENABLE_SERVOS",
-    ]
-    result: dict[str, str] = {}
-    if not path.exists():
-        return result
-    for line in path.read_text(encoding="utf-8").splitlines():
+_KEY_SETTINGS = (
+    "NOMAD_PROFILE",
+    "NOMAD_PROFILE_DESCRIPTION",
+    "NOMAD_SIM_MODE",
+    "NOMAD_ENABLE_SERVOS",
+)
+
+
+def read_env_text(text: str) -> dict[str, str]:
+    """Return KEY=VALUE pairs from env-file text, skipping blanks and comments."""
+    env: dict[str, str] = {}
+    for line in text.splitlines():
         stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
             continue
-        if "=" not in stripped:
-            continue
-        k, _, v = stripped.partition("=")
-        k = k.strip()
-        if k in keys:
-            result[k] = v.strip().strip('"')
-    return result
+        key, _, value = stripped.partition("=")
+        env[key.strip()] = value.strip().strip('"')
+    return env
+
+
+def read_env_file(path: Path) -> dict[str, str]:
+    """Return KEY=VALUE pairs from an env file, or an empty map when absent."""
+    if not path.exists():
+        return {}
+    return read_env_text(path.read_text(encoding="utf-8"))
+
+
+def _key_settings(path: Path) -> dict[str, str]:
+    settings = read_env_file(path)
+    return {key: settings[key] for key in _KEY_SETTINGS if key in settings}
 
 
 def _parse_env(path: Path) -> dict[str, str]:
     """Return all KEY=VALUE pairs from an env file."""
-    env: dict[str, str] = {}
-    if not path.exists():
-        return env
-    for line in path.read_text(encoding="utf-8").splitlines():
-        s = line.strip()
-        if not s or s.startswith("#") or "=" not in s:
-            continue
-        k, _, v = s.partition("=")
-        env[k.strip()] = v.strip().strip('"')
-    return env
+    return read_env_file(path)
 
 
 def _mp_config_path() -> Path | None:
@@ -299,12 +299,13 @@ def _format_env_value(value: str) -> str:
 
 
 def _format_saved_profile(name: str, profile_env: dict[str, str], template: Path) -> str:
-    allowed = set(_parse_env(template))
+    template_text = template.read_text(encoding="utf-8")
+    allowed = set(read_env_text(template_text))
     values = {key: value for key, value in profile_env.items() if key in allowed and key not in _UNSAVED_SECRET_KEYS}
     values["NOMAD_PROFILE"] = name
 
     result: list[str] = []
-    for line in template.read_text(encoding="utf-8").splitlines():
+    for line in template_text.splitlines():
         key = line.partition("=")[0].strip()
         if key in values and not line.lstrip().startswith("#"):
             result.append(f"{key}={_format_env_value(values[key])}")

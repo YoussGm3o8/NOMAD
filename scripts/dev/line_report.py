@@ -28,6 +28,12 @@ SOURCE_EXTENSIONS = {
     ".sh",
 }
 
+# Ruff enforces the 120-column limit for Python (E501), but nothing checked
+# C/C++ until now. ``.clang-format`` carries the same ColumnLimit, yet clang-format
+# is not a pinned dependency and would reformat as well as wrap. Reusing this
+# reporter keeps the rule on the existing toolchain and needs no new package.
+CPP_EXTENSIONS = {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp"}
+
 EXCLUDED_DIRS = {
     ".claude",
     ".freebuff",
@@ -98,9 +104,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-line-length", type=int, default=120)
     parser.add_argument("--baseline-file", type=Path, default=Path("config/file_size_baseline.txt"))
     parser.add_argument("--baseline-function-file", type=Path, default=Path("config/function_size_baseline.txt"))
+    parser.add_argument("--baseline-line-file", type=Path, default=Path("config/line_length_baseline.txt"))
     parser.add_argument("--changed-only", action="store_true")
     parser.add_argument("--fail-over-file-limit", action="store_true")
     parser.add_argument("--fail-over-function-limit", action="store_true")
+    parser.add_argument(
+        "--fail-line-length",
+        action="store_true",
+        help="Fail when a scanned C/C++ source has an unbudgeted line over --max-line-length",
+    )
+    parser.add_argument(
+        "--fail-stale-baseline",
+        action="store_true",
+        help="Fail when a baseline entry no longer names an oversized file, function or tolerated line",
+    )
     return parser.parse_args()
 
 
@@ -150,17 +167,27 @@ def iter_source_files(root: Path, paths: list[Path], changed_only: bool) -> list
     return sorted(path for path in candidates if path.is_file() and should_scan(path, root))
 
 
-def scan_file(path: Path, root: Path) -> tuple[FileSize, LongLine | None]:
+def scan_file(path: Path, root: Path, max_line_length: int) -> tuple[FileSize, list[LongLine]]:
     line_count = 0
-    longest: LongLine | None = None
+    long_lines: list[LongLine] = []
     relative = path.relative_to(root)
     with path.open(encoding="utf-8", errors="replace") as source:
         for number, line in enumerate(source, start=1):
             line_count = number
             text = line.rstrip("\n")
-            if longest is None or len(text) > longest.length:
-                longest = LongLine(relative, number, len(text), text.strip())
-    return FileSize(relative, line_count), longest
+            if len(text) > max_line_length:
+                long_lines.append(LongLine(relative, number, len(text), text.strip()))
+    return FileSize(relative, line_count), long_lines
+
+
+def count_lines(path: Path) -> int:
+    with path.open(encoding="utf-8", errors="replace") as source:
+        return sum(1 for _ in source)
+
+
+def count_over_length_lines(path: Path, max_line_length: int) -> int:
+    with path.open(encoding="utf-8", errors="replace") as source:
+        return sum(1 for line in source if len(line.rstrip("\n")) > max_line_length)
 
 
 def scan_python_functions(path: Path, root: Path) -> list[FunctionSize]:
@@ -190,16 +217,80 @@ def read_baseline(path: Path, root: Path) -> set[str]:
     }
 
 
+def find_function_size(path: Path, name: str, root: Path) -> int | None:
+    """Return the line count of one function, or None when the name is gone."""
+    for item in scan_python_functions(path, root):
+        if item.name == name:
+            return item.lines
+    return None
+
+
+def find_stale_file_entries(args: argparse.Namespace, root: Path) -> list[str]:
+    """List baselined files that no longer exceed the source-file limit."""
+    messages: list[str] = []
+    for entry in sorted(read_baseline(args.baseline_file, root)):
+        path = root / entry
+        if not path.is_file():
+            messages.append(f"{entry}: no such file")
+        elif count_lines(path) <= args.max_file_lines:
+            messages.append(f"{entry}: at or under the {args.max_file_lines}-line limit")
+    return messages
+
+
+def find_stale_function_entries(args: argparse.Namespace, root: Path) -> list[str]:
+    """List baselined functions that shrank under the limit or no longer exist."""
+    messages: list[str] = []
+    for entry in sorted(read_baseline(args.baseline_function_file, root)):
+        source, separator, name = entry.partition(":")
+        path = root / source
+        if not separator:
+            messages.append(f"{entry}: expected a path:function entry")
+        elif not path.is_file():
+            messages.append(f"{entry}: no such file")
+        else:
+            size = find_function_size(path, name, root)
+            if size is None:
+                messages.append(f"{entry}: no such function")
+            elif size <= args.max_function_lines:
+                messages.append(f"{entry}: at or under the {args.max_function_lines}-line limit")
+    return messages
+
+
+def find_stale_line_length_entries(args: argparse.Namespace, root: Path) -> list[str]:
+    """List baselined files with no over-length line left to tolerate."""
+    messages: list[str] = []
+    for entry in sorted(read_baseline(args.baseline_line_file, root)):
+        path = root / entry
+        if not path.is_file():
+            messages.append(f"{entry}: no such file")
+        elif count_over_length_lines(path, args.max_line_length) == 0:
+            messages.append(f"{entry}: no line over {args.max_line_length} characters left to tolerate")
+    return messages
+
+
+def find_stale_baseline_entries(args: argparse.Namespace, root: Path) -> list[str]:
+    """List baseline entries that no longer point at an oversized file, function or line.
+
+    A baselined name that shrank (or a file that was deleted) silently shrinks the
+    gate, so each entry must still justify itself. This scans only the baselined
+    files, so it is cheap even in --changed-only runs.
+    """
+    return (
+        find_stale_file_entries(args, root)
+        + find_stale_function_entries(args, root)
+        + find_stale_line_length_entries(args, root)
+    )
+
+
 def collect_report(files: list[Path], root: Path, max_line_length: int) -> Report:
     file_sizes: list[FileSize] = []
     long_lines: list[LongLine] = []
     functions: list[FunctionSize] = []
     for path in files:
-        file_size, longest = scan_file(path, root)
+        file_size, file_long_lines = scan_file(path, root, max_line_length)
         file_sizes.append(file_size)
+        long_lines.extend(file_long_lines)
         functions.extend(scan_python_functions(path, root))
-        if longest is not None and longest.length > max_line_length:
-            long_lines.append(longest)
     return Report(file_sizes, long_lines, functions)
 
 
@@ -239,6 +330,20 @@ def print_report(report: Report, args: argparse.Namespace) -> None:
     )
 
 
+def find_unbudgeted_long_lines(report: Report, args: argparse.Namespace, root: Path) -> list[LongLine]:
+    """Return C/C++ over-length lines that no line-length baseline entry tolerates.
+
+    Files recorded in the baseline carry known, pre-existing over-length lines
+    that the migration deletes rather than reformats.
+    """
+    tolerated = read_baseline(args.baseline_line_file, root)
+    return [
+        item
+        for item in report.long_lines
+        if item.path.suffix.lower() in CPP_EXTENSIONS and item.path.as_posix() not in tolerated
+    ]
+
+
 def enforce_report(report: Report, args: argparse.Namespace, root: Path) -> int:
     oversized = [item for item in report.file_sizes if item.lines > args.max_file_lines]
     baseline = read_baseline(args.baseline_file, root)
@@ -249,6 +354,20 @@ def enforce_report(report: Report, args: argparse.Namespace, root: Path) -> int:
     # (any function not in the baseline) still fail.
     baseline_functions = read_baseline(args.baseline_function_file, root)
     target_functions = [item for item in functions if f"{item.path.as_posix()}:{item.name}" not in baseline_functions]
+    if args.fail_stale_baseline:
+        stale = find_stale_baseline_entries(args, root)
+        if stale:
+            print("\nStale baseline entries (no longer oversized):")
+            for message in stale:
+                print(f"  {message}")
+            return 1
+    if args.fail_line_length:
+        cpp_long_lines = find_unbudgeted_long_lines(report, args, root)
+        if cpp_long_lines:
+            print(f"\nC/C++ lines over {args.max_line_length} characters:")
+            for item in sorted(cpp_long_lines, key=lambda item: (item.path.as_posix(), item.number)):
+                print(f"  {item.path.as_posix()}:{item.number} ({item.length} characters)")
+            return 1
     if args.fail_over_file_limit and new_oversized:
         print("\nNew or selected files exceed the source-file limit:")
         for item in new_oversized:

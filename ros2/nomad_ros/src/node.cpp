@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // ROS 2 adapter node for the NOMAD C++ core.
 //
-// The node owns one UDP MAVLink connection and one core Vehicle. Callbacks are
-// thin: validate input, translate, call the core API, and return. The core
+// The node owns one MAVSDK MAVLink connection and one core Vehicle. Callbacks
+// are thin: validate input, translate, call the core API, and return. The core
 // owns arming gates, velocity clamping, the watchdog, and telemetry modeling.
 // This node deliberately contains no vehicle decisions.
 
-#include "nomad/mavlink/udp_connection.hpp"
+#include "nomad/mavlink/mavsdk_transport.hpp"
 #include "nomad/safety/velocity_config.hpp"
 #include "nomad/safety/vio_source.hpp"
 #include "nomad/safety/watchdog.hpp"
@@ -36,6 +36,10 @@
 namespace {
 
 constexpr auto kConnectRetryPeriod = std::chrono::milliseconds(1000);
+// MAVSDK's connect() scans for the expected autopilot on the calling thread, so
+// the discovery window is kept to the bound the heartbeat wait already spent in
+// this timer callback. A vehicle that appears later is caught by the retry.
+constexpr auto kDiscoveryTimeout = std::chrono::seconds(1);
 
 } // namespace
 
@@ -43,6 +47,7 @@ class NomadVehicleNode final : public rclcpp::Node {
   public:
     NomadVehicleNode() : Node("nomad_vehicle_node") {
         declare_parameter<std::string>("endpoint", "udpin:0.0.0.0:14570");
+        declare_parameter<int>("system_id", 1);
         declare_parameter<double>("publish_rate_hz", 10.0);
         const auto reviewed_limits = nomad::safety::reviewed_velocity_limits();
         declare_parameter<double>("min_vio_confidence", 0.3);
@@ -55,6 +60,13 @@ class NomadVehicleNode final : public rclcpp::Node {
         declare_parameter<std::string>("vio_source_topic", "/nomad/vio_source");
 
         endpoint_ = get_parameter("endpoint").as_string();
+        const auto system_id = static_cast<int>(get_parameter("system_id").as_int());
+        if (system_id < 1 || system_id > 255) {
+            RCLCPP_ERROR(get_logger(), "system_id %d is not a valid autopilot id; the node will not connect",
+                         system_id);
+        } else {
+            system_id_ = static_cast<std::uint8_t>(system_id);
+        }
         const auto publish_rate = get_parameter("publish_rate_hz").as_double();
         const auto min_vio_confidence = static_cast<float>(get_parameter("min_vio_confidence").as_double());
         vio_timeout_ = std::chrono::milliseconds(get_parameter("vio_timeout_ms").as_int());
@@ -111,15 +123,27 @@ class NomadVehicleNode final : public rclcpp::Node {
   private:
     using TriggerService = std_srvs::srv::Trigger;
 
+    // The transport reports which half of the link failed, so the warning names
+    // the operator problem instead of one generic message.
+    void report_connect_failure() {
+        if (connection_->get_connect_failure() == nomad::mavlink::ConnectFailure::NoAutopilot) {
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "no ArduPilot heartbeat on %s",
+                                 endpoint_.c_str());
+            return;
+        }
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "could not connect to %s", endpoint_.c_str());
+    }
+
     void ensure_connected() {
-        if (vehicle_ != nullptr) {
+        if (vehicle_ != nullptr || system_id_ == 0) {
             return;
         }
         if (connection_ == nullptr) {
-            connection_ = std::make_unique<nomad::mavlink::UdpMavlinkConnection>(endpoint_);
+            connection_ =
+                nomad::mavlink::make_mavsdk_connection(endpoint_, system_id_, kDiscoveryTimeout);
         }
         if (!connection_->is_connected() && !connection_->connect()) {
-            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "could not connect to %s", endpoint_.c_str());
+            report_connect_failure();
             return;
         }
         if (!connection_->wait_for_heartbeat(std::chrono::seconds(1)).has_value()) {
@@ -253,7 +277,8 @@ class NomadVehicleNode final : public rclcpp::Node {
     nomad::safety::VelocityLimits velocity_limits_;
     std::unique_ptr<nomad::safety::VioSourceValidator> vio_validator_;
 
-    std::unique_ptr<nomad::mavlink::UdpMavlinkConnection> connection_;
+    std::uint8_t system_id_{0};
+    std::unique_ptr<nomad::mavlink::MavlinkConnection> connection_;
     std::unique_ptr<nomad::vehicle::Vehicle> vehicle_;
 
     rclcpp::TimerBase::SharedPtr connect_timer_;

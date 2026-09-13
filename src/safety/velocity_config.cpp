@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "nomad/safety/velocity_config.hpp"
 
-#include <cmath>
-#include <cstdlib>
+#include "nomad/util/parse.hpp"
+
 #include <limits>
 
 namespace nomad::safety {
@@ -27,17 +27,17 @@ VelocityLimits::VelocityLimits(float max_velocity_xy_value, float max_velocity_z
 
 namespace {
 
-bool parse_limit(const char *text, float &value) {
+// An unset or empty override keeps the reviewed default; anything malformed or
+// negative is rejected so the caller can fail closed.
+bool apply_limit(const char *text, float &value) {
     if (text == nullptr || text[0] == '\0') {
         return true;
     }
-
-    char *end = nullptr;
-    const float parsed = std::strtof(text, &end);
-    if (end == text || *end != '\0' || !std::isfinite(parsed) || parsed < 0.0F) {
+    const auto parsed = util::parse_non_negative_float(text);
+    if (!parsed.has_value()) {
         return false;
     }
-    value = parsed;
+    value = *parsed;
     return true;
 }
 
@@ -62,8 +62,8 @@ VelocityLimits load_velocity_limits(float max_velocity_xy, float max_velocity_z,
 
 VelocityLimits load_velocity_limits(const char *xy_env, const char *z_env, const char *yaw_rate_env) {
     auto limits = reviewed_velocity_limits();
-    if (!parse_limit(xy_env, limits.max_velocity_xy) || !parse_limit(z_env, limits.max_velocity_z) ||
-        !parse_limit(yaw_rate_env, limits.max_yaw_rate)) {
+    if (!apply_limit(xy_env, limits.max_velocity_xy) || !apply_limit(z_env, limits.max_velocity_z) ||
+        !apply_limit(yaw_rate_env, limits.max_yaw_rate)) {
         // A malformed configured limit must never silently widen or disable
         // the envelope. The evaluator rejects this NaN-bearing policy.
         return invalid_limits();

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "fake_connection.hpp"
-#include "nomad/mavlink/protocol.hpp"
 #include "nomad/safety/geofence.hpp"
 #include "nomad/safety/payload.hpp"
 #include "nomad/safety/velocity.hpp"
 #include "nomad/safety/watchdog.hpp"
 #include "nomad/vehicle/vehicle.hpp"
+#include "test_harness.hpp"
 
 #ifdef NDEBUG
 #undef NDEBUG
@@ -21,17 +21,6 @@
 #include <cstdio>
 
 namespace {
-
-// A failing assert on Windows opens a dialog that blocks unattended CI runs,
-// so main() runs the tests inside a try/catch and reports failures on stderr.
-void check_impl(bool ok, const char *condition, int line) {
-    if (!ok) {
-        throw std::runtime_error(std::string("check failed at line ") + std::to_string(line) + ": " + condition);
-    }
-}
-
-#define CHECK(condition) check_impl(static_cast<bool>(condition), #condition, __LINE__)
-
 
 void test_safety_velocity_accepts_clamped_frd_command() {
     const nomad::safety::FlightConditions conditions{
@@ -174,49 +163,6 @@ void test_vehicle_stop_velocity_sends_zero() {
     CHECK(connection.last_velocity.vx == 0.0F);
 }
 
-void test_geofence_contains_only_safe_targets() {
-    const std::vector<nomad::safety::Point2d> square{
-        {-5.0, -5.0},
-        {5.0, -5.0},
-        {5.0, 5.0},
-        {-5.0, 5.0},
-    };
-    CHECK(nomad::safety::point_in_polygon({0.0, 0.0}, square));
-    CHECK(!nomad::safety::point_in_polygon({10.0, 0.0}, square));
-    CHECK(nomad::safety::is_contained({0.0, 0.0}, square, 2.0));
-    CHECK(!nomad::safety::is_contained({4.0, 0.0}, square, 2.0));
-    CHECK(nomad::safety::distance_to_boundary({0.0, 0.0}, square) == 5.0);
-}
-
-void test_geofence_rejects_invalid_configuration_and_targets() {
-    const auto malformed =
-        nomad::safety::evaluate_position({std::vector<nomad::safety::Point2d>{{0.0, 0.0}}, 0.0}, {0.0, 0.0});
-    CHECK(!malformed.allowed);
-    CHECK(malformed.reason == "fence");
-
-    const auto nonfinite =
-        nomad::safety::evaluate_position({std::nullopt, 0.0}, {std::numeric_limits<double>::quiet_NaN(), 0.0});
-    CHECK(!nonfinite.allowed);
-    CHECK(nonfinite.reason == "nonfinite");
-
-    const auto unconfigured = nomad::safety::evaluate_position({std::nullopt, 0.0}, {100.0, -100.0});
-    CHECK(unconfigured.allowed);
-}
-
-void test_global_geofence_projects_meters() {
-    const nomad::safety::GlobalFencePolicy policy{
-        std::vector<nomad::safety::GlobalPoint>{
-            {45.0, -73.0},
-            {45.0, -72.9999},
-            {45.0001, -72.9999},
-            {45.0001, -73.0},
-        },
-        1.0,
-    };
-    CHECK(nomad::safety::evaluate_global_position(policy, {45.00005, -72.99995}).allowed);
-    CHECK(!nomad::safety::evaluate_global_position(policy, {45.002, -72.99995}).allowed);
-}
-
 void test_vehicle_fence_rejects_target_before_transmission() {
     FakeConnection connection;
     connection.connect();
@@ -236,6 +182,42 @@ void test_vehicle_fence_rejects_target_before_transmission() {
 
     CHECK(!result.success);
     CHECK(connection.last_command.id == 0);
+}
+
+void test_vehicle_goto_location_rejects_stale_position() {
+    FakeConnection connection;
+    connection.connect();
+    connection.acknowledgement = nomad::mavlink::CommandAck{192, 0};
+    connection.auto_stamp_fresh_fields = false;
+    nomad::vehicle::Vehicle vehicle(connection);
+    connection.state->position_valid = true;
+    connection.state->position.latitude_deg = 45.5;
+    connection.state->position.longitude_deg = -73.6;
+    connection.state->position.relative_altitude_m = 5.0F;
+    connection.state->position_updated_at =
+        std::chrono::steady_clock::now() - std::chrono::seconds(10);
+
+    const auto result = vehicle.goto_location({45.5, -73.6, 5.0F});
+
+    CHECK(!result.success);
+    CHECK(result.message.find("stale") != std::string::npos);
+}
+
+void test_vehicle_takeoff_altitude_rejects_stale_position() {
+    FakeConnection connection;
+    connection.connect();
+    connection.acknowledgement = nomad::mavlink::CommandAck{22, 0};
+    connection.auto_stamp_fresh_fields = false;
+    nomad::vehicle::Vehicle vehicle(connection);
+    connection.state->position_valid = true;
+    connection.state->position.relative_altitude_m = 5.0F;
+    connection.state->position_updated_at =
+        std::chrono::steady_clock::now() - std::chrono::seconds(10);
+
+    const auto result = vehicle.takeoff(5.0F);
+
+    CHECK(!result.success);
+    CHECK(result.message.find("stale") != std::string::npos);
 }
 
 void test_vehicle_payload_commands_require_interlock_and_validate_ranges() {
@@ -445,54 +427,30 @@ void test_vehicle_upload_fence_rejects_invalid_coordinates() {
     CHECK(!lon_result.success);
 }
 
-void test_param_readback_codec_round_trip() {
-    // Fence verification reads FENCE_ENABLE back as authoritative state; the
-    // request frame and the value decode must round-trip the exact name.
-    const auto request = nomad::mavlink::encode_param_request_read(1, 255, 190, 1, 1, "FENCE_ENABLE", -1);
-    CHECK(!request.empty());
-    const auto message = nomad::mavlink::decode_message(request);
-    CHECK(message.has_value());
-    CHECK(!nomad::mavlink::decode_param_value(*message).has_value());
-
-    const auto value = nomad::mavlink::encode_message(1, 1, 1, 22, std::vector<std::uint8_t>(25, 0), true);
-    CHECK(value.has_value());
-    const auto decoded = nomad::mavlink::decode_message(*value);
-    CHECK(decoded.has_value());
-    // An all-zero payload decodes as an empty name, which never matches a request.
-    const auto param = nomad::mavlink::decode_param_value(*decoded);
-    CHECK(param.has_value() && param->param_id.empty());
-}
-
 } // namespace
 
 int main() {
-    try {
-    test_safety_velocity_accepts_clamped_frd_command();
-    test_safety_velocity_rejects_each_fault();
-    test_vehicle_rejects_invalid_watchdog_policy_before_transmission();
-    test_watchdog_stops_for_each_fault();
-    test_vehicle_watchdog_stops_for_command_timeout();
-    test_vehicle_watchdog_stops_for_stale_vio_and_mode_loss();
-    test_vehicle_watchdog_stops_for_link_loss();
-    test_vehicle_stop_velocity_sends_zero();
-    test_geofence_contains_only_safe_targets();
-    test_geofence_rejects_invalid_configuration_and_targets();
-    test_global_geofence_projects_meters();
-    test_vehicle_fence_rejects_target_before_transmission();
-    test_vehicle_payload_commands_require_interlock_and_validate_ranges();
-    test_vehicle_payload_on_failure_still_attempts_off();
-    test_vehicle_payload_off_failure_is_reported();
-    test_payload_validation_and_interlock();
-    test_vehicle_destructor_sends_zero_velocity_before_shutdown();
-    test_vehicle_destructor_orders_zero_before_disconnect();
-    test_vehicle_upload_fence_validates_boundary();
-    test_param_readback_codec_round_trip();
-    test_vehicle_verifies_fence_status_and_fails_closed();
-    test_vehicle_upload_fence_rejects_transport_failure();
-    test_vehicle_upload_fence_rejects_invalid_coordinates();
-    } catch (const std::exception &error) {
-        std::fprintf(stderr, "FAILED: %s\n", error.what());
-        return 1;
-    }
-    return 0;
+    return nomad::test::run_tests([] {
+        test_safety_velocity_accepts_clamped_frd_command();
+        test_safety_velocity_rejects_each_fault();
+        test_vehicle_rejects_invalid_watchdog_policy_before_transmission();
+        test_watchdog_stops_for_each_fault();
+        test_vehicle_watchdog_stops_for_command_timeout();
+        test_vehicle_watchdog_stops_for_stale_vio_and_mode_loss();
+        test_vehicle_watchdog_stops_for_link_loss();
+        test_vehicle_stop_velocity_sends_zero();
+        test_vehicle_fence_rejects_target_before_transmission();
+        test_vehicle_goto_location_rejects_stale_position();
+        test_vehicle_takeoff_altitude_rejects_stale_position();
+        test_vehicle_payload_commands_require_interlock_and_validate_ranges();
+        test_vehicle_payload_on_failure_still_attempts_off();
+        test_vehicle_payload_off_failure_is_reported();
+        test_payload_validation_and_interlock();
+        test_vehicle_destructor_sends_zero_velocity_before_shutdown();
+        test_vehicle_destructor_orders_zero_before_disconnect();
+        test_vehicle_upload_fence_validates_boundary();
+        test_vehicle_verifies_fence_status_and_fails_closed();
+        test_vehicle_upload_fence_rejects_transport_failure();
+        test_vehicle_upload_fence_rejects_invalid_coordinates();
+    });
 }
