@@ -181,7 +181,14 @@ class MavlinkResponder:
 
     def _handle_commands(self, commands: list[tuple[int, float]]) -> None:
         for command_id, param1 in commands:
-            if self.state.reject_next:
+            # MAVSDK may issue background protocol requests while the test is
+            # preparing a service call. Keep the fault injection attached to a
+            # vehicle command so an unrelated request cannot consume it.
+            if self.state.reject_next and command_id in {
+                wire.ARM_DISARM_COMMAND,
+                wire.LAND_COMMAND,
+                wire.RTL_COMMAND,
+            }:
                 self.state.reject_next = False
                 self._ack_command(command_id, wire.MAV_RESULT_FAILED)
                 continue
