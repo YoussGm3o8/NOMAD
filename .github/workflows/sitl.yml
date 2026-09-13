@@ -110,8 +110,8 @@ jobs:
     env:
       NOMAD_CORE_SITL_PORT: "14570"
     steps:
-      # The C++ codec compiles against headers generated from the pinned
-      # third_party/ardupilot-mavlink submodule (see scripts/dev/generate_mavlink.py).
+      # The transport is the pinned third_party/MAVSDK submodule, so the checkout
+      # must be recursive for the core to configure at all.
       - uses: actions/checkout@v5
         with:
           submodules: recursive

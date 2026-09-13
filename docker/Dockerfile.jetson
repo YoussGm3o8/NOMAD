@@ -31,11 +31,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip3 install --no-cache-dir pymavlink transforms3d 'numpy<2'
 
+# The core's transport is MAVSDK, so its pinned submodule ships with the image;
+# the MAVSDK subbuild fetches its own pinned dependencies at configure time.
 COPY CMakeLists.txt /ws/src/nomad/CMakeLists.txt
 COPY include/ /ws/src/nomad/include/
 COPY src/ /ws/src/nomad/src/
-COPY scripts/dev/generate_mavlink.py /ws/src/nomad/scripts/dev/generate_mavlink.py
-COPY third_party/ardupilot-mavlink/ /ws/src/nomad/third_party/ardupilot-mavlink/
+COPY examples/ /ws/src/nomad/examples/
+COPY third_party/MAVSDK/ /ws/src/nomad/third_party/MAVSDK/
 COPY ros2/nomad_ros/ /ws/src/nomad/ros2/nomad_ros/
 # Retained ground-side video tools are imported as python.tools inside the
 # container by the optional video bridge service.
@@ -43,6 +45,10 @@ COPY python/__init__.py /opt/nomad/python/__init__.py
 COPY python/tools/ /opt/nomad/python/tools/
 
 SHELL ["/bin/bash", "-c"]
+# MAVSDK's nested mavlink submodule carries patches, and a checkout made on
+# Windows can deliver them with CRLF line endings, which git apply rejects.
+RUN sed -i 's/\r$//' /ws/src/nomad/third_party/MAVSDK/cpp/third_party/mavlink/mavlink.patch \
+    /ws/src/nomad/third_party/MAVSDK/cpp/third_party/mavlink/mavlink_ios.patch
 RUN . /opt/ros/humble/setup.bash && cd /ws/src/nomad/ros2/nomad_ros && \
     colcon build --packages-select nomad_ros \
       --build-base /ws/build --install-base /ws/install \
