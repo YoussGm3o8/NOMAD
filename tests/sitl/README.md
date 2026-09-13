@@ -3,7 +3,7 @@
 These tests drive isolated ArduPilot SITL and observe authoritative vehicle state.
 Normal pytest skips live scenarios without an explicitly configured simulation.
 Nightly/on-demand SITL CI is configured, but a workflow file is not passed-run
-evidence; the repaired startup path still needs a current live G1 run.
+evidence; merge requests must link a successful current-head live run.
 
 ## Local test responsibilities
 
@@ -30,11 +30,11 @@ Scenarios share one vehicle, and two of them leave state that changes what a
 later one can do. `core_sitl_geofence.py` uploads a polygon fence that stays
 active even after it restores `FENCE_ENABLE`, and an active polygon makes
 ArduPilot refuse guided targets outside it (observed: the same reposition
-accepted with `FENCE_ENABLE=0` and rejected with the polygon loaded), so run
-guided-flight scenarios before the fence scenario or reset the vehicle between
-groups. `velocity_loop_closure.py` returns the vehicle with RTL without waiting
-for the landing disarm, so a scenario that requires a disarmed vehicle can start
-while it is still armed; wait for disarm or reset between those two.
+accepted with `FENCE_ENABLE=0` and rejected with the polygon loaded), so the
+workflow runs guided-flight scenarios before the fence upload/readback step.
+`velocity_loop_closure.py` waits for the RTL landing and authoritative disarm
+before it returns, so a following scenario that requires a disarmed vehicle has
+a deterministic handoff.
 
 One unexplained failure is recorded here rather than explained away: on
 2026-09-12 `core-sitl-link-recovery` failed on a fresh stack immediately after

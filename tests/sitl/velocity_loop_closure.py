@@ -55,6 +55,8 @@ class Telemetry:
         kind = msg.get_type()
         with self._lock:
             if kind == "HEARTBEAT":
+                if int(msg.get_srcSystem()) != int(conn.target_system):
+                    return
                 self.mode = mavutil.mode_string_v10(msg) or "UNKNOWN"
                 self.armed = bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
             elif kind == "VFR_HUD":
