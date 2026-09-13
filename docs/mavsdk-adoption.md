@@ -209,7 +209,7 @@ COMMAND_LONG/COMMAND_INT (so the result-code and relative-altitude-frame
 contracts are preserved) and mapping telemetry into `VehicleState` with the same
 per-field validity flags and steady-clock timestamps, so the position-freshness
 gate still applies. At that historical revision, the CLI took `--system-id` and
-still accepted `--transport mavsdk` for older invocations. `nomad_mavsdk_connection_tests` and
+accepted `--transport mavsdk` only as a historical selector. `nomad_mavsdk_connection_tests` and
 `scripts/dev/mavsdk_connection_fixture.py` (driving the deterministic vehicle
 in `scripts/dev/mavsdk_peer.py`) cover accepted, denied, timeout,
 no-peer, stale-telemetry, COMMAND_INT frame and wrong-identity cases, plus

@@ -111,6 +111,16 @@ def test_arm_acknowledgement_paths() -> None:
 
 
 @requires_mavsdk_build
+def test_command_timeout_honors_caller_budget() -> None:
+    fixture.case_command_timeout_honors_caller_budget(PROBE)
+
+
+@requires_mavsdk_build
+def test_parameter_timeout_honors_caller_budget() -> None:
+    fixture.case_param_timeout_honors_caller_budget(PROBE)
+
+
+@requires_mavsdk_build
 def test_command_wire_forms() -> None:
     fixture.case_command_int(PROBE)
     fixture.case_command_long(PROBE)

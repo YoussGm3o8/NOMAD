@@ -108,18 +108,21 @@ void test_velocity_with_no_peer_fails_closed() {
 }
 
 // Peer-driven probe used by scripts/dev/mavsdk_connection_fixture.py:
-// --probe <endpoint> <system-id> <command-id> <long|int>. It connects, waits
-// for a heartbeat, sends the command and prints the MAVLink result code so the
-// fixture can prove COMMAND_LONG and COMMAND_INT ack handling against a peer.
+// --probe <endpoint> <system-id> <command-id> <long|int> [timeout-ms]. It
+// connects, waits for a heartbeat, sends the command and prints the MAVLink
+// result code so the fixture can prove wire handling and caller deadlines.
 int run_probe(int argc, char **argv) {
-    if (argc != 6) {
-        std::fprintf(stderr, "usage: %s --probe <endpoint> <system-id> <command-id> <long|int>\n", argv[0]);
+    if (argc != 6 && argc != 7) {
+        std::fprintf(
+            stderr, "usage: %s --probe <endpoint> <system-id> <command-id> <long|int> [timeout-ms]\n", argv[0]);
         return 2;
     }
     const std::string endpoint = argv[2];
     const auto system_id = static_cast<std::uint8_t>(std::stoi(argv[3]));
     const auto command_id = static_cast<std::uint16_t>(std::stoi(argv[4]));
     const bool use_command_int = std::string_view(argv[5]) == "int";
+    const auto command_timeout = argc == 7 ? std::chrono::milliseconds(std::stoll(argv[6]))
+                                           : std::chrono::seconds(2);
 
     auto connection = nomad::mavlink::make_mavsdk_connection(endpoint, system_id, std::chrono::seconds(3));
     if (connection == nullptr || !connection->connect()) {
@@ -131,7 +134,7 @@ int run_probe(int argc, char **argv) {
         return 1;
     }
     const Command command{command_id, {0, 1, 0, 0, 45.5F, -73.6F, 10.0F}, use_command_int};
-    const auto ack = connection->send_command(command, std::chrono::milliseconds(2000));
+    const auto ack = connection->send_command(command, command_timeout);
     if (!ack.has_value()) {
         std::printf("ack=none\n");
         return 1;
@@ -336,6 +339,34 @@ int run_data_stream_probe(int argc, char **argv) {
     return requested ? 0 : 1;
 }
 
+// Peer-driven probe used by the parameter timeout fixture:
+// --param <endpoint> <system-id> <param-id> <timeout-ms>. An unknown parameter
+// makes the peer stay silent, so a nonzero result must arrive within the
+// caller's budget rather than MAVSDK's default transfer timeout.
+int run_param_probe(int argc, char **argv) {
+    if (argc != 6) {
+        std::fprintf(stderr, "usage: %s --param <endpoint> <system-id> <param-id> <timeout-ms>\n", argv[0]);
+        return 2;
+    }
+    const std::string endpoint = argv[2];
+    const auto system_id = static_cast<std::uint8_t>(std::stoi(argv[3]));
+    const std::string param_id = argv[4];
+    const auto timeout = std::chrono::milliseconds(std::stoll(argv[5]));
+
+    auto connection = nomad::mavlink::make_mavsdk_connection(endpoint, system_id, std::chrono::seconds(3));
+    if (connection == nullptr || !connection->connect()) {
+        std::printf("connect=fail\n");
+        return 1;
+    }
+    if (!connection->wait_for_heartbeat(std::chrono::seconds(3)).has_value()) {
+        std::printf("heartbeat=fail\n");
+        return 1;
+    }
+    const auto value = connection->read_param(param_id, timeout);
+    std::printf("param=%s\n", value.has_value() ? "value" : "none");
+    return value.has_value() ? 0 : 1;
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -353,6 +384,9 @@ int main(int argc, char **argv) {
     }
     if (argc >= 2 && std::string_view(argv[1]) == "--fence") {
         return run_fence_probe(argc, argv);
+    }
+    if (argc >= 2 && std::string_view(argv[1]) == "--param") {
+        return run_param_probe(argc, argv);
     }
     const int result = nomad::test::run_tests([] {
         test_invalid_configuration_is_refused();

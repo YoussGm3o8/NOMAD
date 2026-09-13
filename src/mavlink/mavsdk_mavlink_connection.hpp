@@ -100,6 +100,10 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     std::chrono::milliseconds discovery_timeout_{0};
     ConnectFailure connect_failure_{ConnectFailure::None};
     mavsdk::Mavsdk sdk_;
+    // MAVSDK exposes one transfer timeout for its blocking plugin calls. Keep
+    // caller-budgeted operations and teardown serialized while that value is
+    // changed for one operation.
+    mutable std::mutex sdk_operation_mutex_;
     std::optional<mavsdk::Mavsdk::ConnectionHandle> handle_;
     std::shared_ptr<mavsdk::System> system_;
     std::unique_ptr<mavsdk::Telemetry> telemetry_;

@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
+import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -88,7 +90,7 @@ def test_zero_delivery_observer_decodes_nonzero_and_zero_datagrams() -> None:
 def make_gcs_heartbeat_frame() -> bytes:
     frame = bytearray(21)
     frame[0] = 0xFD
-    frame[5] = 255
+    frame[5] = gcs_heartbeat.GCS_SYSTEM_ID
     frame[6] = 190
     frame[7] = 0
     frame[14] = 6
@@ -133,6 +135,33 @@ def test_gcs_heartbeat_cadence_rejects_non_finite_intervals() -> None:
         gcs_heartbeat.verify_announcements(
             [(10.0, frame), (11.0, frame), (float("nan"), frame), (13.0, frame)], require_cadence=True
         )
+
+
+def test_gcs_heartbeat_relay_learns_mavsdk_udpout_source() -> None:
+    relay_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    relay_socket.bind(("127.0.0.1", 0))
+    relay_port = relay_socket.getsockname()[1]
+    relay_socket.close()
+    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sender.bind(("127.0.0.1", 0))
+    sender.settimeout(1.0)
+    upstream = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    relay = gcs_heartbeat.GatedRelay(relay_port, gate_opens=True)
+    try:
+        sender.sendto(make_gcs_heartbeat_frame(), ("127.0.0.1", relay_port))
+        deadline = time.monotonic() + 1.0
+        while not relay.announcements and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert relay.announcements
+
+        payload = b"vehicle telemetry"
+        upstream.sendto(payload, ("127.0.0.1", relay_port))
+        received, _ = sender.recvfrom(1024)
+        assert received == payload
+    finally:
+        relay.close()
+        upstream.close()
+        sender.close()
 
 
 def test_containment_converts_latitude_and_longitude_to_local_metres() -> None:

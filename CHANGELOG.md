@@ -69,9 +69,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `NOMAD_ENABLE_MAVSDK` and fails configuration when `third_party/MAVSDK` is
   missing, so no build can produce a NOMAD binary with no way to reach a vehicle.
   The ROS 2 adapter builds `make_mavsdk_connection` instead of
-  `UdpMavlinkConnection` and gains a declared `system_id` parameter; `--transport
-  mavsdk` selector; the current CLI has no transport selector and does not read
-  `NOMAD_TRANSPORT`, so naming the selector fails closed with usage. No path
+  `UdpMavlinkConnection` and gains a declared `system_id` parameter. The
+  historical `--transport mavsdk` selector was removed; the current CLI has no
+  transport selector and does not read `NOMAD_TRANSPORT`, so naming the selector
+  fails closed with usage. No path
   retains a hidden fallback.
   (2026-09-12)
 - [core] `VehicleState` carries steady-clock timestamps for position, battery, GPS,

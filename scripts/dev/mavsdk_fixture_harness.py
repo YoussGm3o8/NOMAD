@@ -50,9 +50,23 @@ def run_cli(binary: Path, port: int, *arguments: str, timeout: int = 25) -> subp
 
 
 def run_probe(
-    binary: Path, port: int, system_id: int, command_id: int, wire_form: str, scheme: str = "udpin"
+    binary: Path,
+    port: int,
+    system_id: int,
+    command_id: int,
+    wire_form: str,
+    scheme: str = "udpin",
+    timeout_ms: int = 2000,
 ) -> subprocess.CompletedProcess:
-    command = [str(binary), "--probe", f"{scheme}:127.0.0.1:{port}", str(system_id), str(command_id), wire_form]
+    command = [
+        str(binary),
+        "--probe",
+        f"{scheme}:127.0.0.1:{port}",
+        str(system_id),
+        str(command_id),
+        wire_form,
+        str(timeout_ms),
+    ]
     return subprocess.run(command, capture_output=True, text=True, timeout=25, check=False)
 
 
@@ -85,6 +99,18 @@ def run_data_stream_probe(binary: Path, port: int, system_id: int, stream_id: in
         str(system_id),
         str(stream_id),
         str(rate),
+    ]
+    return subprocess.run(command, capture_output=True, text=True, timeout=25, check=False)
+
+
+def run_param_probe(binary: Path, port: int, system_id: int, param_id: str, timeout_ms: int):
+    command = [
+        str(binary),
+        "--param",
+        f"udpin:127.0.0.1:{port}",
+        str(system_id),
+        param_id,
+        str(timeout_ms),
     ]
     return subprocess.run(command, capture_output=True, text=True, timeout=25, check=False)
 
@@ -136,15 +162,21 @@ def run_cli_case(
 
 
 def run_probe_case(
-    probe: Path, command_id: int, wire_form: str, expected_system_id: int = 1, peer_system_id: int = 1
+    probe: Path,
+    command_id: int,
+    wire_form: str,
+    expected_system_id: int = 1,
+    peer_system_id: int = 1,
+    ack_result: int | None = ACCEPTED,
+    timeout_ms: int = 2000,
 ) -> tuple[subprocess.CompletedProcess, list[CommandRecord]]:
     """Run one connection probe against a fresh peer and return its observed commands."""
     port = find_free_udp_port()
     observed: list[CommandRecord] = []
 
     def action(peer: VehiclePeer) -> subprocess.CompletedProcess:
-        result = run_probe(probe, port, expected_system_id, command_id, wire_form)
+        result = run_probe(probe, port, expected_system_id, command_id, wire_form, timeout_ms=timeout_ms)
         observed.extend(peer.commands())
         return result
 
-    return with_peer(port, peer_system_id, ACCEPTED, action), observed
+    return with_peer(port, peer_system_id, ack_result, action), observed

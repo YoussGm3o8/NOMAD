@@ -492,7 +492,7 @@ cases onto the same peer fixture:
 - `case_gcs_heartbeat_announces_to_a_silent_peer` points NOMAD at a bound,
 silent peer with `udpout:` and requires the announcements to arrive while no
 vehicle is latched: four GCS heartbeats (`MAV_TYPE_GCS`,
-`MAV_AUTOPILOT_INVALID`, component 190, system 245) in a 3 s discovery window
+`MAV_AUTOPILOT_INVALID`, component 190, system 245) in a 6 s discovery window
 that discovers nothing. This is the pre-latch announcement a heartbeat-gated
 relay needs, and the behavior `safety/gcs-heartbeat-cadence` protects. A
 `udpin:` link has no pre-latch destination at all, because MAVSDK only learns
@@ -577,15 +577,15 @@ MAVSDK's own subscriptions deliver, and the SITL stack supplies stream rates
 through `docker/sitl-streams.parm` (C24) — so this is transport-honesty parity,
 not a behavior change on the current path.
 
-Open timeout contract issue: `MavsdkMavlinkConnection::read_param` and
-`send_command` expose caller timeout parameters but currently apply MAVSDK's
-blocking request timeout instead of enforcing the caller's budget (the core's
-ten-second readback timeout is not stacked on it). Before the migration/release
-gate closes, either enforce each per-call deadline or remove the misleading
-per-call promise with updated callers and tests. No parameter write path exists
-because the core only reads. Phase E (production cutover) was still open when
-this historical evidence was written; it landed the same day and is recorded
-below.
+`MavsdkMavlinkConnection::read_param` and `send_command` now serialize the
+operation, divide the caller's positive budget across the pinned MAVSDK retry
+attempts, set that per-attempt transfer timeout, and restore the transport
+default. Non-positive budgets fail closed before any request is sent. Focused
+peer cases exercise 100 ms command and parameter budgets against silent
+responses, rather than inheriting MAVSDK's longer default. No parameter write
+path exists because the core only reads.
+Phase E (production cutover) was still open when this historical evidence was
+written; it landed the same day and is recorded below.
 
 One candidate fix was measured and withdrawn rather than shipped: setting
 `Mavsdk::Configuration::set_always_send_heartbeats(true)`, which MAVSDK

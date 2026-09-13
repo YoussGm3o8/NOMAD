@@ -20,10 +20,21 @@ imports.
 
 from __future__ import annotations
 
+import subprocess
 import sys
+import time
 from pathlib import Path
 
-from mavsdk_fixture_harness import describe, find_binary, require, run_cli_case, run_probe_case
+from mavsdk_fixture_harness import (
+    describe,
+    find_binary,
+    find_free_udp_port,
+    require,
+    run_cli_case,
+    run_param_probe,
+    run_probe_case,
+    with_peer,
+)
 from mavsdk_link_fixture import (
     case_coalesced_telemetry_is_verified,
     case_data_stream_request_reaches_the_wire,
@@ -35,6 +46,7 @@ from mavsdk_link_fixture import (
     case_zero_delivery_scenarios,
 )
 from mavsdk_peer import (
+    ACCEPTED,
     COMMAND_ARM_DISARM,
     COMMAND_DO_MOTOR_TEST,
     COMMAND_DO_MOUNT_CONFIGURE,
@@ -49,6 +61,7 @@ from mavsdk_peer import (
     GLOBAL_RELATIVE_ALT_INT_FRAME,
     USER_COMMAND_ID,
     CommandRecord,
+    VehiclePeer,
 )
 
 
@@ -91,6 +104,39 @@ def case_arm_timeout(cli: Path) -> None:
         result.returncode != 0 and "timed out waiting for acknowledgement" in result.stdout,
         "missing acknowledgement is truthful",
         describe(result, observed),
+    )
+
+
+def case_command_timeout_honors_caller_budget(probe: Path) -> None:
+    started = time.monotonic()
+    result, observed = run_probe_case(
+        probe,
+        COMMAND_ARM_DISARM,
+        "long",
+        ack_result=None,
+        timeout_ms=100,
+    )
+    elapsed = time.monotonic() - started
+    require(
+        result.returncode != 0 and "ack=none" in result.stdout and elapsed < 1.0,
+        "command timeout honors the caller budget",
+        describe(result, observed) + f" elapsed={elapsed:.3f}s",
+    )
+
+
+def case_param_timeout_honors_caller_budget(probe: Path) -> None:
+    port = find_free_udp_port()
+
+    def action(_peer: VehiclePeer) -> subprocess.CompletedProcess:
+        return run_param_probe(probe, port, 1, "UNKNOWN_PARAMETER", 100)
+
+    started = time.monotonic()
+    result = with_peer(port, 1, ACCEPTED, action)
+    elapsed = time.monotonic() - started
+    require(
+        result.returncode != 0 and "param=none" in result.stdout and elapsed < 1.0,
+        "parameter timeout honors the caller budget",
+        f"rc={result.returncode} stdout={result.stdout!r} stderr={result.stderr!r} elapsed={elapsed:.3f}s",
     )
 
 
@@ -287,6 +333,8 @@ def main() -> int:
     case_arm_accepted(cli)
     case_arm_denied(cli)
     case_arm_timeout(cli)
+    case_command_timeout_honors_caller_budget(probe)
+    case_param_timeout_honors_caller_budget(probe)
     case_command_int(probe)
     case_command_long(probe)
     case_wrong_system(probe)

@@ -108,9 +108,12 @@ are possible MAVSDK deployment capabilities but are not current CLI transports.
 Routers bridge selected physical links to UDP. Core placement does not follow
 automatically from compute placement.
 
-NOMAD_RELAY_ADDRESS optionally selects the pre-latch GCS announcement destination.
-The transport emits 1 Hz GCS heartbeats while waiting/polling — MAVSDK does that
-for its `GroundStation` configuration; after peer latching it uses the peer. Malformed overrides fail connection. This heartbeat
+The heartbeat-gated SITL harness uses a `udpout:` endpoint so MAVSDK sends the
+pre-latch GCS announcement to the relay and the relay can learn the ephemeral
+source port. The transport emits 1 Hz GCS heartbeats while waiting/polling —
+MAVSDK does that for its `GroundStation` configuration; after peer latching it
+uses the learned peer. The removed `NOMAD_RELAY_ADDRESS` override is no longer
+read by the MAVSDK transport.
 is unrelated to the competition's required 1 Hz telemetry upload.
 
 For remote core placement, a secure network and an authenticated client protocol

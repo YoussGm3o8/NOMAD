@@ -28,6 +28,27 @@ namespace {
 
 constexpr double kPositionScale = 1e7;
 constexpr auto kTelemetryWaitIncrement = std::chrono::milliseconds(20);
+constexpr double kDefaultMavsdkTimeoutSeconds = 0.5;
+// The pinned MAVSDK retries commands three times and parameter reads five
+// times. Its timeout is per attempt, so divide the caller's operation budget
+// across those attempts before handing it to the library.
+constexpr double kCommandAttemptCount = 4.0;
+constexpr double kParameterAttemptCount = 6.0;
+
+class ScopedMavsdkTimeout final {
+public:
+    ScopedMavsdkTimeout(mavsdk::Mavsdk &sdk, std::chrono::duration<double> timeout) : sdk_(sdk) {
+        sdk_.set_timeout_s(timeout.count());
+    }
+
+    ~ScopedMavsdkTimeout() { sdk_.set_timeout_s(kDefaultMavsdkTimeoutSeconds); }
+
+    ScopedMavsdkTimeout(const ScopedMavsdkTimeout &) = delete;
+    ScopedMavsdkTimeout &operator=(const ScopedMavsdkTimeout &) = delete;
+
+private:
+    mavsdk::Mavsdk &sdk_;
+};
 
 // The velocity command is SET_POSITION_TARGET_LOCAL_NED in the body frame with
 // position, acceleration and absolute-yaw ignored. These values are the wire
@@ -85,7 +106,9 @@ MavsdkMavlinkConnection::MavsdkMavlinkConnection(std::string endpoint, std::uint
     : endpoint_(std::move(endpoint)),
       expected_system_id_(expected_system_id),
       discovery_timeout_(discovery_timeout),
-      sdk_(mavsdk::Mavsdk::Configuration{mavsdk::ComponentType::GroundStation}) {}
+      sdk_(mavsdk::Mavsdk::Configuration{mavsdk::ComponentType::GroundStation}) {
+    sdk_.set_timeout_s(kDefaultMavsdkTimeoutSeconds);
+}
 
 MavsdkMavlinkConnection::~MavsdkMavlinkConnection() {
     disconnect();
@@ -196,6 +219,7 @@ void MavsdkMavlinkConnection::unsubscribe() {
 }
 
 void MavsdkMavlinkConnection::close() {
+    std::lock_guard operation_lock(sdk_operation_mutex_);
     unsubscribe();
     telemetry_.reset();
     passthrough_.reset();
@@ -394,13 +418,12 @@ bool MavsdkMavlinkConnection::is_velocity_active() const {
 }
 
 std::optional<float> MavsdkMavlinkConnection::read_param(const std::string &param_id,
-                                                         std::chrono::milliseconds /*timeout*/) {
-    // MAVSDK's blocking read applies its own request timeout, so the caller's
-    // budget is not stacked on top of it. A read either returns the autopilot's
-    // value or fails closed; nothing is inferred from a missing answer.
-    if (!is_connected() || !param_ || param_id.empty()) {
+                                                         std::chrono::milliseconds timeout) {
+    std::lock_guard operation_lock(sdk_operation_mutex_);
+    if (!is_connected() || !param_ || param_id.empty() || timeout <= std::chrono::milliseconds::zero()) {
         return std::nullopt;
     }
+    const ScopedMavsdkTimeout timeout_scope(sdk_, std::chrono::duration<double>(timeout) / kParameterAttemptCount);
     const auto [result, value] = param_->get_param_float(param_id);
     if (result != mavsdk::Param::Result::Success) {
         return std::nullopt;
@@ -409,10 +432,12 @@ std::optional<float> MavsdkMavlinkConnection::read_param(const std::string &para
 }
 
 std::optional<CommandAck> MavsdkMavlinkConnection::send_command(const Command &command,
-                                                                std::chrono::milliseconds /*timeout*/) {
-    if (!is_connected() || !passthrough_) {
+                                                                std::chrono::milliseconds timeout) {
+    std::lock_guard operation_lock(sdk_operation_mutex_);
+    if (!is_connected() || !passthrough_ || timeout <= std::chrono::milliseconds::zero()) {
         return std::nullopt;
     }
+    const ScopedMavsdkTimeout timeout_scope(sdk_, std::chrono::duration<double>(timeout) / kCommandAttemptCount);
     const auto result = command.use_command_int ? send_int(command) : send_long(command);
     const auto code = command_result_code(result);
     if (!code.has_value()) {

@@ -30,11 +30,12 @@ close its integration or release gate.
   accepts zero without a preceding nonzero command, or live wire capture remains
   empty.
 
-- [~] G2 / SR-LNK-04 GCS-heartbeat evidence: diagnose the hosted Copter SITL
-  rejection of a measured 2.5 Hz announcement rate against the documented 1 Hz,
-  preserve the dropped-announcement negative control, and rerun the remaining
-  complete suite. Falsification: cadence exceeds the owned limit, the relay opens
-  without valid GCS heartbeats, or the complete suite still stops at this gate.
+- [~] G2 / SR-LNK-04 GCS-heartbeat evidence: validate at least three measured
+  intervals between 0.9 s and 1.3 s, route MAVSDK's `udpout:` source through the
+  heartbeat-gated relay, preserve the dropped-announcement negative control, and
+  rerun the current-head full SITL suite. Falsification: cadence exceeds the
+  owned limit, the relay opens without valid GCS heartbeats, or the complete
+  suite still stops at this gate.
 
 ## Ordered implementation backlog
 
