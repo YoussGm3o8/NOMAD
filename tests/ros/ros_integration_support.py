@@ -175,7 +175,11 @@ class MavlinkResponder:
         self._send_sys_status()
 
     def _ack_command(self, command_id: int, result: int) -> None:
-        acknowledgement = self.parser.command_ack_encode(command_id, result, 0, 0, 1, 1)
+        # COMMAND_ACK target fields address the requesting GCS, whose MAVSDK
+        # system/component IDs are not the responder's vehicle IDs. Zero is
+        # the protocol's broadcast value and lets MAVSDK match the frame by
+        # its source system/component and command ID.
+        acknowledgement = self.parser.command_ack_encode(command_id, result, 0, 0, 0, 0)
         self._send(acknowledgement)
 
     def _handle_commands(self, commands: list[tuple[int, float]]) -> None:
