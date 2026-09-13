@@ -181,6 +181,6 @@ int main(int argc, char **argv) {
     }
 
     const auto connection =
-        nomad::mavlink::make_mavsdk_connection(arguments->endpoint, arguments->system_id, std::chrono::seconds(5));
+        nomad::mavlink::make_mavsdk_connection(arguments->endpoint, arguments->system_id, std::chrono::seconds(6));
     return run_command(*connection, *arguments);
 }
