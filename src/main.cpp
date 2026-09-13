@@ -390,7 +390,7 @@ int run_command(const Arguments &arguments) {
         return run_status(connection);
     }
     if (arguments.command == "connect") {
-        const auto heartbeat = connection.wait_for_heartbeat(std::chrono::seconds(3));
+        const auto heartbeat = connection.wait_for_heartbeat(std::chrono::seconds(6));
         if (!heartbeat.has_value()) {
             std::cerr << "timed out waiting for ArduPilot heartbeat\n";
             return EXIT_FAILURE;

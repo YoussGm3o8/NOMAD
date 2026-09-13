@@ -354,9 +354,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   emitted only once per `wait_for_heartbeat` call: the loop announced, then
   blocked in a single receive for the whole remaining timeout. A relay that
   stayed closed saw one announcement instead of the 1 Hz cadence, so
-  `core-sitl-gcs-heartbeat`'s negative control (which requires two) failed. The
+  `core-sitl-gcs-heartbeat`'s negative control (which requires four announcements
+  across three measured intervals) failed. The
   receive is now capped at a 20 ms slice — the same pattern `wait_for_state`
-  already used — and the unit test drives one long 3 s wait as the CLI does, so
+  already used — and the unit test drives one long 6 s wait as the CLI does, so
   the cadence is pinned inside a single blocking call.
 - [core] [bug] The UDP MAVLink transport was single-consumer: with a
   concurrent telemetry pump (the ROS node's 10 Hz timer) a command

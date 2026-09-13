@@ -35,7 +35,7 @@ int run_status(nomad::mavlink::UdpMavlinkConnection &connection) {
     // link already forwards ArduPilot's default streams, so no explicit stream
     // requests are needed; requesting them only loads the link ahead of the
     // next command's acknowledgement.
-    if (!connection.wait_for_heartbeat(std::chrono::seconds(3)).has_value()) {
+    if (!connection.wait_for_heartbeat(std::chrono::seconds(6)).has_value()) {
         std::cerr << "timed out waiting for ArduPilot heartbeat\n";
         return EXIT_FAILURE;
     }

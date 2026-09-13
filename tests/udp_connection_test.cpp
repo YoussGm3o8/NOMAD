@@ -334,12 +334,13 @@ void test_unlatched_connection_sends_gcs_heartbeats() {
     // status verb performs it: a single blocking receive announces once and
     // then stalls, so a heartbeat-gated relay never opens. Collect what arrives
     // on the peer socket over that whole wait.
-    static_cast<void>(connection.wait_for_heartbeat(std::chrono::seconds(3)));
+    static_cast<void>(connection.wait_for_heartbeat(std::chrono::seconds(6)));
 
     const auto received = drain_pending(peer);
 
-    // At least one per second across the 3 s wait, and never a burst.
-    CHECK(received.size() >= 2 && received.size() <= 4);
+    // At least four announcements prove three measured intervals, and the
+    // upper bound catches an accidentally fast or bursty cadence.
+    CHECK(received.size() >= 4 && received.size() <= 7);
     const auto message = nomad::mavlink::decode_message(received.front());
     CHECK(message.has_value());
     CHECK(message->message_id == 0);      // HEARTBEAT
