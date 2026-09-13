@@ -202,13 +202,14 @@ Implement the existing connection boundary using only required MAVSDK APIs.
 Keep public safety/Vehicle semantics, CLI spelling, client errors and argument
 validation stable unless a reviewed correction changes an unsafe contract.
 
-Partial implementation (2026-09-11, local only): `MavsdkMavlinkConnection`
+Historical Phase B implementation record (2026-09-11, local only):
+`MavsdkMavlinkConnection`
 implements `MavlinkConnection` against pin `9884f109`, issuing commands as raw
 COMMAND_LONG/COMMAND_INT (so the result-code and relative-altitude-frame
 contracts are preserved) and mapping telemetry into `VehicleState` with the same
 per-field validity flags and steady-clock timestamps, so the position-freshness
-gate still applies. The CLI takes `--system-id`, and still accepts
-`--transport mavsdk` for older invocations. `nomad_mavsdk_connection_tests` and
+gate still applies. At that historical revision, the CLI took `--system-id` and
+still accepted `--transport mavsdk` for older invocations. `nomad_mavsdk_connection_tests` and
 `scripts/dev/mavsdk_connection_fixture.py` (driving the deterministic vehicle
 in `scripts/dev/mavsdk_peer.py`) cover accepted, denied, timeout,
 no-peer, stale-telemetry, COMMAND_INT frame and wrong-identity cases, plus
@@ -220,7 +221,10 @@ than the acknowledgement alone. Live Copter SITL evidence (2026-09-11): with
 `NOMAD_TRANSPORT=mavsdk` the `core-sitl-command-flow` and `core-sitl-payload`
 scenarios pass against Copter 4.7.1 — GUIDED mode, 3D GPS fix, arm, takeoff to
 5 m, guided goto sent as COMMAND_INT, RTL, land and disarm, every step verified
-against reported state. This is not the end of Phase B: motor-test is unproven
+against reported state. Those selector forms describe historical evidence only:
+the current CLI has no transport selector and rejects `--transport` with usage
+because MAVSDK is the only production transport. This is not the end of Phase B:
+motor-test is unproven
 because `Vehicle::motor_test` sends command ID 139, which is not a `MAV_CMD`
 entry in the pinned dialect (`MAV_CMD_DO_MOTOR_TEST` is 209); that is recorded
 as C23 in the migration contradictions. Explicit vehicle-class identification
@@ -278,20 +282,22 @@ five-second activation and separate rotary/fixed-wing/transition outcomes.
 Parameter parity alone cannot prove a minimum 2 m/s descent through touchdown.
 Preserve ArduPilot failsafes and require independent physical evidence at G7.
 
-## Phase E — Production cutover
+## Phase E — Production cutover (implementation complete; release gates remain)
 
-Switch the production connection after A-D pass. Retain golden/wire semantic
-references until equivalent coverage survives replacement. Remove obsolete
-codec/UDP/generation code and possibly its submodule only after caller inventory,
-profile checks and stable safety traceability remapping.
-Keep the old transport available for controlled comparison until both parity
-and install/rollback evidence exist; remove it only afterward. A rollback package
-must start disarmed/inhibited and never resume stale mission or payload actions.
+The production connection was switched after the A-D implementation work landed.
+The obsolete codec, UDP/generation code and generated dialect headers were
+removed after caller inventory, profile checks and safety traceability remapping.
+Golden/wire semantic references remain in the peer and SITL fixtures. Packaging,
+install/rollback, supported-firmware and full current-head integration evidence
+remain release gates; a rollback package must start disarmed/inhibited and never
+resume stale mission or payload actions.
 
-Exit: default CLI/runtime and clients demonstrably use MAVSDK; full unit,
-adapter and SITL matrix passes for supported firmware; dependency notices and
-packaging verified. The old path cannot be a hidden runtime fallback. Competition
-release G8 cannot pass with MAVSDK limited to a smoke executable.
+Implementation exit: the default CLI/runtime, ROS 2 adapter and clients use
+MAVSDK, and the old path is deleted rather than retained as a hidden fallback.
+Release exit remains open until the full unit, adapter and SITL matrix for
+supported firmware, dependency notices, packaging and install/rollback evidence
+pass. Competition release G8 cannot pass with MAVSDK limited to a smoke
+executable.
 
 ## Phase F — ArduPilot semantics in the fork, and upstreaming
 

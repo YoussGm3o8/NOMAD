@@ -34,21 +34,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `test_client_contract.py` were deleted with it. (Deletion gate 1, 2026-09-05)
 
 ### Added
-- [core,mavsdk] Opt-in MAVSDK-backed `MavlinkConnection`
+- [core,mavsdk] Historical Phase B entry (2026-09-11; superseded by the Phase E
+  cutover): opt-in MAVSDK-backed `MavlinkConnection`
   (`src/mavlink/mavsdk_mavlink_connection.cpp`, built only with
   `NOMAD_ENABLE_MAVSDK=ON`): commands go out as raw COMMAND_LONG/COMMAND_INT to
   preserve NOMAD's result-code and relative-altitude-frame contracts, telemetry
   is mapped into `VehicleState` with the same per-field validity flags and
-  steady-clock timestamps. The CLI gains `--transport udp|mavsdk` (default
-  `udp`; the flag fails closed in a legacy build) and `--system-id`.
-- [test] `pixi run test-mavsdk-phase-b` builds the opt-in CLI and
+  steady-clock timestamps. At that historical revision the CLI gained
+  `--transport udp|mavsdk` (default `udp`) and `--system-id`.
+- [test] Historical Phase B validation: `pixi run test-mavsdk-phase-b` built the
+  opt-in CLI and
   `nomad_mavsdk_connection_tests`, then runs
   `scripts/dev/mavsdk_connection_fixture.py` against a deterministic peer
   (accepted, denied, timeout, no-peer, stale-telemetry, COMMAND_INT frame,
   wrong-identity, and per-command mode/takeoff/goto/land/RTL/servo/relay/
   gimbal-config/user-command cases where the peer applies the requested state
   change so the core's verification is exercised). Live Copter SITL evidence:
-  with `NOMAD_TRANSPORT=mavsdk` the `core-sitl-command-flow` and
+  with the historical `NOMAD_TRANSPORT=mavsdk` selector the `core-sitl-command-flow` and
   `core-sitl-payload` scenarios pass against Copter 4.7.1 (GUIDED mode, 3D GPS
   fix, arm, takeoff, guided goto sent as COMMAND_INT, RTL, land, disarm, all
   state-verified). Motor-test parity was added once C23 was fixed, so the
@@ -62,13 +64,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   retired Python controller — the loop-closure evidence is fully C++-owned.
 
 ### Changed
-- [core,mavsdk] MAVSDK is the transport, not an option: `CMakeLists.txt` drops
+- [core,mavsdk] At the 2026-09-12 Phase E cutover, MAVSDK became the transport,
+  not an option: `CMakeLists.txt` drops
   `NOMAD_ENABLE_MAVSDK` and fails configuration when `third_party/MAVSDK` is
   missing, so no build can produce a NOMAD binary with no way to reach a vehicle.
   The ROS 2 adapter builds `make_mavsdk_connection` instead of
   `UdpMavlinkConnection` and gains a declared `system_id` parameter; `--transport
-  mavsdk` and `NOMAD_TRANSPORT` still parse for older invocations, and naming the
-  removed codec fails closed with usage. No path retains a hidden fallback.
+  mavsdk` selector; the current CLI has no transport selector and does not read
+  `NOMAD_TRANSPORT`, so naming the selector fails closed with usage. No path
+  retains a hidden fallback.
   (2026-09-12)
 - [core] `VehicleState` carries steady-clock timestamps for position, battery, GPS,
   and attitude samples; `Vehicle::wait_for_location` and `Vehicle::wait_for_altitude`

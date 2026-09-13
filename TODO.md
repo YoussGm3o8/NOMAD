@@ -41,17 +41,19 @@ close its integration or release gate.
 - [ ] G0: obtain organizer rulings Q02-Q09 and assign named decision/gate owners
   (D10). The 125-entry documentation reconciliation and Q01 decision are complete;
   unanswered interpretations keep the planning gate open.
-- [ ] G-M Phase B connection boundary: introduce the narrow MAVSDK connection
-  owner behind the existing core boundary without switching production or
-  duplicating vehicle policy. Requirements: project MAVSDK decision, C01 and
-  GAP-16. Falsification: boundary tests accept an invalid/wrong peer, conceal
-  loss, or alter the default legacy production path.
-- [ ] G-M Phases B–D: MAVSDK command, telemetry, velocity/watchdog, GCS heartbeat,
-  zero-delivery, fence and parameter parity; unit plus integration tests.
+- [x] G-M Phases B–E implementation: the narrow MAVSDK connection owns the
+  existing core boundary, command/telemetry/velocity/watchdog, GCS heartbeat,
+  zero-delivery, fence and parameter paths; the default production runtime uses
+  it and the hand-written codec is removed. See the implementation inventory and
+  cutover status in [migration](docs/migration.md). This records source and
+  focused-test completion, not release qualification.
+- [ ] G-M current-head integration and release gates: qualify supported vehicle
+  classes (including QuadPlane), rerun the full current-head ROS/SITL matrix,
+  and complete packaging/install/rollback and G8 evidence. Falsification: any
+  required adapter or SITL gate fails, or the release artifact cannot be
+  installed and rolled back safely.
 - [ ] G-M: add ArduPlane/QuadPlane support coverage for Task 1 alongside Copter;
   prepare focused reviewable implementation changes with independent evidence.
-- [ ] G-M Phase E: switch production to MAVSDK and remove the old implementation
-  only after parity, traceability, profile and release checks pass.
 - [ ] G-M Phase F: upstream tested ArduPilot fixes; track patches, review status
   and maintenance owner. Upstream acceptance is separate from local parity.
 - [ ] G2 / C04–C09, C13, C15: single persistent command owner, authenticated client
@@ -88,8 +90,9 @@ gates. Do not mark multiple work items active or bypass predecessor safety gates
   hover on Copter 4.7.1. Containment gate evidence remains open.
 - [x] Mission Planner core client for goto/discrete outputs and ROS adapter exist;
   full command ownership migration remains open.
-- [x] MAVSDK optional Phase A build/smoke target and fork wiring exist;
-  production migration is still open.
+- [x] MAVSDK Phase A build/smoke target and fork wiring exist; the production
+  cutover is implemented. Current-head integration and release gates remain open
+  in G-M above.
 - [x] MAVSDK Phase A selected-build inputs use immutable/strong-hash references,
   carry checked licence texts, and are published and pinned at the reviewed
   revision. Recursive hosted Linux/Windows, selected ROS and live Copter SITL

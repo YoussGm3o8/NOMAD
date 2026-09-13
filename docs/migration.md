@@ -217,9 +217,11 @@ PowerShell parsing and changed-file pre-commit checks passed.
 
 ### G-M — MAVSDK adoption (transport lead; early prerequisite after G1)
 
-Complete Phase A build/dependency/license/SITL evidence, then command, velocity,
-watchdog/zero, GCS heartbeat and fence parity. Preserve unit fault coverage,
-independent wire observations and CLI/plugin compatibility. Test both Copter
+The Phases A-E implementation is landed: the mandatory MAVSDK transport and
+parity paths are in source, focused tests cover them, the default runtime and
+ROS 2 adapter use MAVSDK, and the hand-written codec is deleted. Preserve unit
+fault coverage, independent wire observations and CLI/plugin compatibility as
+the current-head integration and release gates are completed. Test both Copter
 and the chosen QuadPlane firmware as support is introduced; existing Copter
 tests alone cannot qualify Task 1.
 
@@ -229,12 +231,14 @@ split, ArduPilot command, mode and telemetry semantics are delivered in the pinn
 fork and NOMAD does not grow new ArduPilot paths; fork patches need reproducible
 tests and separately tracked upstream changes when publication is authorized.
 
-Exit: phases A-E in [MAVSDK adoption](mavsdk-adoption.md) pass; default production
-runtime demonstrably uses MAVSDK; legacy deletion passes gates below; transitive
-notices and supported firmware matrix are recorded. Phase F upstream acceptance
-may lag, but required patches must be maintained and reviewed. G-M is mandatory
-for G8 and precedes dependent integrated competition command work; isolated
-server/CV prototypes may proceed without waiting.
+Implementation exit: phases A-E in [MAVSDK adoption](mavsdk-adoption.md) are
+landed; default production runtime demonstrably uses MAVSDK and legacy deletion
+is complete. Release exit remains open until the supported-firmware matrix,
+current-head ROS/SITL matrix, transitive notices and packaging/install/rollback
+evidence pass. Phase F upstream acceptance may lag, but required patches must be
+maintained and reviewed. G-M is mandatory for G8 and precedes dependent
+integrated competition command work; isolated server/CV prototypes may proceed
+without waiting.
 
 Cutover status (2026-09-12): phases A-E have landed. The default runtime is the
 MAVSDK transport, the ROS 2 adapter builds the same transport, and the legacy
@@ -573,11 +577,15 @@ MAVSDK's own subscriptions deliver, and the SITL stack supplies stream rates
 through `docker/sitl-streams.parm` (C24) — so this is transport-honesty parity,
 not a behavior change on the current path.
 
-What Phase D does not yet claim: `read_param` applies MAVSDK's own request
-timeout instead of the caller's budget (the core's ten-second readback timeout is
-not stacked on it), and no parameter write path exists because the core only
-reads. Phase E (production cutover) was still open when this was written; it
-landed the same day and is recorded below.
+Open timeout contract issue: `MavsdkMavlinkConnection::read_param` and
+`send_command` expose caller timeout parameters but currently apply MAVSDK's
+blocking request timeout instead of enforcing the caller's budget (the core's
+ten-second readback timeout is not stacked on it). Before the migration/release
+gate closes, either enforce each per-call deadline or remove the misleading
+per-call promise with updated callers and tests. No parameter write path exists
+because the core only reads. Phase E (production cutover) was still open when
+this historical evidence was written; it landed the same day and is recorded
+below.
 
 One candidate fix was measured and withdrawn rather than shipped: setting
 `Mavsdk::Configuration::set_always_send_heartbeats(true)`, which MAVSDK
