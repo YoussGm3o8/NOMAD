@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Removed
+- [core,mavlink] The hand-written MAVLink codec is **deleted** at the Phase E
+  cutover: `src/mavlink/{protocol,udp_connection,udp_commands,fence,params}.cpp`
+  and their headers, the build-time generated dialect headers, the CMake mavgen
+  rule and its generator (`scripts/dev/generate_mavlink.py`, `pixi run
+  generate-mavlink`), and the legacy transport test targets
+  (`codec_golden_test.cpp`, `udp_connection_test.cpp`, `zero_delivery_test.cpp`)
+  — their behavior is covered by the MAVSDK peer fixture and
+  `nomad_mavsdk_zero_delivery_tests`. The pinned `third_party/ardupilot-mavlink`
+  submodule stays only as the dialect the command-id gate resolves ids against.
+  (2026-09-12, with explicit user authorization)
 - [core,ros] The Python ROS-HTTP bridge (`edge_core/ros_http_bridge/`) is
   **deleted** — the C++ `nomad_vehicle_node` adapter (`ros2/nomad_ros`)
   replaces it end-to-end: it owns the MAVLink UDP link, the core velocity
@@ -52,6 +62,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   retired Python controller — the loop-closure evidence is fully C++-owned.
 
 ### Changed
+- [core,mavsdk] MAVSDK is the transport, not an option: `CMakeLists.txt` drops
+  `NOMAD_ENABLE_MAVSDK` and fails configuration when `third_party/MAVSDK` is
+  missing, so no build can produce a NOMAD binary with no way to reach a vehicle.
+  The ROS 2 adapter builds `make_mavsdk_connection` instead of
+  `UdpMavlinkConnection` and gains a declared `system_id` parameter; `--transport
+  mavsdk` and `NOMAD_TRANSPORT` still parse for older invocations, and naming the
+  removed codec fails closed with usage. No path retains a hidden fallback.
+  (2026-09-12)
 - [core] `VehicleState` carries steady-clock timestamps for position, battery, GPS,
   and attitude samples; `Vehicle::wait_for_location` and `Vehicle::wait_for_altitude`
   fail closed when the position sample is older than the configured

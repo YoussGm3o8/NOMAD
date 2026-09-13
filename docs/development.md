@@ -7,9 +7,11 @@ setup entrypoints target the C++ core. Source status and evidence belong in
 
 ## Prerequisites and verified local checks
 
-Use Git, Pixi, CMake and a C++20 compiler. The current codec build also requires
-the pinned ArduPilot MAVLink submodule and Python/mavgen. This is a build-time
-dependency; C++ runtime use does not require Python, ROS or a GPU.
+Use Git, Pixi, CMake (3.22.1 or newer) and a C++20 compiler, and initialize the
+submodules: the transport is the pinned `third_party/MAVSDK` checkout, and CMake
+fails configuration when it is missing. The MAVSDK build fetches its own pinned
+dependencies, so a first configure needs network access. C++ runtime use does not
+require Python, ROS or a GPU.
 
 ~~~sh
 pixi run test-core
@@ -81,7 +83,7 @@ other optional compute services disabled until G3 qualification.
 
 | Layer | Current checks | Required expansion |
 |---|---|---|
-| C++ | Nine default CTest targets (core, codec, safety, output, UDP, zero, VIO, limits, fence) plus MAVSDK qualification and connection-contract targets in the `NOMAD_ENABLE_MAVSDK` build | Authority, per-field freshness, cancellation, MAVSDK and vehicle-class coverage |
+| C++ | Nine CTest targets (core, safety, output, VIO, velocity config, fence config, MAVSDK validation, MAVSDK connection contract, MAVSDK zero delivery) | Authority, per-field freshness, cancellation, MAVSDK and vehicle-class coverage |
 | Python | pytest includes client contracts, traceability, harnesses, profiles and video tools | Mock competition server/traffic, perception replay and tracker fixtures |
 | ROS | ros2/nomad_ros translation plus tests/ros integration | Bounded callbacks, acquisition-time/frame validation, command-owner integration |
 | Mission Planner | lint-plugin and test-plugin-* helper scripts | Ownership, capabilities, stale displays, action lifecycle and replay |
@@ -119,15 +121,17 @@ for basic unit or server-contract tests.
 
 ## Adapter and optional build checks
 
-MAVSDK build-core-mavsdk and mavsdk-phase-a-smoke are opt-in Phase A tasks; the
-latter requires live SITL. They do not switch production to MAVSDK. Follow
-[MAVSDK parity gates](mavsdk-adoption.md). The build task emits configure/build
-timing and footprint JSON to standard output.
+The `build-core-mavsdk` and `mavsdk-phase-a-smoke` task names are historical:
+every build is the MAVSDK transport now, and the latter still requires live SITL.
+Follow [MAVSDK parity gates](mavsdk-adoption.md). The build task emits
+configure/build timing and footprint JSON to standard output.
 
-The CLI can select the MAVSDK transport with `--transport mavsdk` in a
-`NOMAD_ENABLE_MAVSDK` build; `udp` remains the default and the flag fails closed
-in a legacy build. Run `pixi run test-mavsdk-phase-b` for the Phase B contract
-check: it builds the opt-in CLI, `nomad_mavsdk_connection_tests` and
+MAVSDK is the only transport, so the CLI has no way to select one: `--transport`
+and `NOMAD_TRANSPORT` were removed with the Phase E cutover. `--transport` is now
+an unknown-argument usage failure, and the environment variable is inert because
+nothing can select a transport any more. Run `pixi run test-mavsdk-phase-b` for
+the
+transport contract check: it builds the CLI, `nomad_mavsdk_connection_tests` and
 `nomad_mavsdk_zero_delivery_tests`, then runs
 `scripts/dev/mavsdk_connection_fixture.py`, which asserts accepted, denied,
 timeout, wire-form, stale-telemetry and wrong-identity behaviour plus

@@ -159,10 +159,15 @@ fence writes through the core or restrict them to documented maintenance mode.
 
 ## MAVLink and transport decision
 
-Current production path: UdpMavlinkConnection with NOMAD framing and generated
-ArduPilot dialect headers. CMake requires Python/mavgen at build time; the runtime
-core has no Python or ROS dependency. Native serial/TCP are not implemented in
-that connection. Existing routers can bridge them to UDP.
+The production path is the MAVSDK transport in
+`src/mavlink/mavsdk_mavlink_connection.cpp`, built against the pinned
+`third_party/MAVSDK` checkout: it is the only transport, because the Phase E
+cutover deleted the hand-written codec and its generated ArduPilot dialect
+headers, and CMake no longer has an option that omits MAVSDK. The runtime core
+has no Python or ROS dependency and no build-time generator step. The pinned
+`third_party/ardupilot-mavlink` submodule remains only as the dialect the Python
+command-id gate resolves hand-typed ids against. Native serial/TCP are not
+implemented; existing routers can bridge them to UDP.
 
 User-confirmed direction: adopt the pinned MAVSDK fork as an early competition
 prerequisite after parity, with tests and a focused merge request, as detailed in
@@ -170,9 +175,10 @@ prerequisite after parity, with tests and a focused merge request, as detailed i
 mode and telemetry semantics; NOMAD keeps safety policy, validation, verification
 of outcomes, deadlines and the client contract. Owning a semantic never transfers
 outcome authority, and new ArduPilot command construction belongs in the fork
-rather than in a NOMAD adapter. The opt-in Phase A smoke target does not replace
-the production transport. Preserve Vehicle, safety and outcome semantics through
-adoption. Do not trust library ACKs, Offboard mode, background resends,
+rather than in a NOMAD adapter. The transport landed in gated phases A-D and the
+Phase E cutover deleted the codec it replaced; the Phase A/B names survive only
+as qualification task and provenance-check names. Preserve Vehicle, safety and
+outcome semantics through adoption. Do not trust library ACKs, Offboard mode, background resends,
 GCS heartbeats, or default identity without tests against the selected firmware.
 Pin firmware/dialect/library combinations and requalify each changed combination.
 

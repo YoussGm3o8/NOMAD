@@ -13,17 +13,17 @@ cutover inventory and gate evidence. [PRD](prd.md) owns requirements and decisio
 
 | Area | Source and tests inspected | Actual scope and remaining limitation |
 |---|---|---|
-| C++ foundation | CMakeLists.txt; include/nomad; src; ten CTest targets | Library and CLI build; Python/mavgen build dependency, no Python runtime dependency |
-| MAVLink | src/mavlink; core_test, codec_golden_test, udp_connection_test | Generated dialect, CRC/framing, UDP, ACKs, typed telemetry, heartbeat/relay handling; native serial/TCP absent |
+| C++ foundation | CMakeLists.txt; include/nomad; src; nine CTest targets | Library and CLI build against the mandatory MAVSDK transport; no Python or mavgen build dependency, no Python runtime dependency |
+| MAVLink | src/mavlink (MAVSDK transport); core_test, mavsdk_connection_test, mavsdk_zero_delivery_test | MAVSDK owns framing/transport; NOMAD owns ACK classification, typed telemetry, heartbeat/relay handling, the zero-setpoint stop and fence/parameter traffic; native serial/TCP absent |
 | Vehicle | src/vehicle/vehicle.cpp; core_test.cpp | Arm/mode/takeoff/goto/land/RTL and state checks; Copter modes hardcoded; LAND/RTL success verifies mode, not task completion |
 | Missions | src/mission/executor.cpp; core_test.cpp | Synchronous small step executor; no integrated cancellation, persisted resume, survey or Task 2 workflow |
 | Safety | src/safety; safety_test, fence_config_test, velocity_config_test, vio_source_test | Finite/range gates, VIO-conditioned velocity, watchdog, configured target fence, upload/readback and payload interlock |
-| Stop delivery | tests/zero_delivery_test.cpp; scripts/dev/core_sitl_zero_delivery.py | Live loopback wire tests exist; whole-link outage cannot guarantee delivery; current live SITL result still required |
+| Stop delivery | tests/mavsdk_zero_delivery_test.cpp; scripts/dev/core_sitl_zero_delivery.py | Live peer-driven wire tests cover every stop path on the MAVSDK transport; whole-link outage cannot guarantee delivery; current live SITL result still required |
 | Mission Planner | NomadCoreClient, OutputController, FlightModeController, GimbalController, BoundaryManager, MPFenceUploader | goto/discrete outputs use CLI; direct parameter/mode/gimbal/fence paths and UI-owned decisions remain |
 | ROS 2 | ros2/nomad_ros/src/node.cpp, translation.cpp; tests/ros | Owns a Vehicle, telemetry topics, VIO health/source gate and Trigger services; blocking callbacks, no selected estimator or navigation fusion |
 | Video | python/tools/simple_video_bridge.py, video_bridge_server.py; test_simple_video_bridge.py | ROS image to GStreamer/RTSP; control HTTP is loopback-only; no validated capture/CV/VIO product pipeline |
 | Profiles | scripts/profile.py; three product profile files; test_deployment_profiles.py | Canonical endpoint and stale-setting checks exist; optional workloads and hardware remain unqualified |
-| MAVSDK | CMake opt-in target; Phase B MAVSDK `MavlinkConnection` (commands, telemetry, deterministic peer fixture); qualified telemetry smoke; provenance and CI gates | Phase B transport parity passes its peer fixture (accepted/denied/timeout ACKs, COMMAND_LONG/COMMAND_INT, wrong identity, command parity for mode/takeoff/goto/land/RTL/servo/relay/gimbal-config/user-command, unlatched GCS-heartbeat announcement, coalesced-datagram handling, live-to-stale link observation, body-frame velocity parity with the zero setpoint on disconnect, a wire-confirmed data-stream request, and the core fence upload/readback/enable-verification of Phase D) and the CLI can select it with `--transport mavsdk`; mission parity and production cutover (Phase E) remain open, and production still uses the current codec |
+| MAVSDK | CMake mandatory transport; `MavlinkConnection` (commands, telemetry, deterministic peer fixture); qualified telemetry smoke; provenance and CI gates | Phases A-E landed: the transport parity fixture passes (accepted/denied/timeout ACKs, COMMAND_LONG/COMMAND_INT, wrong identity, command parity for mode/takeoff/goto/land/RTL/servo/relay/gimbal-config/user-command, unlatched GCS-heartbeat announcement, coalesced-datagram handling, live-to-stale link observation, body-frame velocity parity with the zero setpoint on disconnect, a wire-confirmed data-stream request, fence upload/readback/enable-verification and parameter reads), the CLI, the ROS 2 adapter and the CTest targets build it, and the Phase E cutover deleted the hand-written codec; explicit vehicle-class identification and QuadPlane coverage remain open |
 | Competition | No dedicated implementation found in src/include/ROS/Python/plugin scans | Official telemetry, traffic model/deconfliction, herd survey, tracker/path and sampling workflows are open; events await contract |
 
 The working tree removes the Edge Core source/service/API and many camera/
@@ -85,7 +85,7 @@ not authorization to fly. Major gate evidence is expanded below this table.
 | GAP-13 / U-PROF-01 through U-PROF-03; AE27-OPS-004/027/029 | Core viable in all profiles with truthful missing features and live map; templates tested, capability service/capture/resource evidence absent | Integration / Mission Planner | Qualified camera/radio/compute, single owner | Frozen video/map or overload starves safety | Clean boots without GPU/ROS/camera; source loss and saturated video/LTE/RTK; position-age display and measured deadlines | G3/G7 | D01/D02/D06/D08/D09 |
 | GAP-14 / AE27-OPS-023 through AE27-OPS-036 | Physical aircraft, mass, electric power, RF, prop inhibit and FRR | Airframe / safety / flight leads | Final hardware and approved procedures | Unsafe/ineligible aircraft | Per-aircraft weigh/BOM/licence/prop-inhibit inspection, full proof-flight video, weather/energy envelope and approved FRR | G7/G8 | Q03/Q08/D01/D10 |
 | GAP-15 / AE27-ADM-001 through AE27-ADM-035; AE27-OPS-022 | Deadline, eligibility, publication, preparation and attempt evidence; no competition deliverable workflow | Competition lead / ground evidence | Roster, owners, secure storage and reviewed rubric | Lost eligibility/evidence, mixed attempts | Timed isolated-crew rehearsals, attempt reset, file/heading/page/rubric and private receipt checks | G8 | D10/D11/Q08/Q09 |
-| GAP-16 / U project MAVSDK decision | Production MAVSDK mandatory; main.cpp still UdpMavlinkConnection, optional smoke only | Transport lead | Phase A pins/licences/CI/SITL/budgets then parity | Mistaking telemetry smoke for safe control | Phases A-E evidence, Copter and QuadPlane, watchdog/stop/heartbeat/fence/parameters, production provenance and rollback | G-M | D08/D10; resource approval then parity |
+| GAP-16 / U project MAVSDK decision | Closed for the transport: MAVSDK is mandatory, the CLI and ROS 2 adapter build it, and the hand-written codec is deleted; vehicle-class identification and QuadPlane parity are still open | Transport lead | Phase A pins/licences/CI/SITL/budgets then parity | Mistaking telemetry smoke for safe control | Phases A-E evidence, Copter and QuadPlane, watchdog/stop/heartbeat/fence/parameters, production provenance and rollback | G-M | D08/D10; Copter landed, QuadPlane pending |
 
 Telemetry frame review must include the ROS odometry NED label with up-positive
 position and body-frame metadata, and velocity sign conversion through both
@@ -236,6 +236,14 @@ may lag, but required patches must be maintained and reviewed. G-M is mandatory
 for G8 and precedes dependent integrated competition command work; isolated
 server/CV prototypes may proceed without waiting.
 
+Cutover status (2026-09-12): phases A-E have landed. The default runtime is the
+MAVSDK transport, the ROS 2 adapter builds the same transport, and the legacy
+codec plus its generated dialect headers are deleted, so the transport exit items
+are met at the code and local-evidence level. G-M itself stays open: the
+supported-firmware matrix is Copter-only (QuadPlane not started), and the
+install/rollback and packaging evidence lives in G8. A completed local cutover is
+not a competition release.
+
 ### G2 — One authority and aircraft semantics (core + safety leads; G1/G-M)
 
 Add the small persistent runtime and client boundary; unify mission/payload/
@@ -371,10 +379,16 @@ evidence appropriate to the behavior, pass each required profile path, and
 remap safety traceability. Do not delete optional compute because its former
 control UI was REST-based. Retire aliases/settings only after verified migration.
 
-The two codecs may coexist temporarily for comparison; only one owns commands
-in a test/deployment. Keep golden wire references until equivalent semantic/
-wire evidence survives the switch. Do not interpret this plan as permission to
-delete the current codec before G-M.
+The two codecs coexisted temporarily for comparison; only one ever owned commands
+in a test or deployment, and golden wire references were kept until equivalent
+semantic and wire evidence survived the switch. The codec deletion itself ran on
+2026-09-12 with explicit user authorization, after that checklist was met:
+caller inventory (CLI, ROS 2 adapter, SMP tests) moved to
+`make_mavsdk_connection`, the replaced transport tests were ported to the MAVSDK
+contract first, the golden wire assertions became the peer fixture's decode
+checks, and the SR rows were remapped in the same change. These rules stay in
+force for the next removal; they are not retrospective permission for anything
+else.
 
 ## Checks run for this documentation review
 
@@ -445,13 +459,14 @@ autopilot system ID must make the CLI or probe report failure (never success),
 and `goto` must leave the host as COMMAND_INT with the GLOBAL_RELATIVE_ALT_INT
 frame.
 
-The opt-in MAVSDK transport now implements `MavlinkConnection` against the
-reviewed pin `9884f109533f564bc6250e5471e6301d3a62f4a7` (the submodule was
-reconciled from a dirty newer checkout, and provenance passes again). Commands
-are issued as raw COMMAND_LONG/COMMAND_INT so NOMAD keeps its MAVLink
-result-code contract and relative-altitude command frame. The CLI gains
-`--transport udp|mavsdk` (default udp) and `--system-id`; the legacy codec is
-untouched and remains the default.
+As recorded on 2026-09-11, the then-opt-in MAVSDK transport implemented
+`MavlinkConnection` against the reviewed pin
+`9884f109533f564bc6250e5471e6301d3a62f4a7` (the submodule was reconciled from a
+dirty newer checkout, and provenance passes again). Commands are issued as raw
+COMMAND_LONG/COMMAND_INT so NOMAD keeps its MAVLink result-code contract and
+relative-altitude command frame. The CLI gained `--transport udp|mavsdk`
+(default udp) and `--system-id`; at that point the legacy codec was still the
+default, and the Phase E cutover below has since removed it.
 
 Local evidence (2026-09-11, MSVC Release, Copter-oriented peer fixture):
 `nomad_mavsdk_connection_tests` passes its no-peer configuration and
@@ -513,10 +528,10 @@ mid-stream, heartbeat loss, and VIO-feed loss — and each must report its own
 watchdog reason while the peer observes the all-zero setpoint as the newest
 setpoint on the wire. The binary also covers the no-link failure path under
 CTest without a peer, so a declined command cannot masquerade as a stopped
-stream. `zero_delivery_test.cpp` can therefore be deleted with the legacy codec
-at Phase E instead of being ported under pressure; until then both proofs exist
-and the SITL scenario `core-sitl-velocity-watchdog` covers the same behavior on
-the default transport.
+stream. `zero_delivery_test.cpp` was therefore ported rather than rewritten under
+pressure at cutover, and it and the other legacy transport tests were deleted with
+the codec in the Phase E change below; the SITL scenario
+`core-sitl-velocity-watchdog` covers the same behavior end to end.
 
 Phase D (fence/params) landed on 2026-09-12 and closes the last functional gap
 before the cutover decision. MAVSDK's `Geofence` and `Param` plugins implement
@@ -561,8 +576,8 @@ not a behavior change on the current path.
 What Phase D does not yet claim: `read_param` applies MAVSDK's own request
 timeout instead of the caller's budget (the core's ten-second readback timeout is
 not stacked on it), and no parameter write path exists because the core only
-reads. Phase E (production cutover) remains open, and production still uses the
-current codec.
+reads. Phase E (production cutover) was still open when this was written; it
+landed the same day and is recorded below.
 
 One candidate fix was measured and withdrawn rather than shipped: setting
 `Mavsdk::Configuration::set_always_send_heartbeats(true)`, which MAVSDK
@@ -594,8 +609,9 @@ with a stale environment and was still initialising when captured; the
 recreated stack delivers heartbeats at exactly 1.00 Hz, so no relay loss is
 claimed and the cause of that earlier rate is left unexplained rather than
 guessed. Remaining Phase B gaps are unchanged: vehicle-class identification and
-QuadPlane coverage. Phases C, D and E stay open, and production still uses the
-current codec. C23 (the undefined motor-test command id) is fixed and carries
+QuadPlane coverage. Phases C and D were open when this was written and have since
+landed, followed by the Phase E cutover below. C23 (the undefined motor-test
+command id) is fixed and carries
 live evidence: on 2026-09-12 against Copter 4.7.1, `nomad motor-test 1 0 0.1`
 sent `COMMAND_LONG cmd=139` and ArduPilot answered `result=3
 (MAV_RESULT_UNSUPPORTED)`, and after the id was corrected the same run sent
@@ -626,6 +642,72 @@ a closed gate yielded exactly one. The receive is now capped at a short slice
 (measured 2026-09-12: the closed gate captured three announcements at ~1.0 Hz
 before status failed closed, and the open gate relayed the stream). `SR-LNK-04`
 still asks for MAVSDK requalification of this requirement, which remains open.
+
+### MAVSDK Phase E cutover - 2026-09-12
+
+Requirement: project MAVSDK decision / GAP-16 and G-M, with explicit user
+authorization to delete the replaced codec. Falsification: configure the tree
+without the MAVSDK submodule and require failure rather than a transport-less
+binary; name the removed transport on the CLI and require usage instead of a
+silent selection; run the peer fixture and require every command, link, velocity,
+fence and parameter case to keep passing on the transport that remains.
+
+What changed. `src/mavlink/{protocol,udp_connection,udp_commands,fence,params}.cpp`,
+their headers, the build-time generated dialect headers and the legacy transport
+tests (`codec_golden_test.cpp`, `udp_connection_test.cpp`,
+`zero_delivery_test.cpp`) are deleted. `CMakeLists.txt` has no MAVSDK on/off
+option any more: a missing `third_party/MAVSDK` checkout is a `FATAL_ERROR`,
+which removes the last way to build a NOMAD binary with no transport. The ROS 2
+adapter built `UdpMavlinkConnection` directly and now builds
+`make_mavsdk_connection` with a declared `system_id` parameter, so no adapter
+depends on a transport-free core. `--transport` and `NOMAD_TRANSPORT` are removed
+with the selector they fed, so naming a transport (including the removed codec)
+is an unknown-argument usage failure rather than a silent fallback. The dead
+build-time header generator (`scripts/dev/generate_mavlink.py`
+and its Pixi task) is deleted with the CMake rule that invoked it, and the three
+ROS images drop it from their build context and ship the MAVSDK submodule
+instead (`Dockerfile.sim-ros`, `Dockerfile.jetson`, `Dockerfile.sim-isaac`; the
+latter two also clean the MAVSDK patch line endings the way the sim-ros image
+already did).
+
+Keeping the client diagnostics. MAVSDK's `connect()` folds opening the endpoint
+and discovering the peer into one call, which collapsed the two client-facing
+failure messages into one. `MavlinkConnection::connect()` now reports which half
+failed through `ConnectFailure`, so an endpoint that never opened still reports
+`could not connect to <endpoint>` while an open link that no expected autopilot
+answered on reports `timed out waiting for ArduPilot heartbeat` - the message the
+`core-sitl-link-recovery` and `core-sitl-gcs-heartbeat` scenarios and the client
+contract tests key on. `tests/mavsdk_connection_test.cpp`'s
+`test_unusable_endpoint_is_reported_as_a_link_failure` and
+`test_absent_peer_fails_closed` pin both reasons at the transport, and
+`tests/test_core_client_contract.py`'s
+`test_occupied_endpoint_reports_connect_failure` requires the heartbeat
+diagnostic to be absent when the endpoint never opened, so neither message can
+be replaced by the other again. The ROS 2 adapter's throttled warning names the
+same two cases (`ros2/nomad_ros/src/node.cpp:report_connect_failure`).
+
+Evidence on this tree (Windows, MSVC Release, 2026-09-12): `pixi run
+test-mavsdk-phase-b` configures and builds clean, and `ctest` in that tree reports
+9/9 including `nomad_mavsdk_connection_tests` and
+`nomad_mavsdk_zero_delivery_tests`; `scripts/dev/mavsdk_connection_fixture.py`
+passes 73/73 peer checks against the deterministic vehicle, so command, link,
+zero-delivery, fence and parameter behavior all survive the deletion; the ROS 2
+adapter compiles against the transport in the sim-ros image's colcon workspace.
+The no-transport falsification was executed: configuring with
+`-DNOMAD_MAVSDK_SOURCE_DIR` pointing at an empty directory stops at
+`CMakeLists.txt:37` with the submodule instruction and exit 1, so no
+MAVSDK-less binary can be configured. Collapsing the two connect diagnostics
+back into one reproduces the client contract failures, so the preserved messages
+are checked rather than incidental.
+Not re-established here: the live SITL matrix over the MAVSDK transport, the ROS
+adapter integration suite on a rebuilt image, and hardware or QuadPlane behavior.
+The default runtime is MAVSDK on every path now, so those runs are remaining G-M
+evidence rather than a fallback comparison.
+
+debt: the transport calls MAVSDK passthrough APIs marked deprecated in the pinned
+pin (`send_command_long`, `send_command_int`, `queue_message`,
+`subscribe_message`); revisit when the fork drops them; then move the command path
+onto the replacement plugin API with the peer fixture as the wire check.
 
 ### Boundary clarification - 2026-09-10
 

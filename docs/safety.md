@@ -90,13 +90,13 @@ These retain their original obligations; partial coverage is not satisfaction.
 | SR-VEL-03 | Reject the complete command for any non-finite component | C++ tests |
 | SR-VEL-04 | Convert input and MAVLink frames explicitly and correctly | Core wire tests; end-to-end ROS/frame review open |
 | SR-VEL-05 | Guided velocity requires armed state and GUIDED mode | Copter tests; never apply its numeric mode to Plane |
-| SR-VEL-06 | Filter heartbeat to the commanded vehicle | Codec/UDP tests; authenticated source/target selection remains a security gate |
+| SR-VEL-06 | Filter heartbeat to the commanded vehicle | MAVSDK autopilot-selection tests; authenticated source/target selection remains a security gate |
 | SR-VIO-01 | Reject unhealthy, low-confidence, stale or unexpected-source VIO | Core/ROS tests; source timestamp, real sensor and fusion gates open |
 | SR-VIO-02 | Stale VIO stops active velocity within watchdog interval | Deterministic tests; live estimator and full-load deadlines open |
 | SR-LNK-01 | Commands require fresh FC heartbeat | Velocity gate/transport behavior tested; audit every discrete command path at G2 |
 | SR-LNK-02 | Missing velocity input triggers a zero command within timeout | Watchdog tests; independent wire and FC observations required |
 | SR-LNK-03 | Shutdown sends zero before closing an active link | Loopback ordering tests; live SITL and physical link evidence separate |
-| SR-LNK-04 | Announce a standard GCS heartbeat for heartbeat-gated relays | Codec/UDP tests plus live Copter 4.7.1 `core-sitl-gcs-heartbeat` (gate opens; the closed-gate control captures at least three measured intervals across four announcements at 0.9–1.3 s); requalify MAVSDK behavior |
+| SR-LNK-04 | Announce a standard GCS heartbeat for heartbeat-gated relays | MAVSDK `GroundStation` configuration announces at 1 Hz; the closed-gate `core-sitl-gcs-heartbeat` harness requires at least three measured intervals across four announcements at 0.9–1.3 s. Current-head full SITL qualification remains required |
 | SR-FEN-01 | Upload, enable and verify FC fence before autonomous flight | Upload/readback/enable-reading tests; global preflight enforcement and all fence fields open |
 | SR-FEN-02 | Reject position targets outside configured boundary | C++ target tests; live containment and full mission/velocity paths open |
 | SR-PAY-01 | Validate servo channel and PWM before actuation | C++ generic range tests; board map and reserved payload channels open |
@@ -160,7 +160,9 @@ Missing coverage remains visible in the tables above.
 
 Retained from the migration to avoid losing stable code/test references.
 These mappings identify evidence locations; they do not assert full requirement
-closure. Remap them in the MAVSDK cutover while retaining equivalent fault proof.
+closure. The MAVSDK cutover remapped the transport rows to the MAVSDK symbols and
+kept equivalent fault proof; the checker still only proves each reference
+resolves.
 
 ```cpp_traceability
 SR-VEL-01 | src/vehicle/vehicle_velocity.cpp:set_velocity | tests/safety_test.cpp::test_safety_velocity_accepts_clamped_frd_command
@@ -168,9 +170,9 @@ SR-VEL-01 | src/safety/velocity_config.cpp:load_velocity_limits | tests/velocity
 SR-VEL-02 | src/vehicle/vehicle_velocity.cpp:set_velocity | tests/safety_test.cpp::test_safety_velocity_accepts_clamped_frd_command
 SR-VEL-02 | src/safety/velocity_config.cpp:load_velocity_limits | tests/velocity_config_test.cpp::test_configured_limits_are_loaded
 SR-VEL-03 | src/vehicle/vehicle_velocity.cpp:set_velocity | tests/safety_test.cpp::test_safety_velocity_rejects_each_fault
-SR-VEL-04 | src/mavlink/protocol.cpp:encode_velocity_setpoint | tests/core_test.cpp::test_velocity_frame_uses_expected_wire_layout
+SR-VEL-04 | src/mavlink/mavsdk_mavlink_connection.cpp:queue_velocity_setpoint | tests/test_mavsdk_connection.py::test_velocity_reaches_the_wire_and_is_zeroed_on_disconnect
 SR-VEL-05 | src/vehicle/vehicle_velocity.cpp:set_velocity | tests/safety_test.cpp::test_safety_velocity_rejects_each_fault
-SR-VEL-06 | src/mavlink/protocol.cpp:accepts_heartbeat | tests/core_test.cpp::test_heartbeat_filter_accepts_vehicle_only
+SR-VEL-06 | src/mavlink/mavsdk_system.cpp:select_expected_autopilot | tests/test_mavsdk_connection.py::test_wrong_autopilot_identity_is_refused
 SR-VIO-01 | src/safety/velocity.cpp:evaluate_velocity | tests/safety_test.cpp::test_safety_velocity_rejects_each_fault
 SR-VIO-01 | src/safety/vio_source.cpp:VioSourceValidator::validate | tests/vio_source_test.cpp::test_vio_source_validator_rejects_wrong_source
 SR-VIO-01 | ros2/nomad_ros/src/node.cpp:on_velocity_command | tests/ros/test_nomad_ros_integration.py::test_vio_source_gate_blocks_mismatch
@@ -178,15 +180,12 @@ SR-VIO-02 | src/safety/watchdog.cpp:evaluate_watchdog | tests/safety_test.cpp::t
 SR-LNK-01 | src/vehicle/vehicle_velocity.cpp:set_velocity | tests/safety_test.cpp::test_vehicle_watchdog_stops_for_link_loss
 SR-LNK-01 | src/mavlink/mavsdk_mavlink_connection.cpp:wait_for_heartbeat | tests/test_mavsdk_connection.py::test_arm_acknowledgement_paths
 SR-LNK-02 | src/safety/watchdog.cpp:evaluate_watchdog | tests/safety_test.cpp::test_vehicle_watchdog_stops_for_command_timeout
-SR-LNK-03 | src/mavlink/udp_connection.cpp:send_velocity | tests/safety_test.cpp::test_vehicle_stop_velocity_sends_zero
-SR-LNK-04 | src/mavlink/protocol.cpp:encode_gcs_heartbeat | tests/codec_golden_test.cpp::test_gcs_heartbeat_encoder_matches_mavlink_reference
-SR-LNK-04 | src/mavlink/udp_connection.cpp:send_gcs_heartbeat_locked | tests/udp_connection_test.cpp::test_unlatched_connection_sends_gcs_heartbeats
-SR-LNK-04 | src/mavlink/udp_connection.cpp:announcement_override | tests/udp_connection_test.cpp::test_relay_address_override_targets_prelatch_announcements
+SR-LNK-03 | src/mavlink/mavsdk_mavlink_connection.cpp:send_velocity | tests/safety_test.cpp::test_vehicle_stop_velocity_sends_zero
+SR-LNK-03 | src/mavlink/mavsdk_mavlink_connection.cpp:send_velocity | tests/test_mavsdk_connection.py::test_zero_delivery_reaches_the_wire_on_every_stop_path
+SR-LNK-04 | src/mavlink/mavsdk_mavlink_connection.cpp:MavsdkMavlinkConnection | tests/test_mavsdk_connection.py::test_unlatched_link_announces_a_gcs_heartbeat
 SR-FEN-01 | src/vehicle/vehicle_fence.cpp:upload_fence | tests/safety_test.cpp::test_vehicle_upload_fence_validates_boundary
 SR-FEN-01 | src/vehicle/vehicle_fence.cpp:verify_fence_uploaded | tests/safety_test.cpp::test_vehicle_verifies_fence_status_and_fails_closed
-SR-FEN-01 | src/mavlink/fence.cpp:upload_fence_plan | tests/safety_test.cpp::test_vehicle_upload_fence_rejects_transport_failure
-SR-FEN-01 | src/mavlink/fence.cpp:download_fence_plan | tests/safety_test.cpp::test_vehicle_verifies_fence_status_and_fails_closed
-SR-FEN-01 | src/mavlink/params.cpp:read_param | tests/safety_test.cpp::test_vehicle_verifies_fence_status_and_fails_closed
+SR-FEN-01 | src/vehicle/vehicle_fence.cpp:upload_fence | tests/safety_test.cpp::test_vehicle_upload_fence_rejects_transport_failure
 SR-FEN-01 | src/mavlink/mavsdk_fence.cpp:upload_fence_plan | tests/test_mavsdk_connection.py::test_fence_uploads_reads_back_and_refuses_invalid_boundaries
 SR-FEN-01 | src/mavlink/mavsdk_fence.cpp:download_fence_plan | tests/test_mavsdk_connection.py::test_fence_uploads_reads_back_and_refuses_invalid_boundaries
 SR-FEN-01 | src/mavlink/mavsdk_mavlink_connection.cpp:read_param | tests/test_mavsdk_connection.py::test_disabled_fence_never_verifies
@@ -197,7 +196,7 @@ SR-PAY-02 | src/safety/payload.cpp:clamp_release_duration | tests/safety_test.cp
 SR-PAY-02 | src/vehicle/vehicle_payload.cpp:release_payload | tests/safety_test.cpp::test_vehicle_payload_on_failure_still_attempts_off
 SR-PAY-02 | src/vehicle/vehicle_payload.cpp:release_payload | tests/safety_test.cpp::test_vehicle_payload_off_failure_is_reported
 SR-PAY-03 | src/safety/payload.cpp:ReleaseInterlock::evaluate_release | tests/safety_test.cpp::test_payload_validation_and_interlock
-SR-SEC-01 | src/vehicle/vehicle.cpp:send_command | tests/core_test.cpp::test_command_frame_has_expected_header
+SR-SEC-01 | src/vehicle/vehicle.cpp:send_command | tests/test_mavsdk_connection.py::test_command_wire_forms
 SR-SEC-01 | src/main.cpp:run_command | tests/test_cpp_command_surface.py::test_cpp_command_surface_has_no_failsafe_controls
 SR-SEC-02 | src/main.cpp:run_command | tests/test_core_client_contract.py::test_every_actuation_verb_refused_without_key_before_any_socket_work
 SR-SEC-03 | src/main.cpp:audit_command | tests/test_core_client_contract.py::test_actuation_with_key_reaches_transport_and_audits

@@ -13,20 +13,27 @@ Its [source requirements](conops-requirements.md) define the acceptance context:
 
 ## Current status
 
-The production core still uses UdpMavlinkConnection and generated ArduPilot
-dialect headers, and CMake NOMAD_ENABLE_MAVSDK still defaults OFF. Enabling it
-now builds both the connect/status smoke executable and a MAVSDK-backed
-`MavlinkConnection` (`src/mavlink/mavsdk_mavlink_connection.cpp`) that the CLI
-can select with `--transport mavsdk`; `udp` remains the default and the legacy
-codec is untouched.
+MAVSDK is the transport. The Phase E cutover removed the hand-written codec
+(`src/mavlink/{protocol,udp_connection,udp_commands,fence,params}.cpp`, the
+generated dialect headers and the legacy codec test targets), so no build can
+produce a NOMAD binary without a way to reach a vehicle, and the old path cannot
+survive as a hidden runtime fallback. CMake has no MAVSDK on/off option: a
+missing `third_party/MAVSDK` checkout is a configuration error. The CLI, the ROS
+2 adapter (`ros2/nomad_ros`) and the SMP tests build the transport through
+`nomad/mavlink/mavsdk_transport.hpp`. The `--transport` argument and the
+`NOMAD_TRANSPORT` environment variable were removed in the same cutover, so an
+invocation that names a transport fails closed with usage instead of silently
+selecting something else.
 
-Phase A source exists: opt-in subbuild, telemetry smoke consumer, deterministic
-ArduPilot-like UDP fixture, pure qualification tests, Linux/Windows CI jobs,
-selected ROS image compile wiring, dependency inventory, root NOTICE and a pinned
-project MAVSDK fork. The parent gitlink now pins
-`9884f109533f564bc6250e5471e6301d3a62f4a7`; read `.gitmodules`, the gitlinks and
-the [dependency inventory](mavsdk-dependencies.md) for provenance. Phases B-E
-production parity remain open.
+Phases A-D landed as gated steps: opt-in subbuild, telemetry smoke consumer,
+deterministic ArduPilot-like UDP fixture, pure qualification tests, Linux/Windows
+CI jobs, ROS image compile wiring, dependency inventory, root NOTICE and a pinned
+project MAVSDK fork. Command, link, velocity and fence/parameter parity are
+proven by `scripts/dev/mavsdk_connection_fixture.py` and the core test targets.
+The parent gitlink pins `9884f109533f564bc6250e5471e6301d3a62f4a7`; read
+`.gitmodules`, the gitlinks and the
+[dependency inventory](mavsdk-dependencies.md) for provenance. The Phase A/B
+names survive in task, CI-job and provenance-check names, not as a second build.
 
 The published Phase A graph has now passed recursive hosted qualification. Test
 run `34535620056` completed the Python suite, C++ core, provenance checker,
@@ -200,8 +207,8 @@ implements `MavlinkConnection` against pin `9884f109`, issuing commands as raw
 COMMAND_LONG/COMMAND_INT (so the result-code and relative-altitude-frame
 contracts are preserved) and mapping telemetry into `VehicleState` with the same
 per-field validity flags and steady-clock timestamps, so the position-freshness
-gate still applies. The CLI selects it with `--transport udp|mavsdk` (default
-udp) and `--system-id`. `nomad_mavsdk_connection_tests` and
+gate still applies. The CLI takes `--system-id`, and still accepts
+`--transport mavsdk` for older invocations. `nomad_mavsdk_connection_tests` and
 `scripts/dev/mavsdk_connection_fixture.py` (driving the deterministic vehicle
 in `scripts/dev/mavsdk_peer.py`) cover accepted, denied, timeout,
 no-peer, stale-telemetry, COMMAND_INT frame and wrong-identity cases, plus
@@ -217,8 +224,8 @@ against reported state. This is not the end of Phase B: motor-test is unproven
 because `Vehicle::motor_test` sends command ID 139, which is not a `MAV_CMD`
 entry in the pinned dialect (`MAV_CMD_DO_MOTOR_TEST` is 209); that is recorded
 as C23 in the migration contradictions. Explicit vehicle-class identification
-and QuadPlane coverage are still open, and Phases C-E remain, so production
-continues to use the current codec.
+and QuadPlane coverage are still open; everything up to and including the
+production cutover has landed.
 
 Cover arm/disarm, mode, takeoff, land/RTL, goto, servo, relay, motor-test,
 gimbal-config and user-command. Unsupported verbs now belong in the fork: add the

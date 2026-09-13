@@ -102,14 +102,15 @@ and capabilities; keep real settings/credentials in ignored local storage.
 
 ## Connection behavior
 
-Current C++ transport accepts udp, udpin and udpout endpoint schemes, such as
-udpin:127.0.0.1:<port>. Native serial/TCP are future MAVSDK deployment capabilities,
-not working current CLI transports. Routers bridge selected physical links to
-UDP. Core placement does not follow automatically from compute placement.
+The C++ CLI accepts udp, udpin and udpout endpoint schemes, such as
+udpin:127.0.0.1:<port>, and hands them to the MAVSDK transport. Native serial/TCP
+are possible MAVSDK deployment capabilities but are not current CLI transports.
+Routers bridge selected physical links to UDP. Core placement does not follow
+automatically from compute placement.
 
 NOMAD_RELAY_ADDRESS optionally selects the pre-latch GCS announcement destination.
-The existing UDP code emits 1 Hz GCS heartbeats while waiting/polling; after peer
-latching it uses the peer. Malformed overrides fail connection. This heartbeat
+The transport emits 1 Hz GCS heartbeats while waiting/polling — MAVSDK does that
+for its `GroundStation` configuration; after peer latching it uses the peer. Malformed overrides fail connection. This heartbeat
 is unrelated to the competition's required 1 Hz telemetry upload.
 
 For remote core placement, a secure network and an authenticated client protocol
