@@ -286,14 +286,16 @@ def _check_mode_gate(connection, telemetry: Telemetry, binary: Path, port: str, 
     _log("  PASS: setpoint refused outside GUIDED (H-04 gate enforced)")
 
 
-def _cleanup_scenario(connection, reader_stop: threading.Event) -> None:
-    _log("cleanup: returning the vehicle")
+def _cleanup_scenario(connection, telemetry: Telemetry, reader_stop: threading.Event) -> None:
+    _log("cleanup: returning and disarming the vehicle")
     try:
         _set_mode(connection, "RTL")
     except Exception:
         pass
-    reader_stop.set()
-    time.sleep(0.5)
+    try:
+        _wait_until(lambda state: not state[1], 120, telemetry, "vehicle to land and disarm")
+    finally:
+        reader_stop.set()
 
 
 def run_scenario(operator_ep: str, binary: Path, port: str) -> dict:
@@ -309,7 +311,7 @@ def run_scenario(operator_ep: str, binary: Path, port: str) -> dict:
         results["status"] = "PASS"
         return results
     finally:
-        _cleanup_scenario(operator, reader_stop)
+        _cleanup_scenario(operator, telemetry, reader_stop)
 
 
 def main() -> int:
