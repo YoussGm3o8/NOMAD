@@ -582,8 +582,10 @@ operation, divide the caller's positive budget across the pinned MAVSDK retry
 attempts, set that per-attempt transfer timeout, and restore the transport
 default. Non-positive budgets fail closed before any request is sent. Focused
 peer cases exercise 100 ms command and parameter budgets against silent
-responses, rather than inheriting MAVSDK's longer default. No parameter write
-path exists because the core only reads.
+responses, rather than inheriting MAVSDK's longer default. Parameter reads
+accept both ArduPilot integer parameters (such as `FENCE_ENABLE`) and REAL32
+values, returning the numeric value only after a matching response. No
+parameter write path exists because the core only reads.
 Phase E (production cutover) was still open when this historical evidence was
 written; it landed the same day and is recorded below.
 

@@ -34,6 +34,7 @@ constexpr double kDefaultMavsdkTimeoutSeconds = 0.5;
 // across those attempts before handing it to the library.
 constexpr double kCommandAttemptCount = 4.0;
 constexpr double kParameterAttemptCount = 6.0;
+constexpr double kParameterTypeAttemptCount = 2.0;
 
 class ScopedMavsdkTimeout final {
 public:
@@ -423,12 +424,27 @@ std::optional<float> MavsdkMavlinkConnection::read_param(const std::string &para
     if (!is_connected() || !param_ || param_id.empty() || timeout <= std::chrono::milliseconds::zero()) {
         return std::nullopt;
     }
-    const ScopedMavsdkTimeout timeout_scope(sdk_, std::chrono::duration<double>(timeout) / kParameterAttemptCount);
-    const auto [result, value] = param_->get_param_float(param_id);
-    if (result != mavsdk::Param::Result::Success) {
-        return std::nullopt;
+
+    // ArduPilot reports integer-valued parameters such as FENCE_ENABLE with
+    // their MAVLink integer type. Try the integer API first, then accept a
+    // REAL32 parameter, while dividing the caller's budget across both type
+    // probes and MAVSDK's per-probe retries.
+    const auto attempt_timeout = std::chrono::duration<double>(timeout) /
+                                  (kParameterAttemptCount * kParameterTypeAttemptCount);
+    {
+        const ScopedMavsdkTimeout timeout_scope(sdk_, attempt_timeout);
+        const auto [result, value] = param_->get_param_int(param_id);
+        if (result == mavsdk::Param::Result::Success) {
+            return static_cast<float>(value);
+        }
     }
-    return value;
+
+    const ScopedMavsdkTimeout timeout_scope(sdk_, attempt_timeout);
+    const auto [result, value] = param_->get_param_float(param_id);
+    if (result == mavsdk::Param::Result::Success) {
+        return value;
+    }
+    return std::nullopt;
 }
 
 std::optional<CommandAck> MavsdkMavlinkConnection::send_command(const Command &command,

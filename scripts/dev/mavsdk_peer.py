@@ -34,7 +34,10 @@ FENCE_ITEM_FRAME = mavlink.MAV_FRAME_GLOBAL_INT
 
 # Params the peer serves. ArduPilot reports most entries as REAL32, and the
 # fence cases need FENCE_ENABLE because a plan alone is not an enforced fence.
+# ArduPilot reports that switch as an integer parameter, so keep the fixture's
+# wire type faithful to the real SITL contract.
 DEFAULT_PARAMS = {"FENCE_ENABLE": 1.0}
+INTEGER_PARAMS = {"FENCE_ENABLE"}
 
 # Command IDs the parity cases expect on the wire. They come from the dialect so
 # a drift in the core shows up as a mismatch rather than a silently updated
@@ -305,8 +308,9 @@ class VehiclePeer:
     def _param_value(self, name: str, index: int, count: int):
         # pymavlink's generated encoder wants the 16-byte field as bytes; it
         # decodes it back to str for the received-message accessor.
+        param_type = mavlink.MAV_PARAM_TYPE_INT8 if name in INTEGER_PARAMS else mavlink.MAV_PARAM_TYPE_REAL32
         return self._mavlink.param_value_encode(
-            name.encode("ascii"), float(self._params[name]), mavlink.MAV_PARAM_TYPE_REAL32, count, index
+            name.encode("ascii"), float(self._params[name]), param_type, count, index
         )
 
     def _serve_fence_transfer(self, kind: str, message) -> None:
