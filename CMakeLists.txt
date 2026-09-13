@@ -1,21 +1,23 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.22.1)
 
 project(nomad VERSION 0.1.0 LANGUAGES CXX)
 
 include(CTest)
-include(CheckCXXCompilerFlag)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(NOMAD_ENABLE_MAVSDK "Build the optional MAVSDK Phase A smoke target" OFF)
+# MAVSDK is the transport, not an option: the hand-written codec was removed at
+# the Phase E cutover, so a build without MAVSDK would have no way to reach a
+# vehicle and the removed path could survive as a hidden fallback. There is
+# therefore no enable/disable flag; a missing checkout is a configuration error.
 set(NOMAD_MAVSDK_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/MAVSDK" CACHE PATH
-    "MAVSDK checkout used by the optional Phase A smoke target")
+    "MAVSDK checkout that provides the transport")
 
-# Keep the MAVSDK experiment isolated from the default codec build. The child
-# project has its own options; normal variables plus CMP0077 prevent those
-# options from changing NOMAD's top-level cache or test configuration.
+# Keep the MAVSDK build isolated from NOMAD's own options. The child project has
+# its own options; normal variables plus CMP0077 prevent those options from
+# changing NOMAD's top-level cache or test configuration.
 function(add_nomad_mavsdk)
     cmake_policy(SET CMP0077 NEW)
     set(BUILD_TESTING OFF)
@@ -31,34 +33,22 @@ function(add_nomad_mavsdk)
     add_subdirectory("${NOMAD_MAVSDK_SOURCE_DIR}/cpp" "${CMAKE_BINARY_DIR}/mavsdk")
 endfunction()
 
-if(NOMAD_ENABLE_MAVSDK)
-    if(CMAKE_VERSION VERSION_LESS 3.22.1)
-        message(FATAL_ERROR "NOMAD_ENABLE_MAVSDK requires CMake 3.22.1 or newer")
-    endif()
-    if(NOT EXISTS "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/CMakeLists.txt")
-        message(FATAL_ERROR
-            "MAVSDK source is missing. Run: git submodule update --init --recursive")
-    endif()
-    add_nomad_mavsdk()
+if(NOT EXISTS "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/CMakeLists.txt")
+    message(FATAL_ERROR
+        "MAVSDK source is missing. Run: git submodule update --init --recursive")
 endif()
+add_nomad_mavsdk()
 
-if(NOMAD_ENABLE_MAVSDK OR BUILD_TESTING)
-    add_library(nomad_mavsdk_validation src/mavlink/mavsdk_validation.cpp)
-    target_include_directories(nomad_mavsdk_validation PUBLIC include)
-    target_compile_features(nomad_mavsdk_validation PUBLIC cxx_std_20)
-    if(MSVC)
-        target_compile_options(nomad_mavsdk_validation PRIVATE /W4 /permissive- /EHsc)
-    else()
-        target_compile_options(nomad_mavsdk_validation PRIVATE -Wall -Wextra -Wpedantic)
-    endif()
+add_library(nomad_mavsdk_validation src/mavlink/mavsdk_validation.cpp)
+target_include_directories(nomad_mavsdk_validation PUBLIC include)
+target_compile_features(nomad_mavsdk_validation PUBLIC cxx_std_20)
+if(MSVC)
+    target_compile_options(nomad_mavsdk_validation PRIVATE /W4 /permissive- /EHsc)
+else()
+    target_compile_options(nomad_mavsdk_validation PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 add_library(nomad_core
-    src/mavlink/fence.cpp
-    src/mavlink/params.cpp
-    src/mavlink/protocol.cpp
-    src/mavlink/udp_commands.cpp
-    src/mavlink/udp_connection.cpp
     src/mission/executor.cpp
     src/safety/fence_config.cpp
     src/safety/geofence.cpp
@@ -75,29 +65,11 @@ add_library(nomad_core
     src/vehicle/vehicle_velocity.cpp
 )
 
-# MAVLink dialect tables come from the pinned third_party/ardupilot-mavlink
-# submodule (the exact commit the ArduPilot firmware compiles against), not
-# from hand-maintained constants. scripts/dev/generate_mavlink.py runs the
-# submodule's own mavgen into the build directory; the generated headers are
-# gitignored and never committed.
-set(MAVLINK_SUBMODULE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ardupilot-mavlink")
-set(MAVLINK_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated/mavlink")
-if(EXISTS "${MAVLINK_SUBMODULE_DIR}/pymavlink/tools/mavgen.py")
-    find_package(Python3 COMPONENTS Interpreter REQUIRED)
-    add_custom_command(
-        OUTPUT "${MAVLINK_GENERATED_DIR}/provenance.txt"
-        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/scripts/dev/generate_mavlink.py"
-                --output "${MAVLINK_GENERATED_DIR}"
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/dev/generate_mavlink.py"
-                "${MAVLINK_SUBMODULE_DIR}/message_definitions/v1.0/ardupilotmega.xml"
-        COMMENT "Generating MAVLink C headers from third_party/ardupilot-mavlink"
-        VERBATIM)
-    add_custom_target(nomad_mavlink_generate DEPENDS "${MAVLINK_GENERATED_DIR}/provenance.txt")
-    add_dependencies(nomad_core nomad_mavlink_generate)
-    target_include_directories(nomad_core PRIVATE "${MAVLINK_GENERATED_DIR}")
-else()
-    message(FATAL_ERROR "MAVLink submodule is missing. Run: git submodule update --init --recursive")
-endif()
+# MAVLink packing lives in the MAVSDK transport: the transport builds frames with
+# MAVSDK's own generated codec, so nomad_core has no dialect headers of its own
+# and no build-time mavgen step. The pinned third_party/ardupilot-mavlink
+# submodule stays because the Python command-id gate resolves hand-typed ids
+# against its definition.
 
 target_include_directories(nomad_core PUBLIC include)
 target_compile_features(nomad_core PUBLIC cxx_std_20)
@@ -120,55 +92,55 @@ add_executable(nomad
     src/cli_demos.cpp
     src/cli_velocity.cpp
 )
-target_link_libraries(nomad PRIVATE nomad_core)
-# The CLI can select the MAVSDK transport only in a build that was configured
-# with NOMAD_ENABLE_MAVSDK=ON; otherwise a stub keeps `--transport mavsdk` an
-# explicit failure instead of an undefined symbol.
-if(NOMAD_ENABLE_MAVSDK)
-    target_link_libraries(nomad PRIVATE nomad_mavsdk_connection)
+target_link_libraries(nomad PRIVATE nomad_core nomad_mavsdk_connection)
+
+# MAVSDK's embedded fmt target is directory-scoped and is not a reliable
+# dependency for a parent project. Import the generated archive explicitly so
+# static consumers link the same artifact on Linux and Windows.
+# fmt installs a per-configuration archive (`fmtd` in Debug), so the location
+# has to name both: the Debug CTest tree and the Release transport tree are the
+# two configurations the Pixi tasks build.
+set(NOMAD_MAVSDK_INSTALL_DIR "${CMAKE_BINARY_DIR}/mavsdk/third_party/install")
+set(NOMAD_MAVSDK_FMT_LIBRARY
+    "${NOMAD_MAVSDK_INSTALL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}fmt${CMAKE_STATIC_LIBRARY_SUFFIX}")
+set(NOMAD_MAVSDK_FMT_DEBUG_LIBRARY
+    "${NOMAD_MAVSDK_INSTALL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}fmtd${CMAKE_STATIC_LIBRARY_SUFFIX}")
+add_library(nomad_mavsdk_fmt STATIC IMPORTED GLOBAL)
+set_target_properties(nomad_mavsdk_fmt PROPERTIES
+    IMPORTED_LOCATION "${NOMAD_MAVSDK_FMT_LIBRARY}"
+    IMPORTED_LOCATION_DEBUG "${NOMAD_MAVSDK_FMT_DEBUG_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${NOMAD_MAVSDK_INSTALL_DIR}/include")
+
+# The transport every NOMAD binary links: the CLI, the ROS adapter and the
+# connection tests.
+add_library(nomad_mavsdk_connection
+    src/mavlink/mavsdk_connection.cpp
+    src/mavlink/mavsdk_fence.cpp
+    src/mavlink/mavsdk_mavlink_connection.cpp
+    src/mavlink/mavsdk_system.cpp)
+target_include_directories(nomad_mavsdk_connection PUBLIC include PRIVATE
+    "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/core/include"
+    "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/geofence/include"
+    "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/param/include"
+    "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/telemetry/include"
+    "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/mavlink_passthrough/include"
+)
+target_compile_features(nomad_mavsdk_connection PUBLIC cxx_std_20)
+add_dependencies(nomad_mavsdk_connection mavsdk)
+target_link_libraries(
+    nomad_mavsdk_connection PUBLIC nomad_mavsdk_validation PRIVATE mavsdk nomad_mavsdk_fmt)
+if(MSVC)
+    target_compile_options(nomad_mavsdk_connection PRIVATE /W4 /permissive- /EHsc)
 else()
-    target_sources(nomad PRIVATE src/mavlink/mavsdk_transport_stub.cpp)
+    target_compile_options(nomad_mavsdk_connection PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-if(NOMAD_ENABLE_MAVSDK)
-    # MAVSDK's embedded fmt target is directory-scoped and is not a reliable
-    # dependency for a parent project. Import the generated archive explicitly
-    # so static consumers link the same artifact on Linux and Windows.
-    set(NOMAD_MAVSDK_INSTALL_DIR "${CMAKE_BINARY_DIR}/mavsdk/third_party/install")
-    set(NOMAD_MAVSDK_FMT_LIBRARY
-        "${NOMAD_MAVSDK_INSTALL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}fmt${CMAKE_STATIC_LIBRARY_SUFFIX}")
-    add_library(nomad_mavsdk_fmt STATIC IMPORTED GLOBAL)
-    set_target_properties(nomad_mavsdk_fmt PROPERTIES
-        IMPORTED_LOCATION "${NOMAD_MAVSDK_FMT_LIBRARY}"
-        INTERFACE_INCLUDE_DIRECTORIES "${NOMAD_MAVSDK_INSTALL_DIR}/include")
-
-    add_library(nomad_mavsdk_connection
-        src/mavlink/mavsdk_connection.cpp
-        src/mavlink/mavsdk_fence.cpp
-        src/mavlink/mavsdk_mavlink_connection.cpp
-        src/mavlink/mavsdk_system.cpp)
-    target_include_directories(nomad_mavsdk_connection PUBLIC include PRIVATE
-        "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/core/include"
-        "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/geofence/include"
-        "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/param/include"
-        "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/telemetry/include"
-        "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/mavlink_passthrough/include"
-    )
-    target_compile_features(nomad_mavsdk_connection PUBLIC cxx_std_20)
-    add_dependencies(nomad_mavsdk_connection mavsdk)
-    target_link_libraries(
-        nomad_mavsdk_connection PUBLIC nomad_mavsdk_validation PRIVATE mavsdk nomad_mavsdk_fmt)
-    if(MSVC)
-        target_compile_options(nomad_mavsdk_connection PRIVATE /W4 /permissive- /EHsc)
-    else()
-        target_compile_options(nomad_mavsdk_connection PRIVATE -Wall -Wextra -Wpedantic)
-    endif()
-
-    add_executable(nomad_mavsdk_phase_a_smoke examples/mavsdk_phase_a_smoke.cpp)
-    target_include_directories(nomad_mavsdk_phase_a_smoke PRIVATE include)
-    add_dependencies(nomad_mavsdk_phase_a_smoke mavsdk)
-    target_link_libraries(nomad_mavsdk_phase_a_smoke PRIVATE nomad_mavsdk_connection)
-endif()
+# Historical Phase A name: the connect/status smoke consumer the qualification
+# tasks and provenance checks still drive.
+add_executable(nomad_mavsdk_phase_a_smoke examples/mavsdk_phase_a_smoke.cpp)
+target_include_directories(nomad_mavsdk_phase_a_smoke PRIVATE include)
+add_dependencies(nomad_mavsdk_phase_a_smoke mavsdk)
+target_link_libraries(nomad_mavsdk_phase_a_smoke PRIVATE nomad_mavsdk_connection)
 
 # The adapter packages embed this file as a subproject; only build the CTest
 # targets when the tests/ source tree is actually present.
@@ -185,11 +157,6 @@ if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_definitions(nomad_core_tests PRIVATE NOMAD_TESTS)
     add_test(NAME nomad_core_tests COMMAND nomad_core_tests)
 
-    add_executable(nomad_codec_golden_tests tests/codec_golden_test.cpp)
-    target_link_libraries(nomad_codec_golden_tests PRIVATE nomad_core)
-    target_compile_definitions(nomad_codec_golden_tests PRIVATE NOMAD_TESTS)
-    add_test(NAME nomad_codec_golden_tests COMMAND nomad_codec_golden_tests)
-
     add_executable(nomad_safety_tests tests/safety_test.cpp)
     target_link_libraries(nomad_safety_tests PRIVATE nomad_core)
     target_compile_definitions(nomad_safety_tests PRIVATE NOMAD_TESTS)
@@ -199,16 +166,6 @@ if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_link_libraries(nomad_output_tests PRIVATE nomad_core)
     target_compile_definitions(nomad_output_tests PRIVATE NOMAD_TESTS)
     add_test(NAME nomad_output_tests COMMAND nomad_output_tests)
-
-    add_executable(nomad_udp_tests tests/udp_connection_test.cpp)
-    target_link_libraries(nomad_udp_tests PRIVATE nomad_core)
-    target_compile_definitions(nomad_udp_tests PRIVATE NOMAD_TESTS)
-    add_test(NAME nomad_udp_tests COMMAND nomad_udp_tests)
-
-    add_executable(nomad_zero_delivery_tests tests/zero_delivery_test.cpp)
-    target_link_libraries(nomad_zero_delivery_tests PRIVATE nomad_core)
-    target_compile_definitions(nomad_zero_delivery_tests PRIVATE NOMAD_TESTS)
-    add_test(NAME nomad_zero_delivery_tests COMMAND nomad_zero_delivery_tests)
 
     add_executable(nomad_vio_tests tests/vio_source_test.cpp)
     target_link_libraries(nomad_vio_tests PRIVATE nomad_core)
@@ -225,18 +182,16 @@ if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_definitions(nomad_fence_config_tests PRIVATE NOMAD_TESTS)
     add_test(NAME nomad_fence_config_tests COMMAND nomad_fence_config_tests)
 
-    if(NOMAD_ENABLE_MAVSDK)
-        add_executable(nomad_mavsdk_connection_tests tests/mavsdk_connection_test.cpp)
-        target_link_libraries(nomad_mavsdk_connection_tests PRIVATE nomad_mavsdk_connection nomad_core)
-        target_compile_definitions(nomad_mavsdk_connection_tests PRIVATE NOMAD_TESTS)
-        add_test(NAME nomad_mavsdk_connection_tests COMMAND nomad_mavsdk_connection_tests)
+    add_executable(nomad_mavsdk_connection_tests tests/mavsdk_connection_test.cpp)
+    target_link_libraries(nomad_mavsdk_connection_tests PRIVATE nomad_mavsdk_connection nomad_core)
+    target_compile_definitions(nomad_mavsdk_connection_tests PRIVATE NOMAD_TESTS)
+    add_test(NAME nomad_mavsdk_connection_tests COMMAND nomad_mavsdk_connection_tests)
 
-        # SR-LNK-03 on the MAVSDK transport. The peer-driven scenarios run from
-        # scripts/dev/mavsdk_connection_fixture.py; CTest covers the no-link
-        # failure paths, which need no peer.
-        add_executable(nomad_mavsdk_zero_delivery_tests tests/mavsdk_zero_delivery_test.cpp)
-        target_link_libraries(nomad_mavsdk_zero_delivery_tests PRIVATE nomad_mavsdk_connection nomad_core)
-        target_compile_definitions(nomad_mavsdk_zero_delivery_tests PRIVATE NOMAD_TESTS)
-        add_test(NAME nomad_mavsdk_zero_delivery_tests COMMAND nomad_mavsdk_zero_delivery_tests)
-    endif()
+    # SR-LNK-03. The peer-driven scenarios run from
+    # scripts/dev/mavsdk_connection_fixture.py; CTest covers the no-link
+    # failure paths, which need no peer.
+    add_executable(nomad_mavsdk_zero_delivery_tests tests/mavsdk_zero_delivery_test.cpp)
+    target_link_libraries(nomad_mavsdk_zero_delivery_tests PRIVATE nomad_mavsdk_connection nomad_core)
+    target_compile_definitions(nomad_mavsdk_zero_delivery_tests PRIVATE NOMAD_TESTS)
+    add_test(NAME nomad_mavsdk_zero_delivery_tests COMMAND nomad_mavsdk_zero_delivery_tests)
 endif()

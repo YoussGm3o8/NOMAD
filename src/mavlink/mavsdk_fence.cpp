@@ -5,7 +5,7 @@
 //
 // MAVSDK's Geofence plugin transfers the fence as MAV_MISSION_TYPE_FENCE items
 // and owns that handshake, so the plan upload and the readback that verifies it
-// are implemented here. The legacy transport also exposed single-vertex transfer
+// are implemented here. The removed transport also exposed single-vertex transfer
 // (request one fence item, patch one fence item); MAVSDK moves whole polygons
 // and the core only ever uploads a plan and then reads the autopilot's own copy
 // back, so those stay fail-closed rather than inventing a partial transfer.

@@ -2,9 +2,9 @@
 # Copyright 2026 The NOMAD Authors
 """Transport-level zero-delivery proof against live SITL (SR-LNK-03).
 
-The deterministic C++ tests (tests/zero_delivery_test.cpp) prove the zero
-setpoint reaches a live loopback socket. This scenario proves the same thing
-against a real ArduPilot vehicle: while the C++ CLI streams velocity setpoints,
+The deterministic C++ tests (tests/mavsdk_zero_delivery_test.cpp) prove the zero
+setpoint reaches a peer socket. This scenario proves the same thing against a
+real ArduPilot vehicle: while the C++ CLI streams velocity setpoints,
 a pymavlink observer watches every SET_POSITION_TARGET_LOCAL_NED frame the CLI
 puts on the wire, and after the stream ends it must observe the watchdog's
 all-zero setpoint. The vehicle itself is the second witness: it must stop

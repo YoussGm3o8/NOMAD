@@ -13,12 +13,11 @@
 // Default MAVLink endpoint when the operator does not pass --endpoint.
 inline constexpr std::string_view kDefaultEndpoint = "udpin:0.0.0.0:14550";
 
-// Parsed one-shot CLI arguments. `transport` names the connection to build:
-// "udp" is the legacy codec, "mavsdk" the MAVSDK-backed transport.
+// Parsed one-shot CLI arguments. No field records the transport: MAVSDK is the
+// only implementation, so there is nothing left to select.
 struct Arguments {
     std::string command;
     std::string endpoint{kDefaultEndpoint};
-    std::string transport{"udp"};
     std::uint8_t system_id{1};
     std::optional<float> altitude;
     std::optional<float> latitude;

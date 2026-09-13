@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "fake_connection.hpp"
-#include "nomad/mavlink/protocol.hpp"
 #include "nomad/safety/geofence.hpp"
 #include "nomad/safety/payload.hpp"
 #include "nomad/safety/velocity.hpp"
@@ -428,24 +427,6 @@ void test_vehicle_upload_fence_rejects_invalid_coordinates() {
     CHECK(!lon_result.success);
 }
 
-void test_param_readback_codec_round_trip() {
-    // Fence verification reads FENCE_ENABLE back as authoritative state; the
-    // request frame and the value decode must round-trip the exact name.
-    const auto request = nomad::mavlink::encode_param_request_read(1, 255, 190, 1, 1, "FENCE_ENABLE", -1);
-    CHECK(!request.empty());
-    const auto message = nomad::mavlink::decode_message(request);
-    CHECK(message.has_value());
-    CHECK(!nomad::mavlink::decode_param_value(*message).has_value());
-
-    const auto value = nomad::mavlink::encode_message(1, 1, 1, 22, std::vector<std::uint8_t>(25, 0), true);
-    CHECK(value.has_value());
-    const auto decoded = nomad::mavlink::decode_message(*value);
-    CHECK(decoded.has_value());
-    // An all-zero payload decodes as an empty name, which never matches a request.
-    const auto param = nomad::mavlink::decode_param_value(*decoded);
-    CHECK(param.has_value() && param->param_id.empty());
-}
-
 } // namespace
 
 int main() {
@@ -468,7 +449,6 @@ int main() {
         test_vehicle_destructor_sends_zero_velocity_before_shutdown();
         test_vehicle_destructor_orders_zero_before_disconnect();
         test_vehicle_upload_fence_validates_boundary();
-        test_param_readback_codec_round_trip();
         test_vehicle_verifies_fence_status_and_fails_closed();
         test_vehicle_upload_fence_rejects_transport_failure();
         test_vehicle_upload_fence_rejects_invalid_coordinates();

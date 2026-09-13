@@ -168,6 +168,9 @@ def test_occupied_endpoint_reports_connect_failure() -> None:
 
     assert result.returncode != 0
     assert "could not connect" in result.stderr
+    # An endpoint that never opened is a different operator problem from a link
+    # that opened with no vehicle on it, so the timeout diagnostic is absent.
+    assert "timed out waiting for ArduPilot heartbeat" not in result.stderr
 
 
 def test_silent_endpoint_times_out_cleanly() -> None:

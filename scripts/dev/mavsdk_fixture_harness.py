@@ -45,7 +45,7 @@ def find_free_udp_port() -> int:
 def run_cli(binary: Path, port: int, *arguments: str, timeout: int = 25) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     env.setdefault("NOMAD_API_KEY", "fixture-key")
-    command = [str(binary), *arguments, "--transport", "mavsdk", "--endpoint", f"udpin:127.0.0.1:{port}"]
+    command = [str(binary), *arguments, "--endpoint", f"udpin:127.0.0.1:{port}"]
     return subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False, env=env)
 
 

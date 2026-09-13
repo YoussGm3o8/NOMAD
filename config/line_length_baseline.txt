@@ -1,12 +1,7 @@
 # C/C++ files whose existing over-length lines the migration deletes instead of
-# reformatting. These five files are removed in MAVSDK Phase E, so wrapping their
-# lines would be churn on dead code. An entry must still justify itself: the file
-# must exist and must still contain a line over the limit, so deleting the file
-# (or fixing its lines) makes the entry stale and fails complexity-check.
-# debt: whole-file tolerance; revisit when a baselined file is edited for real
-# work; then pin the individual lines or drop the file from the baseline.
-src/mavlink/fence.cpp
-src/mavlink/params.cpp
-src/mavlink/protocol.cpp
-src/mavlink/udp_commands.cpp
-src/mavlink/udp_connection.cpp
+# reformatting. An entry must still justify itself: the file must exist and must
+# still contain a line over the limit, so deleting the file (or fixing its lines)
+# makes the entry stale and fails complexity-check.
+#
+# Currently empty: the hand-written codec was deleted at the MAVSDK Phase E
+# cutover, which is what the previous five entries were waiting for.

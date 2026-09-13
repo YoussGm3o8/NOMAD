@@ -39,6 +39,7 @@ write_launch_script() {
 ARGS=(
     --ros-args
     -p endpoint:=udpin:0.0.0.0:${NOMAD_ROS_MAVLINK_PORT:-14552}
+    -p system_id:=${NOMAD_ROS_SYSTEM_ID:-1}
     -p publish_rate_hz:=${NOMAD_ROS_PUBLISH_RATE_HZ:-10.0}
     -p min_vio_confidence:=${NOMAD_ROS_MIN_VIO_CONFIDENCE:-0.3}
     -p vio_timeout_ms:=${NOMAD_ROS_VIO_TIMEOUT_MS:-1000}

@@ -332,9 +332,9 @@ def case_zero_delivery_scenarios(zero_delivery: Path) -> None:
     """SR-LNK-03 at the core level: every stop path must zero the wire.
 
     The peer decodes the setpoints it received, so each scenario is judged on
-    the frames that arrived: the streamed setpoint, then the all-zero one. The
-    scenarios are the legacy zero_delivery_test.cpp proofs moved onto the
-    MAVSDK transport, plus the VIO-feed death it did not cover.
+    the frames that arrived: the streamed setpoint, then the all-zero one. These
+    are the core-level loopback proofs for the transport that remains, and they
+    include the VIO-feed death the legacy proof never covered.
     """
     for scenario in ZERO_DELIVERY_SCENARIOS:
         require_zero_delivery_scenario(zero_delivery, scenario)

@@ -69,5 +69,4 @@ void print_usage() {
         }
     }
     std::cout << "Actuation commands require the NOMAD_API_KEY environment variable.\n";
-    std::cout << "--transport udp|mavsdk selects the transport (default udp; mavsdk requires a MAVSDK build).\n";
 }

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 The NOMAD Authors
-"""Run the optional MAVSDK Phase A connect/status smoke against SITL."""
+"""Run the MAVSDK Phase A connect/status smoke against SITL."""
 
 from __future__ import annotations
 

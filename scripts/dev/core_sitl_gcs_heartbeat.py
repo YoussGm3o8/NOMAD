@@ -4,10 +4,12 @@
 
 Real mavlink-router and MAVProxy setups only start streaming a UDP leg after
 the endpoint announces itself with a GCS heartbeat. The C++ core therefore
-emits a 1 Hz standard GCS heartbeat while it waits for the vehicle
-(``encode_gcs_heartbeat`` in ``src/mavlink/protocol.cpp``, pinned byte-for-byte
-by ``nomad_codec_golden_tests`` and by ``nomad_udp_tests`` in
-``tests/udp_connection_test.cpp``).
+emits a 1 Hz standard GCS heartbeat while it waits for the vehicle. MAVSDK does
+that: the transport configures its ``Mavsdk`` as ``ComponentType::GroundStation``
+(``src/mavlink/mavsdk_mavlink_connection.cpp``), and
+``test_unlatched_link_announces_a_gcs_heartbeat`` in
+``tests/test_mavsdk_connection.py`` requires the cadence on the wire before any
+autopilot is latched.
 
 The scenario places a heartbeat-gated UDP relay between the always-on SITL
 stream (host UDP 14572, see docker-compose.dev.yml) and a fresh client port,

@@ -10,10 +10,10 @@
 
 namespace nomad::mavlink {
 
-// Creates a MAVSDK-backed MavlinkConnection for the given UDP endpoint and
-// expected autopilot system ID. Returns nullptr in a build without the MAVSDK
-// transport (NOMAD_ENABLE_MAVSDK=OFF) so the caller reports it as unavailable
-// rather than silently falling back to another transport.
+// Creates the MAVSDK-backed MavlinkConnection for the given UDP endpoint and
+// expected autopilot system ID. MAVSDK is the only transport, so this always
+// returns a connection: a link that never appears is reported by connect() and
+// wait_for_heartbeat(), not by a missing object.
 std::unique_ptr<MavlinkConnection>
 make_mavsdk_connection(const std::string &endpoint, std::uint8_t expected_system_id,
                        std::chrono::milliseconds discovery_timeout);

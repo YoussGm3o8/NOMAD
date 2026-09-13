@@ -9,7 +9,6 @@
 #include <array>
 #include <charconv>
 #include <cstdint>
-#include <cstdlib>
 #include <optional>
 #include <string_view>
 
@@ -33,10 +32,6 @@ std::optional<int> parse_output_int(std::string_view value, std::uint32_t maximu
         return std::nullopt;
     }
     return static_cast<int>(*parsed);
-}
-
-bool is_transport(std::string_view value) {
-    return value == "udp" || value == "mavsdk";
 }
 
 // Fills the first unset slot; a second positional is rejected.
@@ -201,10 +196,6 @@ bool consume_global_flag(Arguments &arguments, std::string_view flag, int argc, 
         arguments.endpoint = argv[++index];
         return true;
     }
-    if (flag == "--transport") {
-        arguments.transport = argv[++index];
-        return is_transport(arguments.transport);
-    }
     if (flag == "--system-id") {
         const auto parsed = parse_output_int(argv[++index], 255);
         if (!parsed.has_value() || *parsed == 0) {
@@ -217,7 +208,7 @@ bool consume_global_flag(Arguments &arguments, std::string_view flag, int argc, 
 }
 
 bool is_global_flag(std::string_view token) {
-    return token == "--endpoint" || token == "--transport" || token == "--system-id";
+    return token == "--endpoint" || token == "--system-id";
 }
 
 bool consume_verb_value(Arguments &arguments, std::string_view token, int argc, char **argv, int &index) {
@@ -263,15 +254,6 @@ bool consume_token(Arguments &arguments, int argc, char **argv, int &index) {
     return consume_verb_value(arguments, token, argc, argv, index);
 }
 
-bool apply_transport_from_environment(Arguments &arguments) {
-    const char *transport = std::getenv("NOMAD_TRANSPORT");
-    if (transport == nullptr || transport[0] == '\0') {
-        return true;
-    }
-    arguments.transport = transport;
-    return is_transport(arguments.transport);
-}
-
 // Verbs that need every positional they declare refuse a partial invocation
 // with usage rather than acting on a default.
 bool has_required_arguments(const Arguments &arguments) {
@@ -312,9 +294,6 @@ std::optional<Arguments> parse_arguments(int argc, char **argv) {
     }
 
     Arguments arguments{argv[1]};
-    if (!apply_transport_from_environment(arguments)) {
-        return std::nullopt;
-    }
     for (int index = 2; index < argc; ++index) {
         if (!consume_token(arguments, argc, argv, index)) {
             return std::nullopt;

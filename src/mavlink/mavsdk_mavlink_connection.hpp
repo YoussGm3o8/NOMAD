@@ -59,6 +59,7 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     bool connect() override;
     void disconnect() override;
     bool is_connected() const override;
+    ConnectFailure get_connect_failure() const override;
     std::optional<Heartbeat> wait_for_heartbeat(std::chrono::milliseconds timeout) override;
     std::optional<telemetry::VehicleState> wait_for_state(std::chrono::milliseconds timeout) override;
     telemetry::VehicleState get_state() const override;
@@ -97,6 +98,7 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     std::string endpoint_;
     std::uint8_t expected_system_id_{0};
     std::chrono::milliseconds discovery_timeout_{0};
+    ConnectFailure connect_failure_{ConnectFailure::None};
     mavsdk::Mavsdk sdk_;
     std::optional<mavsdk::Mavsdk::ConnectionHandle> handle_;
     std::shared_ptr<mavsdk::System> system_;

@@ -30,8 +30,9 @@ constexpr double kPositionScale = 1e7;
 constexpr auto kTelemetryWaitIncrement = std::chrono::milliseconds(20);
 
 // The velocity command is SET_POSITION_TARGET_LOCAL_NED in the body frame with
-// position, acceleration and absolute-yaw ignored, exactly as the legacy codec
-// built it: the vehicle must see one frame whichever transport sends it.
+// position, acceleration and absolute-yaw ignored. These values are the wire
+// contract the peer fixture decodes, so a replacement transport must send the
+// same frame rather than a friendlier one.
 constexpr std::uint16_t kVelocityTypeMask = 0x07c7;
 constexpr std::uint8_t kBodyOffsetNedFrame = 9; // MAV_FRAME_BODY_OFFSET_NED
 constexpr std::uint32_t kIgnoredTimestamp = 0;
@@ -92,9 +93,11 @@ MavsdkMavlinkConnection::~MavsdkMavlinkConnection() {
 
 bool MavsdkMavlinkConnection::connect() {
     if (is_connected()) {
+        connect_failure_ = ConnectFailure::None;
         return true;
     }
     close();
+    connect_failure_ = ConnectFailure::LinkUnavailable;
     if (!has_configuration(endpoint_, expected_system_id_, discovery_timeout_)) {
         return false;
     }
@@ -103,10 +106,13 @@ bool MavsdkMavlinkConnection::connect() {
     if (result != mavsdk::ConnectionResult::Success) {
         return false;
     }
+    // The endpoint is open, so from here a failure means no autopilot answered.
+    connect_failure_ = ConnectFailure::NoAutopilot;
     handle_ = handle;
     const auto deadline = ObservationClock::now() + discovery_timeout_;
     while (ObservationClock::now() < deadline) {
         if (select_system()) {
+            connect_failure_ = ConnectFailure::None;
             return true;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -115,11 +121,14 @@ bool MavsdkMavlinkConnection::connect() {
     return false;
 }
 
+ConnectFailure MavsdkMavlinkConnection::get_connect_failure() const {
+    return connect_failure_;
+}
+
 void MavsdkMavlinkConnection::disconnect() {
     // Zero the vehicle while the target is still latched, then tear the link
-    // down. The legacy transport zeros here for the same reason: the last
-    // setpoint it sent would otherwise keep steering a vehicle NOMAD has
-    // stopped controlling.
+    // down: a last setpoint left on the wire would keep steering a vehicle NOMAD
+    // has stopped controlling.
     if (is_velocity_active()) {
         send_velocity({});
     }
@@ -236,6 +245,8 @@ void MavsdkMavlinkConnection::observe_velocity(const mavsdk::Telemetry::Velocity
     state_.velocity.down_mps = velocity.down_m_s;
     state_.velocity.groundspeed_mps = std::sqrt(velocity.north_m_s * velocity.north_m_s +
                                                 velocity.east_m_s * velocity.east_m_s);
+    // NED down is positive downwards, so climb rate is its negation.
+    state_.velocity.climb_rate_mps = -velocity.down_m_s;
 }
 
 void MavsdkMavlinkConnection::observe_battery(const mavsdk::Telemetry::Battery &battery) {
@@ -325,7 +336,8 @@ mavsdk::MavlinkPassthrough::Result MavsdkMavlinkConnection::send_long(const Comm
 
 mavsdk::MavlinkPassthrough::Result MavsdkMavlinkConnection::send_int(const Command &command) {
     // MAV_FRAME_GLOBAL_RELATIVE_ALT_INT with 1e7-scaled integer degrees and
-    // above-home altitude, matching the legacy codec exactly.
+    // above-home altitude: the frame contract the CLI documents and the peer
+    // fixture asserts on the wire.
     mavsdk::MavlinkPassthrough::CommandInt wire{};
     wire.target_sysid = target_system_;
     wire.target_compid = target_component_;
@@ -409,15 +421,17 @@ std::optional<CommandAck> MavsdkMavlinkConnection::send_command(const Command &c
     return CommandAck{command.id, *code};
 }
 
-// MAVSDK's telemetry plugin owns stream/interval setup for the subscriptions
-// made in subscribe(); there is no raw REQUEST_DATA_STREAM to send. No
-// production caller asks for a stream (run_status documents why), so this
-// reports the transport is available rather than claiming a frame was sent.
+// Raw REQUEST_DATA_STREAM. MAVSDK's telemetry plugin owns stream/interval setup
+// for the subscriptions made in subscribe(), but the MavlinkConnection contract
+// still exposes a stream request, so the frame is queued through MAVSDK's
+// passthrough. No production caller asks for one today (run_status documents
+// why), which makes this transport-honesty parity the fixture checks rather than
+// a behavior the CLI depends on.
 mavsdk::MavlinkPassthrough::Result
 MavsdkMavlinkConnection::queue_data_stream_request(std::uint8_t stream_id, std::uint16_t message_rate) {
-    // start_stop = 1 matches the legacy codec's request. MAVSDK's own Telemetry
-    // plugin subscribes to what it needs, but a caller that asks for a stream
-    // must still have the frame put on the wire rather than be told it was.
+    // start_stop = 1 is ArduPilot's "start streaming" value. MAVSDK's own
+    // Telemetry plugin subscribes to what it needs, but a caller that asks for a
+    // stream must still have the frame put on the wire rather than be told it was.
     return passthrough_->queue_message([&](MavlinkAddress address, std::uint8_t channel) {
         mavlink_message_t message{};
         mavlink_msg_request_data_stream_pack_chan(address.system_id, address.component_id, channel, &message,
@@ -427,9 +441,9 @@ MavsdkMavlinkConnection::queue_data_stream_request(std::uint8_t stream_id, std::
 }
 
 bool MavsdkMavlinkConnection::request_data_stream(std::uint8_t stream_id, std::uint16_t message_rate) {
-    // A stream request needs a live, latched peer, the same gate the legacy
-    // transport applied. Answering from the connection's own state would report
-    // success for a request that was never sent.
+    // A stream request needs a live, latched peer. Answering from the
+    // connection's own state would report success for a request that was never
+    // sent.
     if (!is_connected() || !passthrough_ || target_system_ == 0 || !get_state().connected) {
         return false;
     }

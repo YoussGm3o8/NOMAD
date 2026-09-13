@@ -1,10 +1,21 @@
 # nomad_ros
 
 ROS 2 adapter for the NOMAD C++ core. It is a client, not a second vehicle
-implementation: it owns a UDP MAVLink connection and one core `Vehicle`, then
+implementation: it builds the core MAVSDK transport and one core `Vehicle`, then
 translates standard ROS messages into core API calls. ArduPilot-facing safety,
 command validation, and the velocity watchdog stay in `nomad_core` (see
 `docs/architecture.md`, `docs/migration.md`, and `docs/safety.md`).
+
+## Why not mavros or ardupilot_ros
+
+Those packages are alternative MAVLink bridges, and adopting one would put a
+second ArduPilot-facing stack in the ROS graph beside the core's own: another
+telemetry model, another set of mode and parameter services, and another answer
+to whether a command succeeded. The project boundary keeps vehicle decisions in
+the C++ core, so this adapter links `nomad_core` and speaks through the same
+`MavlinkConnection` the CLI uses. MAVSDK already provides the connection,
+plugin, and dialect layer a bridge would supply; a ROS bridge above it would only
+re-export state the core already owns.
 
 Current standalone adapter behavior is described below. The integrated G2
 target uses one shared command owner instead of running this Vehicle alongside

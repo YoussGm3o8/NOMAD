@@ -5,10 +5,11 @@
 // wire when the watchdog stops the stream, when the caller stops velocity, when
 // the vehicle is destroyed, and when the link or the VIO feed dies.
 //
-// tests/zero_delivery_test.cpp is the legacy loopback proof; this binary is its
-// MAVSDK successor, driven by scripts/dev/mavsdk_connection_fixture.py against
-// a deterministic peer. The peer decodes what actually arrived, so the fixture
-// judges the wire rather than this binary's own report.
+// This binary is the loopback proof on the transport that remains (the legacy
+// codec's equivalent was deleted at the Phase E cutover), driven by
+// scripts/dev/mavsdk_connection_fixture.py against a deterministic peer. The
+// peer decodes what actually arrived, so the fixture judges the wire rather than
+// this binary's own report.
 //
 // Without arguments it runs the no-link failure paths for CTest. The fixture
 // invokes it as `--zero-delivery <endpoint> <system-id> <scenario>`.

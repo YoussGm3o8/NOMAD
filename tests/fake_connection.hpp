@@ -27,6 +27,10 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
         return connected;
     }
 
+    nomad::mavlink::ConnectFailure get_connect_failure() const override {
+        return nomad::mavlink::ConnectFailure::None;
+    }
+
     std::optional<nomad::mavlink::Heartbeat> wait_for_heartbeat(std::chrono::milliseconds) override {
         return nomad::mavlink::Heartbeat{1, 1, 0, 2, 3, 0};
     }

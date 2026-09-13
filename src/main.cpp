@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Composition root: parse the invocation, build the selected transport, and
+// Composition root: parse the invocation, build the MAVSDK transport, and
 // dispatch one verb. The verb surface, usage text and API-key boundary are in
 // cli_command_table.hpp; the verb implementations are in the other cli_*.cpp
 // files.
 #include "cli_command_table.hpp"
 #include "cli_commands.hpp"
 #include "nomad/mavlink/mavsdk_transport.hpp"
-#include "nomad/mavlink/udp_connection.hpp"
 #include "nomad/safety/fence_config.hpp"
 #include "nomad/safety/velocity_config.hpp"
 #include "nomad/vehicle/vehicle.hpp"
@@ -15,6 +14,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <string>
 #include <string_view>
 
 namespace {
@@ -29,6 +29,17 @@ void audit_command(std::string_view command, std::string_view result, std::strin
     std::cerr << "audit command=" << command << " result=" << result << " auth=" << auth;
     if (!reason.empty()) std::cerr << " reason=" << reason;
     std::cerr << '\n';
+}
+
+// The transport reports which half of the link failed, so an operator keeps the
+// diagnostic it needs: a link that never opened is a connect failure, while an
+// open link that no autopilot answered on is a heartbeat timeout.
+void print_connect_failure(const nomad::mavlink::MavlinkConnection &connection, const std::string &endpoint) {
+    if (connection.get_connect_failure() == nomad::mavlink::ConnectFailure::NoAutopilot) {
+        std::cerr << "timed out waiting for ArduPilot heartbeat\n";
+        return;
+    }
+    std::cerr << "could not connect to " << endpoint << '\n';
 }
 
 int run_command(nomad::mavlink::MavlinkConnection &connection, const Arguments &arguments) {
@@ -56,7 +67,7 @@ int run_command(nomad::mavlink::MavlinkConnection &connection, const Arguments &
     }
 
     if (!connection.connect()) {
-        std::cerr << "could not connect to " << arguments.endpoint << '\n';
+        print_connect_failure(connection, arguments.endpoint);
         return EXIT_FAILURE;
     }
 
@@ -169,16 +180,7 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    std::unique_ptr<nomad::mavlink::MavlinkConnection> connection;
-    if (arguments->transport == "mavsdk") {
-        connection =
-            nomad::mavlink::make_mavsdk_connection(arguments->endpoint, arguments->system_id, std::chrono::seconds(5));
-        if (connection == nullptr) {
-            std::cerr << "error: mavsdk transport is not available in this build\n";
-            return EXIT_FAILURE;
-        }
-    } else {
-        connection = std::make_unique<nomad::mavlink::UdpMavlinkConnection>(arguments->endpoint);
-    }
+    const auto connection =
+        nomad::mavlink::make_mavsdk_connection(arguments->endpoint, arguments->system_id, std::chrono::seconds(5));
     return run_command(*connection, *arguments);
 }

@@ -9,9 +9,9 @@ exactly that — motor test sent 139, which is not a MAV_CMD entry at all, while
 ``MAV_CMD_DO_MOTOR_TEST`` is 209.
 
 The dialect read here is the pinned ``third_party/ardupilot-mavlink``
-submodule's own definition, the same source ``scripts/dev/generate_mavlink.py``
-generates the codec from, so an id that drifts from the targeted firmware fails
-the gate.
+submodule's own definition, which is the firmware dialect NOMAD targets, so an
+id that drifts from that dialect fails the gate. The submodule stays pinned for
+this gate even though the transport builds its frames with MAVSDK's own codec.
 """
 
 from __future__ import annotations

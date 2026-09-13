@@ -3,7 +3,7 @@
 """Run the MAVSDK transport parity cases against a deterministic peer.
 
 `mavsdk_peer.VehiclePeer` is an ArduPilot-like UDP vehicle; these cases drive
-the real `nomad --transport mavsdk` CLI and the connection probe binary against
+the real `nomad` CLI and the connection probe binary against
 it, so they exercise the full transport path including NOMAD's command
 acknowledgement and state-verification logic.
 

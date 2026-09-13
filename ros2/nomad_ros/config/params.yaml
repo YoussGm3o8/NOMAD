@@ -3,6 +3,9 @@ nomad_vehicle_node:
     # Host UDP MAVLink endpoint that receives the ArduPilot stream. In the dev
     # Docker stack the C++ core smoke tests use udpin:0.0.0.0:14570.
     endpoint: "udpin:0.0.0.0:14570"
+    # Expected autopilot system id. MAVSDK only latches a link whose heartbeat
+    # carries this id, so a wrong or zero value leaves the node unconnected.
+    system_id: 1
     publish_rate_hz: 10.0
     min_vio_confidence: 0.3
     max_velocity_xy: 2.0

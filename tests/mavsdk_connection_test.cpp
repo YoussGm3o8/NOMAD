@@ -52,6 +52,16 @@ void test_invalid_configuration_is_refused() {
     CHECK(!connect_with("udpout:127.0.0.1:14655", kSystemId, std::chrono::milliseconds(0)));
 }
 
+void test_unusable_endpoint_is_reported_as_a_link_failure() {
+    // An endpoint this core cannot open is a configuration problem, not a
+    // missing vehicle, and the caller prints the matching diagnostic.
+    const auto connection =
+        nomad::mavlink::make_mavsdk_connection("tcp:127.0.0.1:5760", kSystemId, std::chrono::milliseconds(100));
+    CHECK(connection != nullptr);
+    CHECK(!connection->connect());
+    CHECK(connection->get_connect_failure() == nomad::mavlink::ConnectFailure::LinkUnavailable);
+}
+
 void test_absent_peer_fails_closed() {
     // No peer replies on this endpoint, so discovery times out and every
     // operation must report failure rather than a fabricated success.
@@ -60,6 +70,9 @@ void test_absent_peer_fails_closed() {
     CHECK(connection != nullptr);
     CHECK(!connection->connect());
     CHECK(!connection->is_connected());
+    // The endpoint opened, so the caller must report a heartbeat timeout rather
+    // than an endpoint failure.
+    CHECK(connection->get_connect_failure() == nomad::mavlink::ConnectFailure::NoAutopilot);
 
     CHECK(!connection->wait_for_heartbeat(std::chrono::milliseconds(50)).has_value());
     CHECK(!connection->wait_for_state(std::chrono::milliseconds(50)).has_value());
@@ -343,6 +356,7 @@ int main(int argc, char **argv) {
     }
     const int result = nomad::test::run_tests([] {
         test_invalid_configuration_is_refused();
+        test_unusable_endpoint_is_reported_as_a_link_failure();
         test_absent_peer_fails_closed();
         test_velocity_with_no_peer_fails_closed();
     });

@@ -2,9 +2,10 @@
 # Copyright 2026 The NOMAD Authors
 """Phase B transport parity tests driven by the deterministic MAVSDK peer.
 
-These run the real `nomad --transport mavsdk` CLI and the connection probe
-binary against scripts/dev/mavsdk_connection_fixture.py. They skip when the
-opt-in MAVSDK build is absent; the fixture's own run is the recorded evidence.
+These run the real `nomad` CLI and the connection probe
+binary against scripts/dev/mavsdk_connection_fixture.py. They skip when the built
+binaries are absent (run `pixi run test-mavsdk-phase-b` first); the fixture's own
+run is the recorded evidence.
 """
 
 from __future__ import annotations
@@ -96,7 +97,8 @@ def test_disabled_fence_never_verifies() -> None:
 def test_zero_delivery_reaches_the_wire_on_every_stop_path() -> None:
     """SR-LNK-03: watchdog, caller stop, destruction, link loss and VIO loss.
 
-    The MAVSDK successor to the legacy zero_delivery_test.cpp proofs.
+    The core-level loopback proof on the transport that remains, after the
+    legacy codec and its equivalent test were deleted at the Phase E cutover.
     """
     fixture.case_zero_delivery_scenarios(ZERO_DELIVERY)
 
