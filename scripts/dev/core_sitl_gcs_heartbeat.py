@@ -40,6 +40,7 @@ Run against the dev stack (see tests/sitl/README.md):
 
 from __future__ import annotations
 
+import math
 import os
 import socket
 import subprocess
@@ -53,7 +54,10 @@ sys.path.insert(0, str(ROOT / "scripts" / "dev"))
 
 from core_sitl_status import find_binary, print_watch_hint  # noqa: E402
 
+MIN_CADENCE_ANNOUNCEMENTS = 4
 MIN_ANNOUNCEMENT_INTERVAL_S = 0.9
+MAX_ANNOUNCEMENT_INTERVAL_S = 1.3
+CADENCE_COMPARISON_EPSILON_S = 1e-9
 
 
 class ScenarioError(AssertionError):
@@ -140,11 +144,19 @@ def verify_announcements(announced: list[tuple[float, bytes]], require_cadence: 
             raise ScenarioError(f"heartbeat is not MAV_TYPE_GCS/MAV_AUTOPILOT_INVALID: {heartbeat}")
     if not require_cadence:
         return
-    if len(announced) < 2:
-        raise ScenarioError("fewer than two announcements captured; cannot prove heartbeat cadence")
+    if len(announced) < MIN_CADENCE_ANNOUNCEMENTS:
+        raise ScenarioError(
+            f"fewer than {MIN_CADENCE_ANNOUNCEMENTS} announcements captured; cannot prove heartbeat cadence"
+        )
     intervals = [current[0] - previous[0] for previous, current in zip(announced, announced[1:])]
-    if min(intervals) < MIN_ANNOUNCEMENT_INTERVAL_S:
-        raise ScenarioError(f"announcement interval {min(intervals):.3f}s is faster than the 1 Hz tolerance")
+    if not all(math.isfinite(interval) for interval in intervals):
+        raise ScenarioError("announcement cadence contains a non-finite interval")
+    fastest = min(intervals)
+    slowest = max(intervals)
+    if fastest < MIN_ANNOUNCEMENT_INTERVAL_S - CADENCE_COMPARISON_EPSILON_S:
+        raise ScenarioError(f"announcement interval {fastest:.3f}s is faster than the 1 Hz tolerance")
+    if slowest > MAX_ANNOUNCEMENT_INTERVAL_S + CADENCE_COMPARISON_EPSILON_S:
+        raise ScenarioError(f"announcement interval {slowest:.3f}s is slower than the 1 Hz tolerance")
 
 
 def measured_rate(announced: list[tuple[float, bytes]]) -> float | None:

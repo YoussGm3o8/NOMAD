@@ -96,7 +96,7 @@ These retain their original obligations; partial coverage is not satisfaction.
 | SR-LNK-01 | Commands require fresh FC heartbeat | Velocity gate/transport behavior tested; audit every discrete command path at G2 |
 | SR-LNK-02 | Missing velocity input triggers a zero command within timeout | Watchdog tests; independent wire and FC observations required |
 | SR-LNK-03 | Shutdown sends zero before closing an active link | Loopback ordering tests; live SITL and physical link evidence separate |
-| SR-LNK-04 | Announce a standard GCS heartbeat for heartbeat-gated relays | Codec/UDP tests plus live Copter 4.7.1 `core-sitl-gcs-heartbeat` (gate opens; the closed-gate control captures the 1 Hz cadence); requalify MAVSDK behavior |
+| SR-LNK-04 | Announce a standard GCS heartbeat for heartbeat-gated relays | Codec/UDP tests plus live Copter 4.7.1 `core-sitl-gcs-heartbeat` (gate opens; the closed-gate control captures at least three measured intervals across four announcements at 0.9–1.3 s); requalify MAVSDK behavior |
 | SR-FEN-01 | Upload, enable and verify FC fence before autonomous flight | Upload/readback/enable-reading tests; global preflight enforcement and all fence fields open |
 | SR-FEN-02 | Reject position targets outside configured boundary | C++ target tests; live containment and full mission/velocity paths open |
 | SR-PAY-01 | Validate servo channel and PWM before actuation | C++ generic range tests; board map and reserved payload channels open |

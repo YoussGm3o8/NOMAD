@@ -98,7 +98,7 @@ def make_gcs_heartbeat_frame() -> bytes:
 
 def test_gcs_heartbeat_cadence_uses_intervals_not_short_command_duration() -> None:
     frame = make_gcs_heartbeat_frame()
-    announcements = [(10.0, frame), (11.0, frame), (12.0, frame)]
+    announcements = [(10.0, frame), (11.0, frame), (12.0, frame), (13.0, frame)]
 
     gcs_heartbeat.verify_announcements(announcements, require_cadence=True)
 
@@ -107,10 +107,32 @@ def test_gcs_heartbeat_cadence_uses_intervals_not_short_command_duration() -> No
 
 def test_gcs_heartbeat_cadence_rejects_fast_or_single_samples() -> None:
     frame = make_gcs_heartbeat_frame()
-    with pytest.raises(gcs_heartbeat.ScenarioError, match="fewer than two"):
-        gcs_heartbeat.verify_announcements([(10.0, frame)], require_cadence=True)
+    with pytest.raises(gcs_heartbeat.ScenarioError, match="fewer than 4"):
+        gcs_heartbeat.verify_announcements([(10.0, frame), (11.0, frame), (12.0, frame)], require_cadence=True)
     with pytest.raises(gcs_heartbeat.ScenarioError, match="faster than the 1 Hz tolerance"):
-        gcs_heartbeat.verify_announcements([(10.0, frame), (10.5, frame)], require_cadence=True)
+        gcs_heartbeat.verify_announcements(
+            [(10.0, frame), (10.5, frame), (11.5, frame), (12.5, frame)], require_cadence=True
+        )
+    with pytest.raises(gcs_heartbeat.ScenarioError, match="slower than the 1 Hz tolerance"):
+        gcs_heartbeat.verify_announcements(
+            [(10.0, frame), (11.0, frame), (12.0, frame), (13.4, frame)], require_cadence=True
+        )
+
+
+def test_gcs_heartbeat_cadence_accepts_tolerance_boundaries() -> None:
+    frame = make_gcs_heartbeat_frame()
+    announcements = [(10.0, frame), (10.9, frame), (12.2, frame), (13.5, frame)]
+
+    gcs_heartbeat.verify_announcements(announcements, require_cadence=True)
+
+
+def test_gcs_heartbeat_cadence_rejects_non_finite_intervals() -> None:
+    frame = make_gcs_heartbeat_frame()
+
+    with pytest.raises(gcs_heartbeat.ScenarioError, match="non-finite"):
+        gcs_heartbeat.verify_announcements(
+            [(10.0, frame), (11.0, frame), (float("nan"), frame), (13.0, frame)], require_cadence=True
+        )
 
 
 def test_containment_converts_latitude_and_longitude_to_local_metres() -> None:
