@@ -27,8 +27,8 @@ function(add_nomad_mavsdk)
     set(SUPERBUILD ON)
     # mavlink_passthrough is not an ENABLED_PLUGINS option: MAVSDK's plugin
     # CMakeLists always adds it, so it is available without listing it here.
-    # geofence and param are Phase D: fence upload/download and parameter read.
-    set(ENABLED_PLUGINS telemetry geofence param)
+    # Action owns ArduPilot relative-altitude goto; Geofence and Param own their transports.
+    set(ENABLED_PLUGINS telemetry geofence param action)
     set(MAVLINK_DIALECT ardupilotmega)
     add_subdirectory("${NOMAD_MAVSDK_SOURCE_DIR}/cpp" "${CMAKE_BINARY_DIR}/mavsdk")
 endfunction()
@@ -120,6 +120,7 @@ add_library(nomad_mavsdk_connection
     src/mavlink/mavsdk_system.cpp)
 target_include_directories(nomad_mavsdk_connection PUBLIC include PRIVATE
     "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/core/include"
+    "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/action/include"
     "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/geofence/include"
     "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/param/include"
     "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/src/mavsdk/plugins/telemetry/include"

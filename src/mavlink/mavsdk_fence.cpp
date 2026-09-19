@@ -58,7 +58,8 @@ std::vector<FencePlanItem> to_plan_items(const mavsdk::Geofence::GeofenceData &d
 } // namespace
 
 bool MavsdkMavlinkConnection::upload_fence_plan(const std::vector<FencePlanItem> &items) {
-    if (!is_connected() || !geofence_ || items.empty()) {
+    std::shared_lock lifetime_lock(plugin_lifetime_mutex_);
+    if (!is_connected_unlocked() || !geofence_ || items.empty()) {
         return false;
     }
     mavsdk::Geofence::Polygon polygon{};
@@ -75,7 +76,8 @@ bool MavsdkMavlinkConnection::upload_fence_plan(const std::vector<FencePlanItem>
 
 std::optional<std::vector<FencePlanItem>>
 MavsdkMavlinkConnection::download_fence_plan(std::chrono::milliseconds timeout) {
-    if (!is_connected() || !geofence_) {
+    std::shared_lock lifetime_lock(plugin_lifetime_mutex_);
+    if (!is_connected_unlocked() || !geofence_) {
         return std::nullopt;
     }
     using Transfer = std::pair<mavsdk::Geofence::Result, mavsdk::Geofence::GeofenceData>;

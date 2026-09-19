@@ -37,7 +37,6 @@ from mavsdk_fixture_harness import (
 )
 from mavsdk_link_fixture import (
     case_coalesced_telemetry_is_verified,
-    case_data_stream_request_reaches_the_wire,
     case_disabled_fence_does_not_verify,
     case_fence_upload_and_readback,
     case_gcs_heartbeat_announces_to_a_silent_peer,
@@ -325,7 +324,6 @@ def main() -> int:
     case_gcs_heartbeat_announces_to_a_silent_peer(probe)
     case_coalesced_telemetry_is_verified(cli)
     case_link_loss_is_observed_as_stale(probe)
-    case_data_stream_request_reaches_the_wire(probe)
     case_velocity_setpoint_reaches_the_wire(probe)
     case_fence_upload_and_readback(probe)
     case_disabled_fence_does_not_verify(probe)

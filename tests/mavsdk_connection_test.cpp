@@ -92,7 +92,6 @@ void test_absent_peer_fails_closed() {
     CHECK(!connection->wait_for_fence_point(std::chrono::milliseconds(10)).has_value());
     CHECK(!connection->download_fence_plan(std::chrono::milliseconds(10)).has_value());
     CHECK(!connection->read_param("FENCE_ENABLE", std::chrono::milliseconds(10)).has_value());
-    CHECK(!connection->request_data_stream(1, 4));
 }
 
 void test_velocity_with_no_peer_fails_closed() {
@@ -133,7 +132,17 @@ int run_probe(int argc, char **argv) {
         std::printf("heartbeat=fail\n");
         return 1;
     }
-    const Command command{command_id, {0, 1, 0, 0, 45.5F, -73.6F, 10.0F}, use_command_int};
+    if (use_command_int) {
+        if (command_id != 192) {
+            std::fprintf(stderr, "the int probe only supports relative goto\n");
+            return 2;
+        }
+        const bool accepted = connection->goto_location_relative(45.5, -73.6, 10.0F, command_timeout);
+        std::printf(accepted ? "ack=0\n" : "ack=none\n");
+        return accepted ? 0 : 1;
+    }
+
+    const Command command{command_id, {0, 1, 0, 0, 45.5F, -73.6F, 10.0F}};
     const auto ack = connection->send_command(command, command_timeout);
     if (!ack.has_value()) {
         std::printf("ack=none\n");
@@ -309,36 +318,6 @@ int run_fence_probe(int argc, char **argv) {
                : 1;
 }
 
-// Peer-driven probe used by scripts/dev/mavsdk_connection_fixture.py:
-// --data-stream <endpoint> <system-id> <stream-id> <rate>. It asks for a stream
-// on a live link and reports whether the transport claimed success. The peer
-// decodes the frames it received, so the fixture can require that a reported
-// success means a REQUEST_DATA_STREAM actually left the host — the transport
-// must not answer from its own connection state.
-int run_data_stream_probe(int argc, char **argv) {
-    if (argc != 6) {
-        std::fprintf(stderr, "usage: %s --data-stream <endpoint> <system-id> <stream-id> <rate>\n", argv[0]);
-        return 2;
-    }
-    const std::string endpoint = argv[2];
-    const auto system_id = static_cast<std::uint8_t>(std::stoi(argv[3]));
-    const auto stream_id = static_cast<std::uint8_t>(std::stoi(argv[4]));
-    const auto rate = static_cast<std::uint16_t>(std::stoi(argv[5]));
-
-    auto connection = nomad::mavlink::make_mavsdk_connection(endpoint, system_id, std::chrono::seconds(3));
-    if (connection == nullptr || !connection->connect()) {
-        std::printf("connect=fail\n");
-        return 1;
-    }
-    if (!connection->wait_for_heartbeat(std::chrono::seconds(3)).has_value()) {
-        std::printf("heartbeat=fail\n");
-        return 1;
-    }
-    const bool requested = connection->request_data_stream(stream_id, rate);
-    std::printf("requested=%d\n", requested ? 1 : 0);
-    return requested ? 0 : 1;
-}
-
 // Peer-driven probe used by the parameter timeout fixture:
 // --param <endpoint> <system-id> <param-id> <timeout-ms>. An unknown parameter
 // makes the peer stay silent, so a nonzero result must arrive within the
@@ -372,9 +351,6 @@ int run_param_probe(int argc, char **argv) {
 int main(int argc, char **argv) {
     if (argc >= 2 && std::string_view(argv[1]) == "--probe") {
         return run_probe(argc, argv);
-    }
-    if (argc >= 2 && std::string_view(argv[1]) == "--data-stream") {
-        return run_data_stream_probe(argc, argv);
     }
     if (argc >= 2 && std::string_view(argv[1]) == "--staleness") {
         return run_staleness_probe(argc, argv);

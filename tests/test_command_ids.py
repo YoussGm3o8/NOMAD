@@ -36,7 +36,6 @@ PINNED_COMMAND_IDS = {
         "kTakeoffCommand": "MAV_CMD_NAV_TAKEOFF",
         "kLandCommand": "MAV_CMD_NAV_LAND",
         "kReturnToLaunchCommand": "MAV_CMD_NAV_RETURN_TO_LAUNCH",
-        "kRepositionCommand": "MAV_CMD_DO_REPOSITION",
         "kSetServoCommand": "MAV_CMD_DO_SET_SERVO",
         "kSetRelayCommand": "MAV_CMD_DO_SET_RELAY",
         "kMotorTestCommand": "MAV_CMD_DO_MOTOR_TEST",

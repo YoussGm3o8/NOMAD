@@ -2,10 +2,9 @@
 // Copyright 2026 The NOMAD Authors
 //
 // MAVSDK-backed MavlinkConnection: the Phase B transport. MAVSDK owns framing,
-// transport and its internal workers; NOMAD keeps command semantics and
-// outcome verification. Commands are issued as raw COMMAND_LONG/COMMAND_INT so
-// the existing NOMAD contract (MAVLink result code, relative-altitude frame,
-// every verb ArduPilot accepts) is preserved exactly.
+// transport and its internal workers; NOMAD keeps command authorization and
+// authoritative outcome verification. Guided goto uses MAVSDK Action; remaining
+// commands without a suitable high-level API use COMMAND_LONG passthrough.
 
 #include "mavsdk_mavlink_connection.hpp"
 
@@ -26,30 +25,7 @@
 namespace nomad::mavlink {
 namespace {
 
-constexpr double kPositionScale = 1e7;
 constexpr auto kTelemetryWaitIncrement = std::chrono::milliseconds(20);
-constexpr double kDefaultMavsdkTimeoutSeconds = 0.5;
-// The pinned MAVSDK retries commands three times and parameter reads five
-// times. Its timeout is per attempt, so divide the caller's operation budget
-// across those attempts before handing it to the library.
-constexpr double kCommandAttemptCount = 4.0;
-constexpr double kParameterAttemptCount = 6.0;
-constexpr double kParameterTypeAttemptCount = 2.0;
-
-class ScopedMavsdkTimeout final {
-public:
-    ScopedMavsdkTimeout(mavsdk::Mavsdk &sdk, std::chrono::duration<double> timeout) : sdk_(sdk) {
-        sdk_.set_timeout_s(timeout.count());
-    }
-
-    ~ScopedMavsdkTimeout() { sdk_.set_timeout_s(kDefaultMavsdkTimeoutSeconds); }
-
-    ScopedMavsdkTimeout(const ScopedMavsdkTimeout &) = delete;
-    ScopedMavsdkTimeout &operator=(const ScopedMavsdkTimeout &) = delete;
-
-private:
-    mavsdk::Mavsdk &sdk_;
-};
 
 // The velocity command is SET_POSITION_TARGET_LOCAL_NED in the body frame with
 // position, acceleration and absolute-yaw ignored. These values are the wire
@@ -76,6 +52,14 @@ bool has_configuration(const std::string &endpoint, std::uint8_t expected_system
                        std::chrono::milliseconds discovery_timeout) {
     return mavsdk_phase_a::canonicalize_udp_endpoint(endpoint).has_value() && expected_system_id != 0 &&
            discovery_timeout > std::chrono::milliseconds::zero();
+}
+
+std::optional<std::chrono::milliseconds> remaining_timeout(ObservationClock::time_point deadline) {
+    const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - ObservationClock::now());
+    if (remaining <= std::chrono::milliseconds::zero()) {
+        return std::nullopt;
+    }
+    return remaining;
 }
 
 // MAV_RESULT codes NOMAD reports for a completed command. MAVSDK exposes the
@@ -107,9 +91,7 @@ MavsdkMavlinkConnection::MavsdkMavlinkConnection(std::string endpoint, std::uint
     : endpoint_(std::move(endpoint)),
       expected_system_id_(expected_system_id),
       discovery_timeout_(discovery_timeout),
-      sdk_(mavsdk::Mavsdk::Configuration{mavsdk::ComponentType::GroundStation}) {
-    sdk_.set_timeout_s(kDefaultMavsdkTimeoutSeconds);
-}
+      sdk_(mavsdk::Mavsdk::Configuration{mavsdk::ComponentType::GroundStation}) {}
 
 MavsdkMavlinkConnection::~MavsdkMavlinkConnection() {
     disconnect();
@@ -160,6 +142,11 @@ void MavsdkMavlinkConnection::disconnect() {
 }
 
 bool MavsdkMavlinkConnection::is_connected() const {
+    std::shared_lock lifetime_lock(plugin_lifetime_mutex_);
+    return is_connected_unlocked();
+}
+
+bool MavsdkMavlinkConnection::is_connected_unlocked() const {
     return system_ != nullptr && system_->is_connected();
 }
 
@@ -177,6 +164,7 @@ bool MavsdkMavlinkConnection::select_system() {
 }
 
 void MavsdkMavlinkConnection::subscribe() {
+    action_ = std::make_unique<mavsdk::Action>(system_);
     telemetry_ = std::make_unique<mavsdk::Telemetry>(system_);
     passthrough_ = std::make_unique<mavsdk::MavlinkPassthrough>(system_);
     geofence_ = std::make_unique<mavsdk::Geofence>(system_);
@@ -220,8 +208,9 @@ void MavsdkMavlinkConnection::unsubscribe() {
 }
 
 void MavsdkMavlinkConnection::close() {
-    std::lock_guard operation_lock(sdk_operation_mutex_);
+    std::unique_lock lifetime_lock(plugin_lifetime_mutex_);
     unsubscribe();
+    action_.reset();
     telemetry_.reset();
     passthrough_.reset();
     geofence_.reset();
@@ -344,7 +333,8 @@ std::optional<telemetry::VehicleState> MavsdkMavlinkConnection::wait_for_state(s
     return std::nullopt;
 }
 
-mavsdk::MavlinkPassthrough::Result MavsdkMavlinkConnection::send_long(const Command &command) {
+mavsdk::MavlinkPassthrough::Result MavsdkMavlinkConnection::send_long(const Command &command,
+                                                                      std::chrono::milliseconds timeout) {
     mavsdk::MavlinkPassthrough::CommandLong wire{};
     wire.target_sysid = target_system_;
     wire.target_compid = target_component_;
@@ -356,26 +346,7 @@ mavsdk::MavlinkPassthrough::Result MavsdkMavlinkConnection::send_long(const Comm
     wire.param5 = command.parameters[4];
     wire.param6 = command.parameters[5];
     wire.param7 = command.parameters[6];
-    return passthrough_->send_command_long(wire);
-}
-
-mavsdk::MavlinkPassthrough::Result MavsdkMavlinkConnection::send_int(const Command &command) {
-    // MAV_FRAME_GLOBAL_RELATIVE_ALT_INT with 1e7-scaled integer degrees and
-    // above-home altitude: the frame contract the CLI documents and the peer
-    // fixture asserts on the wire.
-    mavsdk::MavlinkPassthrough::CommandInt wire{};
-    wire.target_sysid = target_system_;
-    wire.target_compid = target_component_;
-    wire.command = command.id;
-    wire.frame = MAV_FRAME_GLOBAL_RELATIVE_ALT_INT;
-    wire.param1 = command.parameters[0];
-    wire.param2 = command.parameters[1];
-    wire.param3 = command.parameters[2];
-    wire.param4 = command.parameters[3];
-    wire.x = static_cast<std::int32_t>(static_cast<double>(command.parameters[4]) * kPositionScale);
-    wire.y = static_cast<std::int32_t>(static_cast<double>(command.parameters[5]) * kPositionScale);
-    wire.z = command.parameters[6];
-    return passthrough_->send_command_int(wire);
+    return passthrough_->send_command_long(wire, mavsdk::OperationOptions{timeout});
 }
 
 mavsdk::MavlinkPassthrough::Result
@@ -395,6 +366,7 @@ MavsdkMavlinkConnection::queue_velocity_setpoint(const VelocitySetpoint &setpoin
 }
 
 bool MavsdkMavlinkConnection::send_velocity(const VelocitySetpoint &setpoint) {
+    std::shared_lock lifetime_lock(plugin_lifetime_mutex_);
     if (!has_finite_components(setpoint) || !passthrough_ || target_system_ == 0) {
         return false;
     }
@@ -402,7 +374,7 @@ bool MavsdkMavlinkConnection::send_velocity(const VelocitySetpoint &setpoint) {
     // safety command the watchdog and shutdown paths rely on, so it is allowed
     // out on a link the core already believes is dead.
     const bool is_zero = is_zero_setpoint(setpoint);
-    if (!is_zero && (!is_connected() || !get_state().connected)) {
+    if (!is_zero && (!is_connected_unlocked() || !get_state().connected)) {
         return false;
     }
     if (queue_velocity_setpoint(setpoint) != mavsdk::MavlinkPassthrough::Result::Success) {
@@ -420,27 +392,32 @@ bool MavsdkMavlinkConnection::is_velocity_active() const {
 
 std::optional<float> MavsdkMavlinkConnection::read_param(const std::string &param_id,
                                                          std::chrono::milliseconds timeout) {
-    std::lock_guard operation_lock(sdk_operation_mutex_);
-    if (!is_connected() || !param_ || param_id.empty() || timeout <= std::chrono::milliseconds::zero()) {
+    std::shared_lock lifetime_lock(plugin_lifetime_mutex_);
+    if (!is_connected_unlocked() || !param_ || param_id.empty() || timeout <= std::chrono::milliseconds::zero()) {
         return std::nullopt;
     }
 
     // ArduPilot reports integer-valued parameters such as FENCE_ENABLE with
     // their MAVLink integer type. Try the integer API first, then accept a
-    // REAL32 parameter, while dividing the caller's budget across both type
-    // probes and MAVSDK's per-probe retries.
-    const auto attempt_timeout = std::chrono::duration<double>(timeout) /
-                                  (kParameterAttemptCount * kParameterTypeAttemptCount);
-    {
-        const ScopedMavsdkTimeout timeout_scope(sdk_, attempt_timeout);
-        const auto [result, value] = param_->get_param_int(param_id);
-        if (result == mavsdk::Param::Result::Success) {
-            return static_cast<float>(value);
-        }
+    // REAL32 parameter. MAVSDK owns the retry schedule; NOMAD only carries the
+    // unused portion of the caller's total budget into the second type probe.
+    const auto deadline = ObservationClock::now() + timeout;
+    auto remaining = remaining_timeout(deadline);
+    if (!remaining) {
+        return std::nullopt;
+    }
+    const auto [int_result, int_value] =
+        param_->get_param_int(param_id, mavsdk::OperationOptions{*remaining});
+    if (int_result == mavsdk::Param::Result::Success) {
+        return static_cast<float>(int_value);
     }
 
-    const ScopedMavsdkTimeout timeout_scope(sdk_, attempt_timeout);
-    const auto [result, value] = param_->get_param_float(param_id);
+    remaining = remaining_timeout(deadline);
+    if (!remaining) {
+        return std::nullopt;
+    }
+    const auto [result, value] =
+        param_->get_param_float(param_id, mavsdk::OperationOptions{*remaining});
     if (result == mavsdk::Param::Result::Success) {
         return value;
     }
@@ -449,12 +426,11 @@ std::optional<float> MavsdkMavlinkConnection::read_param(const std::string &para
 
 std::optional<CommandAck> MavsdkMavlinkConnection::send_command(const Command &command,
                                                                 std::chrono::milliseconds timeout) {
-    std::lock_guard operation_lock(sdk_operation_mutex_);
-    if (!is_connected() || !passthrough_ || timeout <= std::chrono::milliseconds::zero()) {
+    std::shared_lock lifetime_lock(plugin_lifetime_mutex_);
+    if (!is_connected_unlocked() || !passthrough_ || timeout <= std::chrono::milliseconds::zero()) {
         return std::nullopt;
     }
-    const ScopedMavsdkTimeout timeout_scope(sdk_, std::chrono::duration<double>(timeout) / kCommandAttemptCount);
-    const auto result = command.use_command_int ? send_int(command) : send_long(command);
+    const auto result = send_long(command, timeout);
     const auto code = command_result_code(result);
     if (!code.has_value()) {
         return std::nullopt;
@@ -462,33 +438,14 @@ std::optional<CommandAck> MavsdkMavlinkConnection::send_command(const Command &c
     return CommandAck{command.id, *code};
 }
 
-// Raw REQUEST_DATA_STREAM. MAVSDK's telemetry plugin owns stream/interval setup
-// for the subscriptions made in subscribe(), but the MavlinkConnection contract
-// still exposes a stream request, so the frame is queued through MAVSDK's
-// passthrough. No production caller asks for one today (run_status documents
-// why), which makes this transport-honesty parity the fixture checks rather than
-// a behavior the CLI depends on.
-mavsdk::MavlinkPassthrough::Result
-MavsdkMavlinkConnection::queue_data_stream_request(std::uint8_t stream_id, std::uint16_t message_rate) {
-    // start_stop = 1 is ArduPilot's "start streaming" value. MAVSDK's own
-    // Telemetry plugin subscribes to what it needs, but a caller that asks for a
-    // stream must still have the frame put on the wire rather than be told it was.
-    return passthrough_->queue_message([&](MavlinkAddress address, std::uint8_t channel) {
-        mavlink_message_t message{};
-        mavlink_msg_request_data_stream_pack_chan(address.system_id, address.component_id, channel, &message,
-                                                 target_system_, target_component_, stream_id, message_rate, 1);
-        return message;
-    });
-}
-
-bool MavsdkMavlinkConnection::request_data_stream(std::uint8_t stream_id, std::uint16_t message_rate) {
-    // A stream request needs a live, latched peer. Answering from the
-    // connection's own state would report success for a request that was never
-    // sent.
-    if (!is_connected() || !passthrough_ || target_system_ == 0 || !get_state().connected) {
+bool MavsdkMavlinkConnection::goto_location_relative(double latitude_deg, double longitude_deg,
+                                                      float relative_altitude_m, std::chrono::milliseconds timeout) {
+    std::shared_lock lifetime_lock(plugin_lifetime_mutex_);
+    if (!is_connected_unlocked() || !action_ || timeout <= std::chrono::milliseconds::zero()) {
         return false;
     }
-    return queue_data_stream_request(stream_id, message_rate) == mavsdk::MavlinkPassthrough::Result::Success;
+    return action_->goto_location_relative(latitude_deg, longitude_deg, relative_altitude_m, NAN,
+                                           mavsdk::OperationOptions{timeout}) == mavsdk::Action::Result::Success;
 }
 
 std::unique_ptr<MavlinkConnection> make_mavsdk_connection(const std::string &endpoint,

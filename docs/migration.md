@@ -23,7 +23,7 @@ cutover inventory and gate evidence. [PRD](prd.md) owns requirements and decisio
 | ROS 2 | ros2/nomad_ros/src/node.cpp, translation.cpp; tests/ros | Owns a Vehicle, telemetry topics, VIO health/source gate and Trigger services; blocking callbacks, no selected estimator or navigation fusion |
 | Video | python/tools/simple_video_bridge.py, video_bridge_server.py; test_simple_video_bridge.py | ROS image to GStreamer/RTSP; control HTTP is loopback-only; no validated capture/CV/VIO product pipeline |
 | Profiles | scripts/profile.py; three product profile files; test_deployment_profiles.py | Canonical endpoint and stale-setting checks exist; optional workloads and hardware remain unqualified |
-| MAVSDK | CMake mandatory transport; `MavlinkConnection` (commands, telemetry, deterministic peer fixture); qualified telemetry smoke; provenance and CI gates | Phases A-E landed: the transport parity fixture passes (accepted/denied/timeout ACKs, COMMAND_LONG/COMMAND_INT, wrong identity, command parity for mode/takeoff/goto/land/RTL/servo/relay/gimbal-config/user-command, unlatched GCS-heartbeat announcement, coalesced-datagram handling, live-to-stale link observation, body-frame velocity parity with the zero setpoint on disconnect, a wire-confirmed data-stream request, fence upload/readback/enable-verification and parameter reads), the CLI, the ROS 2 adapter and the CTest targets build it, and the Phase E cutover deleted the hand-written codec; explicit vehicle-class identification and QuadPlane coverage remain open |
+| MAVSDK | CMake mandatory transport; `MavlinkConnection` (commands, telemetry, deterministic peer fixture); qualified telemetry smoke; provenance and CI gates | Phases A-E landed: the transport parity fixture passes (accepted/denied/timeout ACKs, COMMAND_LONG/COMMAND_INT, wrong identity, command parity for mode/takeoff/goto/land/RTL/servo/relay/gimbal-config/user-command, unlatched GCS-heartbeat announcement, coalesced-datagram handling, live-to-stale link observation, body-frame velocity parity with the zero setpoint on disconnect, fence upload/readback/enable-verification and parameter reads), the CLI, the ROS 2 adapter and the CTest targets build it, and the Phase E cutover deleted the hand-written codec; the unused legacy stream-request surface is removed, while explicit vehicle-class identification and QuadPlane coverage remain open |
 | Competition | No dedicated implementation found in src/include/ROS/Python/plugin scans | Official telemetry, traffic model/deconfliction, herd survey, tracker/path and sampling workflows are open; events await contract |
 
 The working tree removes the Edge Core source/service/API and many camera/
@@ -563,29 +563,28 @@ load-bearing by breaking them and watching the case fail — a fabricated
 the peer holding no polygon.
 
 One fabricated success was found and fixed while reviewing the cutover surface.
-`MavsdkMavlinkConnection::request_data_stream` returned `is_connected()`, so it
-reported success for a `REQUEST_DATA_STREAM` it never put on the wire, while the
-legacy transport genuinely encodes and sends that frame. It now queues the
-frame through MAVSDK's passthrough with the legacy fields (stream id, requested
-rate, `start_stop = 1`) and requires a live latched peer, so a request on a dead
-link fails closed. `case_data_stream_request_reaches_the_wire` proves both
-halves: the peer decodes the frame and the case requires stream 1 at 4 Hz
-targeting the autopilot. The case was confirmed load-bearing by restoring the
-fabricated success, which reported `requested=1` while the peer decoded nothing.
-No production caller requests a stream today — the core reads the telemetry
-MAVSDK's own subscriptions deliver, and the SITL stack supplies stream rates
-through `docker/sitl-streams.parm` (C24) — so this is transport-honesty parity,
-not a behavior change on the current path.
+Historically, `MavsdkMavlinkConnection::request_data_stream` returned
+`is_connected()` and reported success for a `REQUEST_DATA_STREAM` it never put
+on the wire. A deterministic peer test first proved the repaired frame delivery.
+The unused operation and its protocol fixture were then removed on 2026-09-13:
+telemetry initialization is a MAVSDK responsibility and NOMAD has no production
+reason to expose the legacy MAVLink request. The core reads the telemetry
+MAVSDK's subscriptions deliver, while the current SITL stack supplies rates
+through `docker/sitl-streams.parm` (C24) until the fork proves clean-session
+initialization and fallback behavior independently.
 
-`MavsdkMavlinkConnection::read_param` and `send_command` now serialize the
-operation, divide the caller's positive budget across the pinned MAVSDK retry
-attempts, set that per-attempt transfer timeout, and restore the transport
-default. Non-positive budgets fail closed before any request is sent. Focused
-peer cases exercise 100 ms command and parameter budgets against silent
-responses, rather than inheriting MAVSDK's longer default. Parameter reads
-accept both ArduPilot integer parameters (such as `FENCE_ENABLE`) and REAL32
-values, returning the numeric value only after a matching response. No
-parameter write path exists because the core only reads.
+`MavsdkMavlinkConnection::read_param` and `send_command` now pass each caller's
+positive overall budget through MAVSDK's `OperationOptions`. MAVSDK owns the
+queue wait, retry schedule, and remaining per-attempt timeout; NOMAD no longer
+mutates global SDK timeout state or depends on internal retry counts. Parameter
+reads carry the unused portion of one NOMAD deadline from the integer probe to
+the REAL32 probe. Non-positive budgets fail closed before any request is sent,
+and independent operations may proceed in parallel while a shared lifetime lock
+prevents plugin teardown during a call. Focused peer cases exercise 100 ms
+command and parameter budgets against silent responses. Parameter reads accept
+both ArduPilot integer parameters (such as `FENCE_ENABLE`) and REAL32 values,
+returning the numeric value only after a matching response. No parameter write
+path exists because the core only reads.
 Phase E (production cutover) was still open when this historical evidence was
 written; it landed the same day and is recorded below.
 
@@ -714,10 +713,11 @@ adapter integration suite on a rebuilt image, and hardware or QuadPlane behavior
 The default runtime is MAVSDK on every path now, so those runs are remaining G-M
 evidence rather than a fallback comparison.
 
-debt: the transport calls MAVSDK passthrough APIs marked deprecated in the pinned
-pin (`send_command_long`, `send_command_int`, `queue_message`,
-`subscribe_message`); revisit when the fork drops them; then move the command path
-onto the replacement plugin API with the peer fixture as the wire check.
+debt: remaining generic commands and one-shot velocity use MAVSDK passthrough
+APIs marked deprecated in the pinned pin (`send_command_long`, `queue_message`,
+`subscribe_message`); revisit when the fork provides equivalent command and
+expiring-setpoint APIs; then use the peer fixture as the wire check. Relative
+goto now uses `Action::goto_location_relative` below NOMAD's safety policy.
 
 ### Boundary clarification - 2026-09-10
 

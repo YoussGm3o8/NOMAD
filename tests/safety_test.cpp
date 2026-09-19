@@ -182,6 +182,7 @@ void test_vehicle_fence_rejects_target_before_transmission() {
 
     CHECK(!result.success);
     CHECK(connection.last_command.id == 0);
+    CHECK(!connection.last_goto.has_value());
 }
 
 void test_vehicle_goto_location_rejects_stale_position() {

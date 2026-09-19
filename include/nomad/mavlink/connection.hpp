@@ -15,10 +15,6 @@ namespace nomad::mavlink {
 struct Command {
     std::uint16_t id{};
     std::array<float, 7> parameters{};
-    // ArduPilot rejects some location-bearing commands (notably
-    // MAV_CMD_DO_REPOSITION) as command_long; set this to send COMMAND_INT
-    // with a GLOBAL_RELATIVE_ALT_INT frame instead.
-    bool use_command_int{false};
 };
 
 struct CommandAck {
@@ -91,9 +87,10 @@ class MavlinkConnection {
     virtual std::optional<telemetry::VehicleState> wait_for_state(std::chrono::milliseconds timeout) = 0;
     virtual telemetry::VehicleState get_state() const = 0;
     virtual std::optional<CommandAck> send_command(const Command &command, std::chrono::milliseconds timeout) = 0;
+    virtual bool goto_location_relative(double latitude_deg, double longitude_deg, float relative_altitude_m,
+                                        std::chrono::milliseconds timeout) = 0;
     virtual bool send_velocity(const VelocitySetpoint &setpoint) = 0;
     virtual bool is_velocity_active() const = 0;
-    virtual bool request_data_stream(std::uint8_t stream_id, std::uint16_t message_rate) = 0;
     virtual bool send_fence_point(const FencePoint &point, std::uint8_t index, std::uint8_t total) = 0;
     virtual bool request_fence_point(std::uint8_t index) = 0;
     virtual std::optional<FencePoint> wait_for_fence_point(std::chrono::milliseconds timeout) = 0;
