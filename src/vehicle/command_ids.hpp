@@ -26,7 +26,6 @@ constexpr std::uint16_t kSetModeCommand = 176;        // MAV_CMD_DO_SET_MODE
 constexpr std::uint16_t kTakeoffCommand = 22;         // MAV_CMD_NAV_TAKEOFF
 constexpr std::uint16_t kLandCommand = 21;            // MAV_CMD_NAV_LAND
 constexpr std::uint16_t kReturnToLaunchCommand = 20;  // MAV_CMD_NAV_RETURN_TO_LAUNCH
-constexpr std::uint16_t kRepositionCommand = 192;     // MAV_CMD_DO_REPOSITION
 constexpr std::uint16_t kSetServoCommand = 183;       // MAV_CMD_DO_SET_SERVO
 constexpr std::uint16_t kSetRelayCommand = 181;       // MAV_CMD_DO_SET_RELAY
 constexpr std::uint16_t kMotorTestCommand = 209;      // MAV_CMD_DO_MOTOR_TEST

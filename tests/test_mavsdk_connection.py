@@ -61,12 +61,6 @@ def test_link_loss_is_observed_as_stale() -> None:
 
 
 @requires_mavsdk_build
-def test_data_stream_request_is_actually_sent() -> None:
-    """A reported stream request must correspond to a frame on the wire."""
-    fixture.case_data_stream_request_reaches_the_wire(PROBE)
-
-
-@requires_mavsdk_build
 def test_velocity_reaches_the_wire_and_is_zeroed_on_disconnect() -> None:
     """Velocity parity plus the zero-on-disconnect safety behavior (SR-LNK-03).
 

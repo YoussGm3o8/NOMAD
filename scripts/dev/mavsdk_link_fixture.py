@@ -26,7 +26,6 @@ from mavsdk_fixture_harness import (
     find_free_udp_port,
     require,
     run_cli_case,
-    run_data_stream_probe,
     run_fence_probe,
     run_probe,
     run_staleness_probe,
@@ -41,7 +40,6 @@ from mavsdk_peer import (
     GCS_AUTOPILOT_TYPE,
     GCS_COMPONENT_ID,
     GCS_VEHICLE_TYPE,
-    DataStreamRecord,
     ReceivedMessage,
     SetpointRecord,
     VehiclePeer,
@@ -291,41 +289,6 @@ def case_disabled_fence_does_not_verify(probe: Path) -> None:
         f"rc={result.returncode} stdout={result.stdout!r} stderr={result.stderr!r}",
     )
     require_fence_polygon(held, FENCE_BOUNDARY)
-
-
-def case_data_stream_request_reaches_the_wire(probe: Path) -> None:
-    """A stream request that reports success must have been sent.
-
-    The MAVSDK transport used to answer this from the connection's own state,
-    returning true for a REQUEST_DATA_STREAM it never put on the wire. The peer
-    decodes what arrived, so a reported success with no decoded frame fails here
-    instead of passing on the transport's word.
-    """
-    port = find_free_udp_port()
-    received: list[DataStreamRecord] = []
-
-    def action(peer: VehiclePeer) -> subprocess.CompletedProcess:
-        result = run_data_stream_probe(probe, port, 1, stream_id=1, rate=4)
-        received.extend(peer.data_streams())
-        return result
-
-    result = with_peer(port, 1, ACCEPTED, action)
-    require(
-        result.returncode == 0 and "requested=1" in result.stdout,
-        "the transport reports the stream request on a live link",
-        f"rc={result.returncode} stdout={result.stdout!r} stderr={result.stderr!r}",
-    )
-    require(len(received) >= 1, "a REQUEST_DATA_STREAM reached the vehicle", f"observed {received}")
-    request = received[0]
-    require(
-        request.stream_id == 1
-        and request.message_rate == 4
-        and request.start_stop == 1
-        and request.target_system == 1
-        and request.target_component == 1,
-        "the request asks the autopilot for stream 1 at 4 Hz",
-        f"observed {request}",
-    )
 
 
 def case_zero_delivery_scenarios(zero_delivery: Path) -> None:

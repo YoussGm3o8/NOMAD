@@ -30,10 +30,19 @@ deterministic ArduPilot-like UDP fixture, pure qualification tests, Linux/Window
 CI jobs, ROS image compile wiring, dependency inventory, root NOTICE and a pinned
 project MAVSDK fork. Command, link, velocity and fence/parameter parity are
 proven by `scripts/dev/mavsdk_connection_fixture.py` and the core test targets.
-The parent gitlink pins `9884f109533f564bc6250e5471e6301d3a62f4a7`; read
+The parent gitlink pins `775abc6334e3bfed02b0d29b953652cc5c01c2bf`; read
 `.gitmodules`, the gitlinks and the
 [dependency inventory](mavsdk-dependencies.md) for provenance. The Phase A/B
 names survive in task, CI-job and provenance-check names, not as a second build.
+The fork's generic compatibility work and the Action-backed NOMAD goto change
+are committed at `775abc6334e3bfed02b0d29b953652cc5c01c2bf`, and the parent
+gitlink points to that commit.
+Local qualification on 2026-09-18 covered the pinned fork: the standalone
+MAVSDK unit suite passed, the affected synthetic system-test groups passed all
+28/28 after the UDP receive-loop recovery fix, and a fresh pinned ArduCopter
+4.7.1 run passed all 19 compatibility tests. NOMAD's C++ suite passed 9/9 and
+its Python suite passed 514 tests with 3 environment skips. The dedicated fork
+workflow is the remaining hosted requalification gate.
 
 The published Phase A graph has now passed recursive hosted qualification. Test
 run `34535620056` completed the Python suite, C++ core, provenance checker,
@@ -97,6 +106,35 @@ fork owns the semantics above:
 Recheck each entry against the pin before patching (the Phase F rule): the
 historical findings above were recorded against earlier revisions, and upstream
 moves.
+
+## Adapter ownership audit
+
+The 2026-09-13 source audit classifies every current responsibility in
+`MavsdkMavlinkConnection` and `mavsdk_fence.cpp`. This table is the deletion
+checklist: a row moves only after the fork has its own executable regression.
+
+| Adapter responsibility | Classification | Owner and disposition |
+|---|---|---|
+| Select one configured system ID and reject absent or ambiguous peers | NOMAD policy | Keep; this is vehicle identity policy |
+| Mark heartbeat and telemetry fields fresh with steady-clock timestamps | NOMAD policy | Keep; freshness and fail-closed behavior are application safety rules |
+| Translate MAVSDK telemetry types into `VehicleState` | Thin translation | Keep, with no ArduPilot protocol decisions |
+| Translate MAVSDK result enums into NOMAD acknowledgements | Thin translation | Keep while the NOMAD interface exposes MAVLink result codes |
+| Build `COMMAND_LONG` for general commands through `MavlinkPassthrough` | Thin translation | Keep for commands with no suitable high-level API; qualify transport and ACK mapping in the fork |
+| Adapt relative-altitude goto | Thin translation | Use the fork's `Action::goto_location_relative`, qualified by an independent wire-form regression and pinned-SITL movement test. NOMAD keeps target validation, fence policy and authoritative arrival verification; no `COMMAND_INT` packing remains in its adapter |
+| Pack one-shot `SET_POSITION_TARGET_LOCAL_NED` body-velocity setpoints | NOMAD safety contract with a generic MAVSDK candidate | The fork's pinned-SITL test proves `Offboard::set_velocity_body` movement and stop, but its automatic resend can outlive a stale NOMAD command if NOMAD's watchdog stalls. Keep the one-shot path until an expiring MAVSDK setpoint API or fault-injection evidence establishes equivalent fail-closed behavior |
+| Upload/download fence plans through `Geofence` | Thin translation | Keep; protocol transfer already belongs to MAVSDK |
+| Validate fence shape, enabled state, and exact readback | NOMAD policy | Keep; these are operating-area and authoritative-verification rules |
+| Probe integer then float parameters | Thin translation | Keep value conversion and carry the remaining caller budget between typed reads |
+| Bound command and parameter retries | Generic MAVSDK capability | Use `OperationOptions`; MAVSDK owns retry counts and the overall deadline |
+| Expose and construct `REQUEST_DATA_STREAM` | Already unnecessary | Removed; no production caller existed and telemetry setup belongs to MAVSDK |
+| Send zero velocity on disconnect/destruction | NOMAD policy | Keep; this is watchdog/shutdown policy even if the send API moves |
+
+The executable disproof for each migration is two-layered: the fork's pinned
+ArduPilot test must fail without the compatibility behavior, and NOMAD's focused
+transport/safety tests must continue to prove identity, freshness, bounds, zero
+delivery, and authoritative state change after the raw workaround is deleted.
+The goto handoff additionally preserves double-precision coordinates through
+NOMAD's transport interface instead of narrowing them to float command slots.
 
 ## Phase A — Build, dependencies and telemetry
 
@@ -258,6 +296,11 @@ Evaluate Offboard start/stop and any automatic background resend against
 ArduPilot GUIDED semantics. A narrow raw-setpoint path is an option if needed,
 not permission to bypass NOMAD gates. Stop must end stale resends; destruction,
 reconnect and callback lifetime must not revive control.
+
+debt: the adapter still packs one-shot body setpoints; revisit when MAVSDK
+offers an expiring one-shot body setpoint API or a NOMAD watchdog-stall test
+proves automatic resend cannot exceed the command-freshness deadline; then
+replace raw packing with a thin `Offboard` translation.
 
 Exit: each watchdog fault case; independent wire zero-delivery plus
 core-sitl-zero-delivery; core-sitl-velocity-watchdog; GCS-heartbeat relay gate

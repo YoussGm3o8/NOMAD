@@ -13,6 +13,12 @@
 
 class FakeConnection final : public nomad::mavlink::MavlinkConnection {
   public:
+    struct GotoRequest {
+        double latitude_deg{};
+        double longitude_deg{};
+        float relative_altitude_m{};
+    };
+
     bool connect() override {
         connected = true;
         return true;
@@ -66,6 +72,20 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
         return nomad::mavlink::CommandAck{command.id, acknowledgement->result};
     }
 
+    bool goto_location_relative(double latitude_deg, double longitude_deg, float relative_altitude_m,
+                                std::chrono::milliseconds) override {
+        std::lock_guard lock(state_mutex);
+        last_goto = GotoRequest{latitude_deg, longitude_deg, relative_altitude_m};
+        if (!acknowledgement || acknowledgement->command != 192 || acknowledgement->result != 0) {
+            return false;
+        }
+        state->position_valid = true;
+        state->position.latitude_deg = latitude_deg;
+        state->position.longitude_deg = longitude_deg;
+        state->position.relative_altitude_m = relative_altitude_m;
+        return true;
+    }
+
     bool send_velocity(const nomad::mavlink::VelocitySetpoint &setpoint) override {
         event_log.push_back("send_velocity");
         last_velocity = setpoint;
@@ -81,10 +101,6 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     bool is_velocity_active() const override {
         return last_velocity.vx != 0.0F || last_velocity.vy != 0.0F || last_velocity.vz != 0.0F ||
                last_velocity.yaw_rate != 0.0F;
-    }
-
-    bool request_data_stream(std::uint8_t, std::uint16_t) override {
-        return true;
     }
 
     bool send_fence_point(const nomad::mavlink::FencePoint &point, std::uint8_t index, std::uint8_t total) override {
@@ -137,6 +153,7 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     nomad::mavlink::VelocitySetpoint last_velocity{};
     int velocity_send_count{0};
     nomad::mavlink::Command last_command{};
+    std::optional<GotoRequest> last_goto;
     std::optional<nomad::mavlink::CommandAck> acknowledgement{
         nomad::mavlink::CommandAck{0, 0},
     };
@@ -205,13 +222,6 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
             state->armed = false;
         } else if (command.id == 20) {
             state->custom_mode = 6;
-        } else if (command.id == 192) {
-            state->position_valid = true;
-            state->position.latitude_deg = command.parameters[4];
-            state->position.longitude_deg = command.parameters[5];
-            // REPOSITION altitude is above home; the vehicle telemetry carries
-            // it in relative_altitude_m and verification compares that frame.
-            state->position.relative_altitude_m = command.parameters[6];
         }
     }
 };

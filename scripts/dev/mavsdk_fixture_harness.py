@@ -21,7 +21,7 @@ from pathlib import Path
 from mavsdk_peer import ACCEPTED, CommandRecord, VehiclePeer
 
 ROOT = Path(__file__).resolve().parents[2]
-BUILD_DIR = ROOT / "build" / "mavsdk-phase-a"
+BUILD_DIR = Path(os.environ.get("NOMAD_MAVSDK_FIXTURE_BUILD_DIR", ROOT / "build" / "mavsdk-phase-a"))
 
 
 def find_binary(name: str) -> Path | None:
@@ -89,18 +89,6 @@ def run_velocity_probe(binary: Path, port: int, system_id: int, setpoint: tuple[
 def run_zero_delivery_probe(binary: Path, port: int, system_id: int, scenario: str) -> subprocess.CompletedProcess:
     command = [str(binary), "--zero-delivery", f"udpin:127.0.0.1:{port}", str(system_id), scenario]
     return subprocess.run(command, capture_output=True, text=True, timeout=45, check=False)
-
-
-def run_data_stream_probe(binary: Path, port: int, system_id: int, stream_id: int, rate: int):
-    command = [
-        str(binary),
-        "--data-stream",
-        f"udpin:127.0.0.1:{port}",
-        str(system_id),
-        str(stream_id),
-        str(rate),
-    ]
-    return subprocess.run(command, capture_output=True, text=True, timeout=25, check=False)
 
 
 def run_param_probe(binary: Path, port: int, system_id: int, param_id: str, timeout_ms: int):

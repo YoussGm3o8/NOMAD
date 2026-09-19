@@ -130,15 +130,12 @@ CommandResult Vehicle::goto_location(const Location &location) {
     if (!fence_decision.allowed) {
         return {false, fence_decision.message};
     }
-    // Altitude is above home (relative), matching takeoff and the GCS guided
-    // target conventions. ArduPilot accepts MAV_CMD_DO_REPOSITION only as
-    // command_int; the command_long form is answered MAV_RESULT_UNSUPPORTED.
-    auto command = make_command(kRepositionCommand, {0, 1, 0, 0, static_cast<float>(location.latitude_deg),
-                                                     static_cast<float>(location.longitude_deg), location.altitude_m});
-    command.use_command_int = true;
-    const auto result = send_command(command, "goto location");
-    if (!result.success) {
-        return result;
+    if (!connection_.is_connected()) {
+        return {false, "not connected"};
+    }
+    if (!connection_.goto_location_relative(location.latitude_deg, location.longitude_deg, location.altitude_m,
+                                            kCommandTimeout)) {
+        return {false, "goto location command not accepted"};
     }
     return wait_for_location(location);
 }

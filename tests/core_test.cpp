@@ -112,14 +112,14 @@ void test_goto_location_validates_and_verifies() {
     nomad::vehicle::Vehicle vehicle(connection);
     connection.acknowledgement = nomad::mavlink::CommandAck{192, 0};
 
-    const auto result = vehicle.goto_location({45.5, -73.6, 10.0F});
+    const auto result = vehicle.goto_location({45.500000123, -73.600000123, 10.0F});
 
     CHECK(result.success);
-    CHECK(connection.last_command.id == 192);
-    CHECK(connection.last_command.parameters[4] == 45.5F);
-    CHECK(connection.last_command.parameters[5] == -73.6F);
-    // ArduPilot only accepts MAV_CMD_DO_REPOSITION as command_int.
-    CHECK(connection.last_command.use_command_int);
+    CHECK(connection.last_command.id == 0);
+    CHECK(connection.last_goto.has_value());
+    CHECK(connection.last_goto->latitude_deg == 45.500000123);
+    CHECK(connection.last_goto->longitude_deg == -73.600000123);
+    CHECK(connection.last_goto->relative_altitude_m == 10.0F);
 }
 
 void test_goto_location_rejects_invalid_coordinates() {
@@ -132,6 +132,30 @@ void test_goto_location_rejects_invalid_coordinates() {
 
     CHECK(!result.success);
     CHECK(connection.last_command.id == 0);
+    CHECK(!connection.last_goto.has_value());
+}
+
+void test_goto_location_rejects_failed_action() {
+    FakeConnection connection;
+    connection.connect();
+    nomad::vehicle::Vehicle vehicle(connection);
+    connection.acknowledgement = nomad::mavlink::CommandAck{192, 2};
+
+    const auto result = vehicle.goto_location({45.5, -73.6, 10.0F});
+
+    CHECK(!result.success);
+    CHECK(connection.last_goto.has_value());
+    CHECK(connection.last_command.id == 0);
+}
+
+void test_goto_location_requires_connection() {
+    FakeConnection connection;
+    nomad::vehicle::Vehicle vehicle(connection);
+
+    const auto result = vehicle.goto_location({45.5, -73.6, 10.0F});
+
+    CHECK(!result.success);
+    CHECK(!connection.last_goto.has_value());
 }
 
 void test_command_rejects_failed_acknowledgement() {
@@ -197,6 +221,8 @@ int main() {
         test_disarm_is_verified();
         test_goto_location_validates_and_verifies();
         test_goto_location_rejects_invalid_coordinates();
+        test_goto_location_rejects_failed_action();
+        test_goto_location_requires_connection();
         test_command_rejects_failed_acknowledgement();
         test_command_requires_connection();
         test_mission_executor_runs_steps_and_reports_progress();

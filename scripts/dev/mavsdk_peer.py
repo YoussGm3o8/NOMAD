@@ -110,17 +110,6 @@ class ReceivedMessage:
     autopilot: int = -1
 
 
-@dataclass(frozen=True)
-class DataStreamRecord:
-    """One REQUEST_DATA_STREAM the peer decoded off the wire."""
-
-    stream_id: int
-    message_rate: int
-    start_stop: int
-    target_system: int
-    target_component: int
-
-
 def read_parameters(kind: str, message) -> tuple[float, ...]:
     """Read the seven MAVLink command parameters in NOMAD's canonical order."""
     if kind == "COMMAND_INT":
@@ -180,7 +169,6 @@ class VehiclePeer:
         self._setpoints: list[SetpointRecord] = []
         self._pending_acks: list[Any] = []
         self._params = dict(DEFAULT_PARAMS if params is None else params)
-        self._data_streams: list[DataStreamRecord] = []
         self._fence_polygon: list[tuple[float, float]] = []
         self._fence_arriving: list[tuple[int, float, float, float]] = []
         self._fence_expected = 0
@@ -216,10 +204,6 @@ class VehiclePeer:
 
     def setpoints(self) -> list[SetpointRecord]:
         return list(self._setpoints)
-
-    def data_streams(self) -> list[DataStreamRecord]:
-        """Every REQUEST_DATA_STREAM the peer decoded, in arrival order."""
-        return list(self._data_streams)
 
     def fence_polygon(self) -> list[tuple[float, float]]:
         """The fence polygon the vehicle currently holds, as (latitude, longitude)."""
@@ -266,16 +250,6 @@ class VehiclePeer:
         )
         if kind == "SET_POSITION_TARGET_LOCAL_NED":
             self._setpoints.append(self._read_setpoint(message))
-        if kind == "REQUEST_DATA_STREAM":
-            self._data_streams.append(
-                DataStreamRecord(
-                    int(message.req_stream_id),
-                    int(message.req_message_rate),
-                    int(message.start_stop),
-                    int(message.target_system),
-                    int(message.target_component),
-                )
-            )
         if kind in ("PARAM_REQUEST_READ", "PARAM_REQUEST_LIST"):
             self._serve_params(message)
             return

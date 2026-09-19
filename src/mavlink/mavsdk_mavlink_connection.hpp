@@ -10,6 +10,7 @@
 #include "nomad/mavlink/connection.hpp"
 
 #include <mavsdk/mavsdk.hpp>
+#include <plugins/action/action.hpp>
 #include <plugins/geofence/geofence.hpp>
 #include <plugins/mavlink_passthrough/mavlink_passthrough.hpp>
 #include <plugins/param/param.hpp>
@@ -21,6 +22,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
@@ -64,9 +66,10 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     std::optional<telemetry::VehicleState> wait_for_state(std::chrono::milliseconds timeout) override;
     telemetry::VehicleState get_state() const override;
     std::optional<CommandAck> send_command(const Command &command, std::chrono::milliseconds timeout) override;
+    bool goto_location_relative(double latitude_deg, double longitude_deg, float relative_altitude_m,
+                                std::chrono::milliseconds timeout) override;
     bool send_velocity(const VelocitySetpoint &setpoint) override;
     bool is_velocity_active() const override;
-    bool request_data_stream(std::uint8_t stream_id, std::uint16_t message_rate) override;
     bool send_fence_point(const FencePoint &point, std::uint8_t index, std::uint8_t total) override;
     bool request_fence_point(std::uint8_t index) override;
     std::optional<FencePoint> wait_for_fence_point(std::chrono::milliseconds timeout) override;
@@ -75,6 +78,7 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     std::optional<float> read_param(const std::string &param_id, std::chrono::milliseconds timeout) override;
 
   private:
+    bool is_connected_unlocked() const;
     telemetry::VehicleState state_locked() const;
 
     void subscribe();
@@ -89,23 +93,18 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     void observe_gps(const mavsdk::Telemetry::GpsInfo &gps);
     void observe_attitude(const mavsdk::Telemetry::EulerAngle &attitude);
 
-    mavsdk::MavlinkPassthrough::Result send_long(const Command &command);
-    mavsdk::MavlinkPassthrough::Result send_int(const Command &command);
+    mavsdk::MavlinkPassthrough::Result send_long(const Command &command, std::chrono::milliseconds timeout);
     mavsdk::MavlinkPassthrough::Result queue_velocity_setpoint(const VelocitySetpoint &setpoint);
-    mavsdk::MavlinkPassthrough::Result queue_data_stream_request(std::uint8_t stream_id,
-                                                                 std::uint16_t message_rate);
 
     std::string endpoint_;
     std::uint8_t expected_system_id_{0};
     std::chrono::milliseconds discovery_timeout_{0};
     ConnectFailure connect_failure_{ConnectFailure::None};
     mavsdk::Mavsdk sdk_;
-    // MAVSDK exposes one transfer timeout for its blocking plugin calls. Keep
-    // caller-budgeted operations and teardown serialized while that value is
-    // changed for one operation.
-    mutable std::mutex sdk_operation_mutex_;
+    mutable std::shared_mutex plugin_lifetime_mutex_;
     std::optional<mavsdk::Mavsdk::ConnectionHandle> handle_;
     std::shared_ptr<mavsdk::System> system_;
+    std::unique_ptr<mavsdk::Action> action_;
     std::unique_ptr<mavsdk::Telemetry> telemetry_;
     std::unique_ptr<mavsdk::MavlinkPassthrough> passthrough_;
     std::unique_ptr<mavsdk::Geofence> geofence_;

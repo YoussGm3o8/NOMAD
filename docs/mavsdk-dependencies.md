@@ -1,18 +1,18 @@
 # MAVSDK Phase A dependency inventory
 
-This inventory records the optional Phase A build inputs at the reviewed NOMAD
-gitlink. It is an engineering and notice audit, not a release approval. The
-production core does not use MAVSDK yet.
+This inventory records the MAVSDK build inputs at the reviewed NOMAD gitlink. It
+is an engineering and notice audit, not a release approval. The production core
+uses this pinned MAVSDK checkout as its only vehicle transport.
 The CONOPS v1.0 reconciliation did not change dependency pins or accepted evidence.
 MAVSDK remains a project prerequisite, not an organizer-prescribed library.
 Competition transport/traffic requirements do not justify adding speculative
-network plugins: obtain the official server contract first. Re-audit this
-inventory when production parity adds required MAVSDK plugins or changes build
-options; the telemetry-only Phase A inventory cannot cover those future inputs.
+network plugins: obtain the official server contract first. The selected build
+includes Action, Geofence, Param and Telemetry, and this table records the
+reviewed fork gitlink.
 
 | Component | Reviewed source | License found in fetched source |
 |---|---|---|
-| MAVSDK | NOMAD gitlink `9884f109533f564bc6250e5471e6301d3a62f4a7` | BSD-3-Clause |
+| MAVSDK | NOMAD gitlink `775abc6334e3bfed02b0d29b953652cc5c01c2bf` | BSD-3-Clause |
 | MAVSDK proto | nested gitlink `1fd0bc7a05c21336227b1eab266b8b610401cf38` | BSD-3-Clause |
 | Asio | tag `asio-1-30-2` | Boost-1.0 |
 | fmt | tag `12.1.0` | MIT |
@@ -40,7 +40,7 @@ while the server remains disabled; enabling it requires a new audit.
 ## Hardening evidence - 2026-09-10
 
 The project MAVSDK fork is pinned at
-`9884f109533f564bc6250e5471e6301d3a62f4a7`. The fork replaces the mutable
+`775abc6334e3bfed02b0d29b953652cc5c01c2bf`. The fork replaces the mutable
 PicoSHA2 branch with an immutable commit, adds SHA-256 archive checks for
 liblzma and nlohmann JSON, handles deterministic archive extraction on both
 pre-3.24 and newer CMake, and removes MAVLink's build-time network package
@@ -48,11 +48,12 @@ resolution in favor of its pinned nested pymavlink generator source.NOMAD
 pins that revision directly so a recursive clean checkout resolves the reviewed
 graph.
 
-The fork's scope is not limited to dependencies: since 2026-09-12 it also owns
-ArduPilot command, mode and telemetry semantics, so the pinned revision changes
-only when that work lands with its own tests and a requalification — see
-[MAVSDK adoption](mavsdk-adoption.md). No ArduPilot source change exists in the
-fork yet; the three commits above are the entire difference from upstream `main`.
+The fork's intended scope is not limited to dependencies: since 2026-09-12 it
+also owns ArduPilot command, mode and telemetry semantics, so the pinned
+revision changes only when that work lands with its own tests and a
+requalification — see [MAVSDK adoption](mavsdk-adoption.md). Commit
+`775abc6334e3bfed02b0d29b953652cc5c01c2bf` contains the standalone compatibility layer, its regression tests,
+and the dedicated ArduPilot workflow.
 
 Recursive hosted test run `34535620056` passed the optional MAVSDK build,
 provenance checker and deterministic expected/wrong/absent-peer fixture on both
