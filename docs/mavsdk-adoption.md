@@ -30,19 +30,20 @@ deterministic ArduPilot-like UDP fixture, pure qualification tests, Linux/Window
 CI jobs, ROS image compile wiring, dependency inventory, root NOTICE and a pinned
 project MAVSDK fork. Command, link, velocity and fence/parameter parity are
 proven by `scripts/dev/mavsdk_connection_fixture.py` and the core test targets.
-The parent gitlink pins `288334b36c40f722beb1207fdab94ec662747319`; read
+The parent gitlink pins `30a9bb0282ed855349882aa2844d7646e94e7f67`; read
 `.gitmodules`, the gitlinks and the
 [dependency inventory](mavsdk-dependencies.md) for provenance. The Phase A/B
 names survive in task, CI-job and provenance-check names, not as a second build.
 The fork's generic compatibility work and the Action-backed NOMAD goto change
-are committed at `288334b36c40f722beb1207fdab94ec662747319`, and the parent
+are committed at `30a9bb0282ed855349882aa2844d7646e94e7f67`, and the parent
 gitlink points to that commit.
 Local qualification on 2026-09-18 covered the pinned fork: the standalone
 MAVSDK unit suite passed, the affected synthetic system-test groups passed all
 28/28 after the UDP receive-loop recovery fix, and a fresh pinned ArduCopter
 4.7.1 run passed all 19 compatibility tests. NOMAD's C++ suite passed 9/9 and
 its Python suite passed 514 tests with 3 environment skips. The dedicated fork
-workflow is the remaining hosted requalification gate.
+workflow passed its ArduCopter SITL qualification; the normal Linux/Windows
+generator and style matrix is requalifying this refreshed pin.
 
 The published Phase A graph has now passed recursive hosted qualification. Test
 run `34535620056` completed the Python suite, C++ core, provenance checker,
