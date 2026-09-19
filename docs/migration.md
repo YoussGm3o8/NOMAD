@@ -9,6 +9,9 @@ cutover inventory and gate evidence. [PRD](prd.md) owns requirements and decisio
 
 ## Current implementation inventory
 
+The [MAVSDK compatibility handoff](mavsdk-handoff.md) records the 2026-09-19
+merged baseline, hosted qualification results, and remaining fork/adapter work.
+
 "Implemented" below means source and focused tests exist, not flight readiness.
 
 | Area | Source and tests inspected | Actual scope and remaining limitation |
