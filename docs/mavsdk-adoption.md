@@ -30,12 +30,12 @@ deterministic ArduPilot-like UDP fixture, pure qualification tests, Linux/Window
 CI jobs, ROS image compile wiring, dependency inventory, root NOTICE and a pinned
 project MAVSDK fork. Command, link, velocity and fence/parameter parity are
 proven by `scripts/dev/mavsdk_connection_fixture.py` and the core test targets.
-The parent gitlink pins `30a9bb0282ed855349882aa2844d7646e94e7f67`; read
+The parent gitlink pins `e0dada26a606ffa4f48e72841efa231177733d05`; read
 `.gitmodules`, the gitlinks and the
 [dependency inventory](mavsdk-dependencies.md) for provenance. The Phase A/B
 names survive in task, CI-job and provenance-check names, not as a second build.
 The fork's generic compatibility work and the Action-backed NOMAD goto change
-are committed at `30a9bb0282ed855349882aa2844d7646e94e7f67`, and the parent
+are committed at `e0dada26a606ffa4f48e72841efa231177733d05`, and the parent
 gitlink points to that commit.
 Local qualification on 2026-09-18 covered the pinned fork: the standalone
 MAVSDK unit suite passed, the affected synthetic system-test groups passed all

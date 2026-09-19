@@ -12,7 +12,7 @@ reviewed fork gitlink.
 
 | Component | Reviewed source | License found in fetched source |
 |---|---|---|
-| MAVSDK | NOMAD gitlink `30a9bb0282ed855349882aa2844d7646e94e7f67` | BSD-3-Clause |
+| MAVSDK | NOMAD gitlink `e0dada26a606ffa4f48e72841efa231177733d05` | BSD-3-Clause |
 | MAVSDK proto | nested gitlink `1fd0bc7a05c21336227b1eab266b8b610401cf38` | BSD-3-Clause |
 | Asio | tag `asio-1-30-2` | Boost-1.0 |
 | fmt | tag `12.1.0` | MIT |
@@ -40,7 +40,7 @@ while the server remains disabled; enabling it requires a new audit.
 ## Hardening evidence - 2026-09-10
 
 The project MAVSDK fork is pinned at
-`30a9bb0282ed855349882aa2844d7646e94e7f67`. The fork replaces the mutable
+`e0dada26a606ffa4f48e72841efa231177733d05`. The fork replaces the mutable
 PicoSHA2 branch with an immutable commit, adds SHA-256 archive checks for
 liblzma and nlohmann JSON, handles deterministic archive extraction on both
 pre-3.24 and newer CMake, and removes MAVLink's build-time network package
@@ -52,7 +52,7 @@ The fork's intended scope is not limited to dependencies: since 2026-09-12 it
 also owns ArduPilot command, mode and telemetry semantics, so the pinned
 revision changes only when that work lands with its own tests and a
 requalification — see [MAVSDK adoption](mavsdk-adoption.md). Commit
-`30a9bb0282ed855349882aa2844d7646e94e7f67` contains the standalone compatibility layer, its regression tests,
+`e0dada26a606ffa4f48e72841efa231177733d05` contains the standalone compatibility layer, its regression tests,
 and the dedicated ArduPilot workflow.
 
 Recursive hosted test run `34535620056` passed the optional MAVSDK build,
