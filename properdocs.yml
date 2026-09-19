@@ -71,6 +71,7 @@ nav:
   - Migration: migration.md
   - MAVSDK adoption: mavsdk-adoption.md
   - MAVSDK dependencies: mavsdk-dependencies.md
+  - MAVSDK handoff: mavsdk-handoff.md
   - Safety: safety.md
 
 
