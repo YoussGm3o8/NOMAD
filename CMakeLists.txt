@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 3.22.1)
 project(nomad VERSION 0.1.0 LANGUAGES CXX)
 
 include(CTest)
-include(GNUInstallDirs)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -95,28 +94,32 @@ add_executable(nomad
 )
 target_link_libraries(nomad PRIVATE nomad_core nomad_mavsdk_connection)
 
-# The core release is an executable package. Static MAVSDK internals are linked
-# into the CLI, so the staged runtime does not depend on the build tree. Headers,
-# configuration templates and the reviewed dependency notices travel with the
-# executable for clean install and rollback review.
-install(TARGETS nomad RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT nomad_runtime)
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT nomad_runtime)
-install(FILES LICENSE NOTICE DESTINATION ${CMAKE_INSTALL_DATADIR}/nomad COMPONENT nomad_runtime)
-install(FILES config/README.md config/nomad.env.example
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/nomad/config COMPONENT nomad_runtime)
-install(DIRECTORY licenses/mavsdk-phase-a/
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/nomad/licenses/mavsdk-phase-a COMPONENT nomad_runtime)
+if(PROJECT_IS_TOP_LEVEL)
+    include(GNUInstallDirs)
 
-set(CPACK_PACKAGE_NAME "nomad-core")
-set(CPACK_PACKAGE_VENDOR "The NOMAD Authors")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "NOMAD C++ vehicle core and CLI")
-set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
-set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}")
-set(CPACK_COMPONENTS_ALL nomad_runtime)
-set(CPACK_COMPONENTS_GROUPING ALL_COMPONENTS_IN_ONE)
-set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
-set(CPACK_GENERATOR "ZIP;TGZ")
-include(CPack)
+    # The core release is an executable package. Static MAVSDK internals are linked
+    # into the CLI, so the staged runtime does not depend on the build tree. Headers,
+    # configuration templates and the reviewed dependency notices travel with the
+    # executable for clean install and rollback review.
+    install(TARGETS nomad RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT nomad_runtime)
+    install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT nomad_runtime)
+    install(FILES LICENSE NOTICE DESTINATION ${CMAKE_INSTALL_DATADIR}/nomad COMPONENT nomad_runtime)
+    install(FILES config/README.md config/nomad.env.example
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/nomad/config COMPONENT nomad_runtime)
+    install(DIRECTORY licenses/mavsdk-phase-a/
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/nomad/licenses/mavsdk-phase-a COMPONENT nomad_runtime)
+
+    set(CPACK_PACKAGE_NAME "nomad-core")
+    set(CPACK_PACKAGE_VENDOR "The NOMAD Authors")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "NOMAD C++ vehicle core and CLI")
+    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+    set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}")
+    set(CPACK_COMPONENTS_ALL nomad_runtime)
+    set(CPACK_COMPONENTS_GROUPING ALL_COMPONENTS_IN_ONE)
+    set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
+    set(CPACK_GENERATOR "ZIP;TGZ")
+    include(CPack)
+endif()
 
 # MAVSDK's embedded fmt target is directory-scoped and is not a reliable
 # dependency for a parent project. Import the generated archive explicitly so
