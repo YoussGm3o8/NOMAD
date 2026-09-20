@@ -20,12 +20,20 @@ pixi run lint
 pixi run format-check
 pixi run complexity-check
 pixi run docs-build
+pixi run package-core
+pixi run verify-core-install
+pixi run verify-core-package
 ~~~
 
 test-core configures/builds before CTest; build-core builds without tests.
 format-check is read-only with respect to source; format rewrites source and is
 not appropriate for a documentation-only review of unrelated migration work.
 docs-build is the strict ProperDocs site check.
+The package tasks are non-deploying release checks: `package-core` builds the
+Release CLI and CPack ZIP/TGZ artifacts, `verify-core-install` stages a clean
+install prefix, and `verify-core-package` checks the staged tree or both CPack
+archives without opening a vehicle connection. They do not install to a system
+prefix or change runtime infrastructure.
 
 complexity-check applies the source-size rules to new and modified files: 500
 lines per source file, 40 per Python function, and 120 columns per C/C++ line

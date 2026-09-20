@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 The NOMAD Authors
+"""Unit tests for the non-deploying core package verifier."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from scripts.dev import verify_core_package
+
+
+def make_install_tree(root: Path) -> None:
+    (root / "bin").mkdir(parents=True)
+    (root / "bin" / "nomad.exe").write_text("placeholder", encoding="utf-8")
+    for relative in verify_core_package.REQUIRED_FILES:
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("placeholder", encoding="utf-8")
+    licenses = root / "share/nomad/licenses/mavsdk-phase-a"
+    licenses.mkdir(parents=True, exist_ok=True)
+    (licenses / "example.txt").write_text("license", encoding="utf-8")
+
+
+def test_valid_install_tree_has_no_content_errors(tmp_path: Path) -> None:
+    make_install_tree(tmp_path)
+
+    assert verify_core_package.validate_install_root(tmp_path) == []
+
+
+def test_install_tree_rejects_live_configuration(tmp_path: Path) -> None:
+    make_install_tree(tmp_path)
+    live_config = tmp_path / "share/nomad/config/nomad.env"
+    live_config.write_text("NOMAD_API_KEY=secret", encoding="utf-8")
+
+    errors = verify_core_package.validate_install_root(tmp_path)
+
+    assert "package contains live config/nomad.env" in errors
+
+
+def test_install_tree_rejects_mavsdk_development_payload(tmp_path: Path) -> None:
+    make_install_tree(tmp_path)
+    (tmp_path / "include/mavsdk").mkdir(parents=True)
+    (tmp_path / "lib/mavsdk.lib").parent.mkdir(parents=True)
+
+    errors = verify_core_package.validate_install_root(tmp_path)
+
+    assert "package contains MAVSDK development headers" in errors
+    assert "package contains development libraries" in errors
+
+
+def test_find_install_root_accepts_cpack_top_level_directory(tmp_path: Path) -> None:
+    nested = tmp_path / "nomad-core-0.1.0"
+    (nested / "bin").mkdir(parents=True)
+
+    assert verify_core_package.find_install_root(tmp_path) == nested
