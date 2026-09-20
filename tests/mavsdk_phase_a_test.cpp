@@ -45,6 +45,8 @@ void test_system_identity() {
     check(classify_system_ids({}, 1) == SystemSelection::NoAutopilot, "no autopilot");
     check(classify_system_ids({1}, 1) == SystemSelection::Selected, "expected autopilot");
     check(classify_system_ids({2}, 1) == SystemSelection::WrongPeer, "wrong autopilot");
+    check(classify_system_ids({257}, 1) == SystemSelection::WrongPeer, "wide system ID must not alias system 1");
+    check(classify_system_ids({255}, 255) == SystemSelection::Selected, "maximum MAVLink system ID");
     check(classify_system_ids({1, 2}, 1) == SystemSelection::Ambiguous, "multiple autopilots");
 }
 

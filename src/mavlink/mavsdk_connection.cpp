@@ -181,7 +181,7 @@ bool MavsdkConnection::is_connected() const {
 }
 
 std::uint8_t MavsdkConnection::system_id() const {
-    return implementation_->system ? implementation_->system->get_system_id() : 0;
+    return implementation_->system ? implementation_->options.expected_system_id : 0;
 }
 
 MavsdkConnectionError MavsdkConnection::last_error() const {

@@ -46,6 +46,7 @@ dist/
 *.egg
 
 # Vendored MAVSDK build caches are not source inputs for the ROS image.
+third_party/MAVSDK/build*/
 third_party/MAVSDK/cpp/build-win/
 third_party/MAVSDK/cpp/build*/
 

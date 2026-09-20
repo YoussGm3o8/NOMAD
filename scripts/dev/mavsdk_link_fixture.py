@@ -35,7 +35,7 @@ from mavsdk_fixture_harness import (
 )
 from mavsdk_peer import (
     ACCEPTED,
-    BODY_OFFSET_NED_FRAME,
+    BODY_NED_FRAME,
     COMMAND_ARM_DISARM,
     GCS_AUTOPILOT_TYPE,
     GCS_COMPONENT_ID,
@@ -47,7 +47,8 @@ from mavsdk_peer import (
 
 # NOMAD's velocity command, pinned independently of the transport: ignore
 # position, acceleration and absolute yaw; send velocity and yaw rate.
-VELOCITY_TYPE_MASK = 0x07C7
+# BODY_NED uses body FRD velocity; the force bit is clear because acceleration is ignored.
+VELOCITY_TYPE_MASK = 0x05C7
 
 # Must match kStreamedVelocity in tests/mavsdk_zero_delivery_test.cpp. The core
 # converts vx/vy/vz/yaw_rate to the body-frame NED convention, so a setpoint
@@ -177,7 +178,7 @@ def require_velocity_wire_format(received: list[SetpointRecord], streamed: tuple
     require(
         matches_streamed_rates(first, streamed)
         and first.type_mask == VELOCITY_TYPE_MASK
-        and first.coordinate_frame == BODY_OFFSET_NED_FRAME
+        and first.coordinate_frame == BODY_NED_FRAME
         and first.target_system == 1,
         "the setpoint carries the body-frame velocity mask and the requested rates",
         f"observed {first}",

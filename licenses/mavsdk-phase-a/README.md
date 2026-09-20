@@ -1,11 +1,10 @@
 # MAVSDK Phase A redistribution licenses
 
-This directory accompanies any NOMAD distribution that contains the optional
-statically linked MAVSDK Phase A executable. The files are verbatim copies from
-the exact fetched sources recorded in
+This directory accompanies NOMAD distributions that contain statically linked
+MAVSDK. The files are verbatim copies from the exact fetched sources recorded in
 [the dependency inventory](../../docs/mavsdk-dependencies.md). The provenance
-checker validates every file by SHA-256 so a missing or changed text fails the
-Phase A gate.
+checker validates every license text by its Git blob ID so a missing or changed
+text fails the Phase A gate.
 
 | File | Component and licence |
 |---|---|
@@ -23,6 +22,6 @@ Phase A gate.
 | `XZ-GPL-3.0.txt` | XZ Utils source-package GPLv3 text |
 | `XZ-LGPL-2.1.txt` | XZ Utils source-package LGPLv2.1 text |
 
-The MAVSDK server is disabled for Phase A, so MAVSDK-Proto is not fetched,
-compiled or linked into this executable. Re-audit this bundle before enabling
+Recursive checkouts fetch MAVSDK-Proto, but the disabled MAVSDK server means it
+is not compiled or linked into NOMAD. Re-audit this bundle before enabling
 the server, curl support, tests, another plugin, or another dependency set.

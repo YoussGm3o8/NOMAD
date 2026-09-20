@@ -72,3 +72,5 @@ jobs:
         run: pixi run check-mavsdk-phase-a
       - name: Run deterministic MAVSDK peer qualification
         run: pixi run test-mavsdk-phase-a
+      - name: Run MAVSDK command, link, fence and velocity regressions
+        run: pixi run test-mavsdk-phase-b

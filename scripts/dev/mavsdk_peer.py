@@ -65,9 +65,8 @@ GCS_VEHICLE_TYPE = mavlink.MAV_TYPE_GCS
 GCS_AUTOPILOT_TYPE = mavlink.MAV_AUTOPILOT_INVALID
 GCS_COMPONENT_ID = mavlink.MAV_COMP_ID_MISSIONPLANNER
 
-# The frame NOMAD's velocity command uses: body-frame offsets, so the vehicle
-# interprets the setpoint relative to its current heading.
-BODY_OFFSET_NED_FRAME = mavlink.MAV_FRAME_BODY_OFFSET_NED
+# Body-frame velocity follows the vehicle's current heading; position is ignored.
+BODY_NED_FRAME = mavlink.MAV_FRAME_BODY_NED
 
 TELEMETRY_PERIOD_SECONDS = 0.2
 

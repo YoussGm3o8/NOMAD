@@ -716,11 +716,13 @@ adapter integration suite on a rebuilt image, and hardware or QuadPlane behavior
 The default runtime is MAVSDK on every path now, so those runs are remaining G-M
 evidence rather than a fallback comparison.
 
-debt: remaining generic commands and one-shot velocity use MAVSDK passthrough
-APIs marked deprecated in the pinned pin (`send_command_long`, `queue_message`,
-`subscribe_message`); revisit when the fork provides equivalent command and
-expiring-setpoint APIs; then use the peer fixture as the wire check. Relative
-goto now uses `Action::goto_location_relative` below NOMAD's safety policy.
+debt: remaining generic commands and heartbeat observation use MAVSDK passthrough
+APIs marked deprecated in the pin (`send_command_long`, `subscribe_message`);
+revisit when the fork provides equivalent command and observation APIs; then use
+the peer fixture as the wire check. Relative goto uses
+`Action::goto_location_relative`; velocity uses `Offboard::set_velocity_body_once`
+without automatic resends. NOMAD retains freshness, authorization, watchdogs and
+authoritative verification. The adoption record names the independent fault tests.
 
 ### Boundary clarification - 2026-09-10
 

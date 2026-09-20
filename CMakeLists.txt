@@ -27,8 +27,8 @@ function(add_nomad_mavsdk)
     set(SUPERBUILD ON)
     # mavlink_passthrough is not an ENABLED_PLUGINS option: MAVSDK's plugin
     # CMakeLists always adds it, so it is available without listing it here.
-    # Action owns ArduPilot relative-altitude goto; Geofence and Param own their transports.
-    set(ENABLED_PLUGINS telemetry geofence param action)
+    # Action owns relative goto; Offboard owns one-shot velocity; Geofence and Param own their transports.
+    set(ENABLED_PLUGINS telemetry geofence param action offboard)
     set(MAVLINK_DIALECT ardupilotmega)
     add_subdirectory("${NOMAD_MAVSDK_SOURCE_DIR}/cpp" "${CMAKE_BINARY_DIR}/mavsdk")
 endfunction()
