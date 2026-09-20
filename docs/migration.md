@@ -18,7 +18,7 @@ merged baseline, hosted qualification results, and remaining fork/adapter work.
 |---|---|---|
 | C++ foundation | CMakeLists.txt; include/nomad; src; ten CTest targets | Library and CLI build against the mandatory MAVSDK transport; no Python or mavgen build dependency, no Python runtime dependency |
 | MAVLink | src/mavlink (MAVSDK transport); core_test, mavsdk_connection_test, mavsdk_zero_delivery_test | MAVSDK owns framing/transport; NOMAD owns ACK classification, typed telemetry, heartbeat/relay handling, the zero-setpoint stop and fence/parameter traffic; native serial/TCP absent |
-| Vehicle | src/vehicle/vehicle.cpp; src/telemetry/identity.cpp; core_test.cpp; aircraft_identity_test.cpp | Arm/mode/takeoff/goto/land/RTL and state checks; heartbeat identity selects Copter/Plane/QuadPlane mode semantics and unknown identities fail closed; body-frame velocity is admitted only for Copter; Plane/QuadPlane SITL and task-completion verification remain open |
+| Vehicle | src/vehicle/vehicle.cpp; src/telemetry/identity.cpp; core_test.cpp; aircraft_identity_test.cpp | Arm/mode/takeoff/goto/land/RTL and state checks; heartbeat identity selects Copter/Plane/QuadPlane mode semantics and unknown identities fail closed; body-frame velocity is admitted only for Copter; Plane landing is rejected before transmission, while QuadPlane mode verification accepts QLAND but not AUTO; Plane/QuadPlane SITL and task-completion verification remain open |
 | Missions | src/mission/executor.cpp; core_test.cpp | Synchronous small step executor; no integrated cancellation, persisted resume, survey or Task 2 workflow |
 | Safety | src/safety; safety_test, fence_config_test, velocity_config_test, vio_source_test | Finite/range gates, VIO-conditioned velocity, watchdog, configured target fence, upload/readback and payload interlock |
 | Stop delivery | tests/mavsdk_zero_delivery_test.cpp; scripts/dev/core_sitl_zero_delivery.py | Live peer-driven wire tests cover every stop path on the MAVSDK transport; whole-link outage cannot guarantee delivery; merged-main Copter SITL evidence is recorded below and must be rerun when the transport, fixture or firmware changes |
@@ -239,9 +239,11 @@ packaging and install/rollback gates remain open.
 
 The first supported-aircraft implementation slice now carries the ArduPilot
 autopilot and vehicle type from heartbeat discovery into `VehicleState`. It
-classifies known Copter, Plane and QuadPlane identities, selects their guided,
-landing and return-to-launch modes, rejects unknown identities, and refuses
-non-Copter body-frame velocity. The focused identity/core/safety tests pass in
+classifies known Copter, Plane and QuadPlane identities, selects their guided
+and return-to-launch modes, rejects unknown identities, and refuses non-Copter
+body-frame velocity. Mode-based landing verification accepts Copter LAND and
+QuadPlane QLAND only; Plane landing is rejected before transmission because
+AUTO alone does not establish NAV_LAND execution. The focused tests pass in
 the ten-target CTest suite. This does not close the aircraft gate: Plane and
 QuadPlane SITL, Task 1 VTOL execution, and the complete supported-aircraft
 ROS/SITL and release matrix still require independent evidence.

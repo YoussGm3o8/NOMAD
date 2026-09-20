@@ -68,9 +68,9 @@ bool is_landing_mode(AircraftClass aircraft_class, std::uint32_t custom_mode) {
     case AircraftClass::Copter:
         return custom_mode == 9;
     case AircraftClass::Plane:
-        return custom_mode == 10; // Plane reports AUTO while executing NAV_LAND.
+        return false; // AUTO does not prove that Plane is executing NAV_LAND.
     case AircraftClass::QuadPlane:
-        return custom_mode == 10 || custom_mode == 20; // AUTO or QLAND.
+        return custom_mode == 20; // QLAND is unambiguous; AUTO is not.
     case AircraftClass::Unknown:
         return false;
     }

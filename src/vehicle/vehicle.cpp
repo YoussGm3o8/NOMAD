@@ -163,11 +163,14 @@ CommandResult Vehicle::land() {
     if (!aircraft.success) {
         return aircraft;
     }
+    const auto aircraft_class = connection_.get_state().identity.aircraft_class;
+    if (aircraft_class == telemetry::AircraftClass::Plane) {
+        return {false, "land is not qualified for Plane aircraft"};
+    }
     const auto result = send_command(make_command(kLandCommand), "land");
     if (!result.success) {
         return result;
     }
-    const auto aircraft_class = connection_.get_state().identity.aircraft_class;
     return wait_for_mode(
         [aircraft_class](std::uint32_t mode) { return telemetry::is_landing_mode(aircraft_class, mode); }, "land");
 }
