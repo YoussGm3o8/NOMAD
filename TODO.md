@@ -31,9 +31,9 @@ close its integration or release gate.
   ArduPilot Copter, Plane, QuadPlane or Unknown, carried in core vehicle state,
   and used for guided/landing/RTL mode semantics and body-velocity admission.
   Unknown and unsupported identities fail closed, while fixed-wing and QuadPlane
-  body-frame velocity is rejected. Plane landing is rejected before transmission
-  because AUTO does not prove NAV_LAND execution; QuadPlane mode verification
-  accepts QLAND, not AUTO. Focused CTest coverage passes; Plane/QuadPlane SITL,
+  body-frame velocity is rejected. Plane and QuadPlane landing are rejected
+  before transmission because direct COMMAND_LONG NAV_LAND behavior is not
+  qualified for those aircraft. Focused CTest coverage passes; Plane/QuadPlane SITL,
   Task 1 VTOL execution and the complete supported-aircraft release matrix remain
   open. Falsification: an unsupported identity is admitted, a class-specific
   mode is not verified, or the focused and hosted regression suites diverge.

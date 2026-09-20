@@ -223,20 +223,10 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
             state->position_valid = true;
             state->position.relative_altitude_m = command.parameters[6];
         } else if (command.id == 21) {
-            switch (state->identity.aircraft_class) {
-            case nomad::telemetry::AircraftClass::Copter:
+            if (state->identity.aircraft_class == nomad::telemetry::AircraftClass::Copter) {
                 state->custom_mode = 9;
-                break;
-            case nomad::telemetry::AircraftClass::Plane:
-                state->custom_mode = 10;
-                break;
-            case nomad::telemetry::AircraftClass::QuadPlane:
-                state->custom_mode = 20;
-                break;
-            case nomad::telemetry::AircraftClass::Unknown:
-                break;
+                state->armed = false;
             }
-            state->armed = false;
         } else if (command.id == 20) {
             switch (state->identity.aircraft_class) {
             case nomad::telemetry::AircraftClass::Copter:

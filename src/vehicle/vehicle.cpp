@@ -164,8 +164,9 @@ CommandResult Vehicle::land() {
         return aircraft;
     }
     const auto aircraft_class = connection_.get_state().identity.aircraft_class;
-    if (aircraft_class == telemetry::AircraftClass::Plane) {
-        return {false, "land is not qualified for Plane aircraft"};
+    if (aircraft_class == telemetry::AircraftClass::Plane ||
+        aircraft_class == telemetry::AircraftClass::QuadPlane) {
+        return {false, "land is not qualified for this aircraft"};
     }
     const auto result = send_command(make_command(kLandCommand), "land");
     if (!result.success) {
