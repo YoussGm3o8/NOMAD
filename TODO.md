@@ -9,7 +9,7 @@ close its integration or release gate.
 
 ## Current work
 
-- [~] G-M packaging/install evidence: the Release CMake target now produces
+- [ ] G-M packaging/install evidence: the Release CMake target now produces
   NOMAD-only install trees plus reproducible ZIP/TGZ archives with the CLI,
   public headers, configuration template and dependency notices. The offline
   verifier rejects live configuration, checks both archive formats and runs the
