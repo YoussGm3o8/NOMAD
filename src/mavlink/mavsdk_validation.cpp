@@ -99,7 +99,7 @@ std::optional<std::uint8_t> parse_system_id(std::string_view value) {
     return static_cast<std::uint8_t>(system_id);
 }
 
-SystemSelection classify_system_ids(const std::vector<std::uint8_t> &system_ids, std::uint8_t expected_id) {
+SystemSelection classify_system_ids(const std::vector<std::uint32_t> &system_ids, std::uint8_t expected_id) {
     if (system_ids.empty()) {
         return SystemSelection::NoAutopilot;
     }

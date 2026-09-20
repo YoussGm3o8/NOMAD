@@ -18,7 +18,7 @@ std::vector<std::shared_ptr<mavsdk::System>> connected_autopilots(const mavsdk::
 std::shared_ptr<mavsdk::System> select_expected_autopilot(const mavsdk::Mavsdk &sdk, std::uint8_t expected_system_id,
                                                           mavsdk_phase_a::SystemSelection &selection) {
     const auto systems = connected_autopilots(sdk);
-    std::vector<std::uint8_t> ids;
+    std::vector<std::uint32_t> ids;
     ids.reserve(systems.size());
     for (const auto &candidate : systems) {
         ids.push_back(candidate->get_system_id());

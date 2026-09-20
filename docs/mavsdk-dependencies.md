@@ -7,13 +7,13 @@ The CONOPS v1.0 reconciliation did not change dependency pins or accepted eviden
 MAVSDK remains a project prerequisite, not an organizer-prescribed library.
 Competition transport/traffic requirements do not justify adding speculative
 network plugins: obtain the official server contract first. The selected build
-includes Action, Geofence, Param and Telemetry, and this table records the
+includes Action, Geofence, Offboard, Param and Telemetry, and this table records the
 reviewed fork gitlink.
 
 | Component | Reviewed source | License found in fetched source |
 |---|---|---|
-| MAVSDK | NOMAD gitlink `e0dada26a606ffa4f48e72841efa231177733d05` | BSD-3-Clause |
-| MAVSDK proto | nested gitlink `1fd0bc7a05c21336227b1eab266b8b610401cf38` | BSD-3-Clause |
+| MAVSDK | NOMAD gitlink `3f85f6f808b617c736316d7da5f51f3d3eba1737` | BSD-3-Clause |
+| MAVSDK proto | nested gitlink `5c81ecfeb6110cf74ba75ae50b78a1b265c05670` | Unknown: no separate license declaration found; server disabled |
 | Asio | tag `asio-1-30-2` | Boost-1.0 |
 | fmt | tag `12.1.0` | MIT |
 | libevents | commit `840a88ea226d4eb0fd4c391ce860317422756435` | BSD-3-Clause |
@@ -34,12 +34,29 @@ The checker `pixi run check-mavsdk-phase-a` fails if reviewed gitlinks,
 dependency references, archive hashes/timestamp handling, the pinned-generator
 patch, NOTICE component names, or any bundled licence text changes without an
 explicit audit update. The complete selected-build texts and their checked hashes
-are in `licenses/mavsdk-phase-a/`. MAVSDK-Proto is not fetched, compiled or linked
-while the server remains disabled; enabling it requires a new audit.
+are in `licenses/mavsdk-phase-a/`. Recursive checkouts fetch MAVSDK-Proto, but it
+is not compiled or linked while the server remains disabled; enabling it requires
+a new audit.
 
-## Hardening evidence - 2026-09-10
+## Rebase audit - 2026-09-19
 
-The project MAVSDK fork is pinned at
+The fork was rebased onto upstream
+`d7043d3cafe8cd6250565fd211b966d8b455d561`. The selected production dependency
+references, archive hashes and bundled license texts are unchanged. Enabling
+Offboard adds no third-party library dependency. The nested proto revision
+changed with upstream; its current tree contains no LICENSE or COPYING file,
+so this inventory no longer infers BSD-3-Clause from MAVSDK's separate license.
+Resolve that audit before enabling the server or distributing those inputs.
+
+All platforms now apply the pinned MAVLink generator patch once, including iOS.
+Debian 11 packaging uses signed, dated Debian and Debian Security snapshots
+because its live indexes referenced unavailable packages. This reproduces the
+build environment and does not promise continued Debian 11 security support.
+Exact-pin qualification is recorded in the [compatibility closeout](mavsdk-handoff.md).
+
+## Historical hardening evidence
+
+Before this rebase, the project MAVSDK fork was pinned at
 `e0dada26a606ffa4f48e72841efa231177733d05`. The fork replaces the mutable
 PicoSHA2 branch with an immutable commit, adds SHA-256 archive checks for
 liblzma and nlohmann JSON, handles deterministic archive extraction on both
@@ -61,8 +78,8 @@ Ubuntu and Windows, alongside the Python and C++ core suites. Selected ROS-image
 run `34538394497` built the pinned graph with NOMAD_ENABLE_MAVSDK=ON and passed
 the ROS adapter integration tests. Mainline SITL run `34538903820` built an
 ArduPilot Copter 4.7.1 image and passed the live MAVSDK Phase A connect/status
-smoke. These results establish current clean-checkout and hosted build evidence
-for the reviewed Phase A graph; they do not qualify later plugin additions,
+smoke. These historical results establish clean-checkout and hosted build evidence
+for that Phase A graph; they do not qualify later plugin additions,
 production cutover or aircraft hardware.
 
 The historical warm Windows build tree was 379,308,757 bytes and the smoke

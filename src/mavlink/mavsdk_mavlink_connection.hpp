@@ -13,6 +13,7 @@
 #include <plugins/action/action.hpp>
 #include <plugins/geofence/geofence.hpp>
 #include <plugins/mavlink_passthrough/mavlink_passthrough.hpp>
+#include <plugins/offboard/offboard.hpp>
 #include <plugins/param/param.hpp>
 #include <plugins/telemetry/telemetry.hpp>
 
@@ -94,7 +95,7 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     void observe_attitude(const mavsdk::Telemetry::EulerAngle &attitude);
 
     mavsdk::MavlinkPassthrough::Result send_long(const Command &command, std::chrono::milliseconds timeout);
-    mavsdk::MavlinkPassthrough::Result queue_velocity_setpoint(const VelocitySetpoint &setpoint);
+    mavsdk::Offboard::Result queue_velocity_setpoint(const VelocitySetpoint &setpoint);
 
     std::string endpoint_;
     std::uint8_t expected_system_id_{0};
@@ -109,6 +110,7 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     std::unique_ptr<mavsdk::MavlinkPassthrough> passthrough_;
     std::unique_ptr<mavsdk::Geofence> geofence_;
     std::unique_ptr<mavsdk::Param> param_;
+    std::unique_ptr<mavsdk::Offboard> offboard_;
 
     mutable std::mutex observation_mutex_;
     std::condition_variable observation_changed_;

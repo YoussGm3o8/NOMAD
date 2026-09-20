@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <thread>
@@ -26,14 +27,6 @@ namespace nomad::mavlink {
 namespace {
 
 constexpr auto kTelemetryWaitIncrement = std::chrono::milliseconds(20);
-
-// The velocity command is SET_POSITION_TARGET_LOCAL_NED in the body frame with
-// position, acceleration and absolute-yaw ignored. These values are the wire
-// contract the peer fixture decodes, so a replacement transport must send the
-// same frame rather than a friendlier one.
-constexpr std::uint16_t kVelocityTypeMask = 0x07c7;
-constexpr std::uint8_t kBodyOffsetNedFrame = 9; // MAV_FRAME_BODY_OFFSET_NED
-constexpr std::uint32_t kIgnoredTimestamp = 0;
 
 bool is_zero_setpoint(const VelocitySetpoint &setpoint) {
     return setpoint.vx == 0.0F && setpoint.vy == 0.0F && setpoint.vz == 0.0F && setpoint.yaw_rate == 0.0F;
@@ -157,7 +150,7 @@ bool MavsdkMavlinkConnection::select_system() {
         return false;
     }
     system_ = candidate;
-    target_system_ = system_->get_system_id();
+    target_system_ = expected_system_id_;
     target_component_ = kAutopilotComponent;
     subscribe();
     return true;
@@ -169,6 +162,7 @@ void MavsdkMavlinkConnection::subscribe() {
     passthrough_ = std::make_unique<mavsdk::MavlinkPassthrough>(system_);
     geofence_ = std::make_unique<mavsdk::Geofence>(system_);
     param_ = std::make_unique<mavsdk::Param>(system_);
+    offboard_ = std::make_unique<mavsdk::Offboard>(system_);
     position_handle_ = telemetry_->subscribe_position([this](const auto &value) { observe_position(value); });
     velocity_handle_ = telemetry_->subscribe_velocity_ned([this](const auto &value) { observe_velocity(value); });
     battery_handle_ = telemetry_->subscribe_battery([this](const auto &value) { observe_battery(value); });
@@ -215,6 +209,7 @@ void MavsdkMavlinkConnection::close() {
     passthrough_.reset();
     geofence_.reset();
     param_.reset();
+    offboard_.reset();
     system_.reset();
     if (handle_) {
         sdk_.remove_connection(*handle_);
@@ -349,25 +344,16 @@ mavsdk::MavlinkPassthrough::Result MavsdkMavlinkConnection::send_long(const Comm
     return passthrough_->send_command_long(wire, mavsdk::OperationOptions{timeout});
 }
 
-mavsdk::MavlinkPassthrough::Result
+mavsdk::Offboard::Result
 MavsdkMavlinkConnection::queue_velocity_setpoint(const VelocitySetpoint &setpoint) {
-    // queue_message() is MAVSDK's supported send path: it owns the sequence
-    // numbering and hands back the address to pack with.
-    // MavlinkAddress is a plain struct in the global namespace of the MAVSDK
-    // header, which is why it is not qualified here.
-    return passthrough_->queue_message([&](MavlinkAddress address, std::uint8_t channel) {
-        mavlink_message_t message{};
-        mavlink_msg_set_position_target_local_ned_pack_chan(
-            address.system_id, address.component_id, channel, &message, kIgnoredTimestamp, target_system_,
-            target_component_, kBodyOffsetNedFrame, kVelocityTypeMask, 0.0F, 0.0F, 0.0F, setpoint.vx, setpoint.vy,
-            setpoint.vz, 0.0F, 0.0F, 0.0F, 0.0F, setpoint.yaw_rate);
-        return message;
-    });
+    // The SDK queues one frame; NOMAD owns refresh, freshness and safety zeroes.
+    const float yaw_rate_deg_s = setpoint.yaw_rate * (180.0F / std::numbers::pi_v<float>);
+    return offboard_->set_velocity_body_once({setpoint.vx, setpoint.vy, setpoint.vz, yaw_rate_deg_s});
 }
 
 bool MavsdkMavlinkConnection::send_velocity(const VelocitySetpoint &setpoint) {
     std::shared_lock lifetime_lock(plugin_lifetime_mutex_);
-    if (!has_finite_components(setpoint) || !passthrough_ || target_system_ == 0) {
+    if (!has_finite_components(setpoint) || !offboard_ || target_system_ == 0) {
         return false;
     }
     // A non-zero setpoint needs a live, latched peer. A zero setpoint is the
@@ -377,7 +363,7 @@ bool MavsdkMavlinkConnection::send_velocity(const VelocitySetpoint &setpoint) {
     if (!is_zero && (!is_connected_unlocked() || !get_state().connected)) {
         return false;
     }
-    if (queue_velocity_setpoint(setpoint) != mavsdk::MavlinkPassthrough::Result::Success) {
+    if (queue_velocity_setpoint(setpoint) != mavsdk::Offboard::Result::Success) {
         return false;
     }
     std::lock_guard lock(observation_mutex_);

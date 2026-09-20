@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 EXPECTED_REVISIONS = {
-    "third_party/MAVSDK": "e0dada26a606ffa4f48e72841efa231177733d05",
+    "third_party/MAVSDK": "3f85f6f808b617c736316d7da5f51f3d3eba1737",
     "third_party/ardupilot-mavlink": "288b907c384a892c8519bfe271682424b1e1a3a0",
 }
 EXPECTED_DEPENDENCIES = {
@@ -159,7 +159,7 @@ def verify_provenance() -> None:
         capture_output=True,
         text=True,
     ).stdout.strip()
-    if proto != "1fd0bc7a05c21336227b1eab266b8b610401cf38":
+    if proto != "5c81ecfeb6110cf74ba75ae50b78a1b265c05670":
         raise RuntimeError(f"MAVSDK proto revision changed: {proto}")
 
     notice = (ROOT / "NOTICE").read_text(encoding="utf-8")

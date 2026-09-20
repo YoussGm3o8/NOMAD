@@ -109,7 +109,6 @@ COPY third_party/MAVSDK/ /ws/src/nomad/third_party/MAVSDK/
 COPY ros2/nomad_ros/ /ws/src/nomad/ros2/nomad_ros/
 SHELL ["/bin/bash", "-c"]
 RUN sed -i 's/\r$//' /ws/src/nomad/third_party/MAVSDK/cpp/third_party/mavlink/mavlink.patch \
-    /ws/src/nomad/third_party/MAVSDK/cpp/third_party/mavlink/mavlink_ios.patch \
     && . /opt/ros/humble/setup.bash && cd /ws/src/nomad/ros2/nomad_ros && \
     colcon build --packages-select nomad_ros --build-base /ws/build --install-base /ws/install \
     --event-handlers console_cohesion+

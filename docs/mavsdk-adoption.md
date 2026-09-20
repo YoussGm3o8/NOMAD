@@ -30,22 +30,27 @@ deterministic ArduPilot-like UDP fixture, pure qualification tests, Linux/Window
 CI jobs, ROS image compile wiring, dependency inventory, root NOTICE and a pinned
 project MAVSDK fork. Command, link, velocity and fence/parameter parity are
 proven by `scripts/dev/mavsdk_connection_fixture.py` and the core test targets.
-The parent gitlink pins `e0dada26a606ffa4f48e72841efa231177733d05`; read
+The parent gitlink pins `3f85f6f808b617c736316d7da5f51f3d3eba1737`; read
 `.gitmodules`, the gitlinks and the
 [dependency inventory](mavsdk-dependencies.md) for provenance. The Phase A/B
 names survive in task, CI-job and provenance-check names, not as a second build.
-The fork's generic compatibility work and the Action-backed NOMAD goto change
-are committed at `e0dada26a606ffa4f48e72841efa231177733d05`, and the parent
-gitlink points to that commit.
-Local qualification on 2026-09-18 covered the pinned fork: the standalone
-MAVSDK unit suite passed, the affected synthetic system-test groups passed all
-28/28 after the UDP receive-loop recovery fix, and a fresh pinned ArduCopter
-4.7.1 run passed all 19 compatibility tests. NOMAD's C++ suite passed 9/9 and
-its Python suite passed 514 tests with 3 environment skips. The dedicated fork
-workflow passed its ArduCopter SITL qualification; the normal Linux/Windows
-generator and style matrix is requalifying this refreshed pin.
+The fork is rebased onto upstream `d7043d3cafe8cd6250565fd211b966d8b455d561`.
+It adds a generic one-shot velocity API, vehicle fence rejection and transfer
+recovery evidence, exclusion polygons, controlled retry loss, repeated progress
+acknowledgements and concurrent deadlines. Millisecond timer rounding no longer
+causes retries immediately before an operation deadline.
 
-The published Phase A graph has now passed recursive hosted qualification. Test
+Local qualification on 2026-09-19 passed 415 MAVSDK unit tests, 114 system tests,
+33 compatibility tests against pinned ArduCopter 4.7.1, and 80 repeated Linux
+deadline/retry checks. The pinned revision's hosted compatibility run also
+passed all 33; its final change affects only archive workflow paths and docs.
+NOMAD's core suite passed 9/9, its Phase A and Phase B wire fixtures passed, and
+live zero-delivery and velocity-watchdog probes verified stop and disarm. Wider
+SDK system IDs are checked before narrowing, including rejection of ID 257 for
+expected ID 1. Complete Linux, Apple and Windows workflows pass on that revision;
+see the [closeout record](mavsdk-handoff.md) for the final evidence and remaining gates.
+
+The original Phase A graph passed recursive hosted qualification. Test
 run `34535620056` completed the Python suite, C++ core, provenance checker,
 deterministic peer fixture and optional MAVSDK build on both Ubuntu and Windows.
 Selected ROS-image run `34538394497` built with NOMAD_ENABLE_MAVSDK=ON and passed
@@ -122,7 +127,7 @@ checklist: a row moves only after the fork has its own executable regression.
 | Translate MAVSDK result enums into NOMAD acknowledgements | Thin translation | Keep while the NOMAD interface exposes MAVLink result codes |
 | Build `COMMAND_LONG` for general commands through `MavlinkPassthrough` | Thin translation | Keep for commands with no suitable high-level API; qualify transport and ACK mapping in the fork |
 | Adapt relative-altitude goto | Thin translation | Use the fork's `Action::goto_location_relative`, qualified by an independent wire-form regression and pinned-SITL movement test. NOMAD keeps target validation, fence policy and authoritative arrival verification; no `COMMAND_INT` packing remains in its adapter |
-| Pack one-shot `SET_POSITION_TARGET_LOCAL_NED` body-velocity setpoints | NOMAD safety contract with a generic MAVSDK candidate | The fork's pinned-SITL test proves `Offboard::set_velocity_body` movement and stop, but its automatic resend can outlive a stale NOMAD command if NOMAD's watchdog stalls. Keep the one-shot path until an expiring MAVSDK setpoint API or fault-injection evidence establishes equivalent fail-closed behavior |
+| Translate one-shot body-velocity setpoints | Thin translation | Use `Offboard::set_velocity_body_once`; MAVSDK owns frame, mask and encoding without storing or resending the command. NOMAD converts yaw radians to degrees and retains authorization, freshness, watchdogs and zero-on-stop policy. Fork wire tests cover stalled producers, zero, destruction, removed links, invalid input and refusal to mix automatic resends; pinned Copter SITL verifies expiry under its unchanged `GUID_TIMEOUT` |
 | Upload/download fence plans through `Geofence` | Thin translation | Keep; protocol transfer already belongs to MAVSDK |
 | Validate fence shape, enabled state, and exact readback | NOMAD policy | Keep; these are operating-area and authoritative-verification rules |
 | Probe integer then float parameters | Thin translation | Keep value conversion and carry the remaining caller budget between typed reads |
@@ -298,10 +303,17 @@ ArduPilot GUIDED semantics. A narrow raw-setpoint path is an option if needed,
 not permission to bypass NOMAD gates. Stop must end stale resends; destruction,
 reconnect and callback lifetime must not revive control.
 
-debt: the adapter still packs one-shot body setpoints; revisit when MAVSDK
-offers an expiring one-shot body setpoint API or a NOMAD watchdog-stall test
-proves automatic resend cannot exceed the command-freshness deadline; then
-replace raw packing with a thin `Offboard` translation.
+The adapter uses `Offboard::set_velocity_body_once`, which queues a single
+setpoint without starting Offboard mode or automatic resends. Success means
+queued, not accepted by the vehicle. NOMAD's producer and watchdog own refresh
+and stop; ArduPilot's existing Guided timeout handles a stalled producer without
+requiring NOMAD's watchdog to run. No firmware failsafe is changed.
+
+The wire fixture independently checks BODY_NED (8), mask `0x05C7`, all velocity
+components and yaw rate. BODY_NED and the previous BODY_OFFSET_NED have the same
+body-relative velocity meaning; their position difference is irrelevant because
+position is ignored. The previous mask's force bit also applied only to ignored
+acceleration fields. Zero delivery and no stale resends remain explicit checks.
 
 Exit: each watchdog fault case; independent wire zero-delivery plus
 core-sitl-zero-delivery; core-sitl-velocity-watchdog; GCS-heartbeat relay gate
