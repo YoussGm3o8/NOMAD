@@ -48,10 +48,10 @@ bool is_supported_aircraft(AircraftClass aircraft_class) {
 std::optional<std::uint32_t> guided_mode_for(AircraftClass aircraft_class) {
     switch (aircraft_class) {
     case AircraftClass::Copter:
-    case AircraftClass::QuadPlane:
-        return 4; // ArduPilot Copter/QuadPlane GUIDED.
+        return 4; // ArduPilot Copter GUIDED.
     case AircraftClass::Plane:
-        return 15; // ArduPilot Plane GUIDED.
+    case AircraftClass::QuadPlane:
+        return 15; // ArduPilot Plane/QuadPlane GUIDED.
     case AircraftClass::Unknown:
         return std::nullopt;
     }
@@ -92,7 +92,7 @@ bool is_return_to_launch_mode(AircraftClass aircraft_class, std::uint32_t custom
 }
 
 bool supports_body_velocity(AircraftClass aircraft_class) {
-    return aircraft_class == AircraftClass::Copter || aircraft_class == AircraftClass::QuadPlane;
+    return aircraft_class == AircraftClass::Copter;
 }
 
 } // namespace nomad::telemetry
