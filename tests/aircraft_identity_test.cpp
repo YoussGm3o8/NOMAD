@@ -26,6 +26,10 @@ void test_unsupported_identity_is_unknown() {
     CHECK(nomad::telemetry::identify_vehicle(nomad::telemetry::kArduPilotAutopilot, 99).aircraft_class ==
           AircraftClass::Unknown);
     CHECK(!nomad::telemetry::is_supported_aircraft(AircraftClass::Unknown));
+    CHECK(nomad::telemetry::aircraft_class_name(AircraftClass::Unknown) == "Unknown");
+    CHECK(nomad::telemetry::aircraft_class_name(AircraftClass::Copter) == "Copter");
+    CHECK(nomad::telemetry::aircraft_class_name(AircraftClass::Plane) == "Plane");
+    CHECK(nomad::telemetry::aircraft_class_name(AircraftClass::QuadPlane) == "QuadPlane");
 }
 
 void test_mode_semantics_are_aircraft_specific() {

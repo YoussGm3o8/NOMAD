@@ -1,0 +1,17 @@
+# NOMAD reference QuadPlane profile for ArduPlane Plane-4.7.1.
+# Geometry values mirror ArduPilot's pinned quadplane-tilttri SITL defaults.
+Q_ENABLE 1
+Q_FRAME_CLASS 7
+Q_TILT_ENABLE 1
+Q_TILT_MASK 3
+Q_TILT_TYPE 0
+SERVO3_FUNCTION 0
+SERVO12_FUNCTION 41
+SERVO12_MIN 1000
+SERVO12_MAX 2000
+
+# Make the passive NOMAD link independently observable without stream requests.
+SR0_POSITION 5
+SR0_EXT_STAT 2
+SR0_EXTRA1 5
+SR0_EXTRA2 2

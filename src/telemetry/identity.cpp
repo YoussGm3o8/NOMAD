@@ -41,6 +41,20 @@ VehicleIdentity identify_vehicle(std::uint8_t autopilot_type, std::uint8_t vehic
     return identity;
 }
 
+std::string_view aircraft_class_name(AircraftClass aircraft_class) {
+    switch (aircraft_class) {
+    case AircraftClass::Unknown:
+        return "Unknown";
+    case AircraftClass::Copter:
+        return "Copter";
+    case AircraftClass::Plane:
+        return "Plane";
+    case AircraftClass::QuadPlane:
+        return "QuadPlane";
+    }
+    return "Unknown";
+}
+
 bool is_supported_aircraft(AircraftClass aircraft_class) {
     return aircraft_class != AircraftClass::Unknown;
 }

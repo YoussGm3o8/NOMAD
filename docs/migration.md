@@ -244,8 +244,12 @@ and return-to-launch modes, rejects unknown identities, and refuses non-Copter
 body-frame velocity. Only Copter landing is supported by this slice. Plane and
 QuadPlane landing are rejected before transmission because their direct
 COMMAND_LONG NAV_LAND behavior has not been qualified. The focused tests pass in
-the ten-target CTest suite. This does not close the aircraft gate: Plane and
-QuadPlane SITL, Task 1 VTOL execution, and the complete supported-aircraft
+the ten-target CTest suite. ArduPlane's fixed-wing heartbeat is classified as
+QuadPlane for `Q_ENABLE=1` or `2`, Plane for zero, and Unknown when the parameter
+is unavailable or invalid.
+The pinned observation harness described below now provides local QuadPlane SITL
+identity, telemetry and baseline-mode evidence. This does not close the aircraft
+gate: Task 1 VTOL execution, hosted evidence, and the complete supported-aircraft
 ROS/SITL and release matrix still require independent evidence.
 
 Create focused, reviewable implementation changes with unit tests, integration
@@ -267,9 +271,40 @@ Cutover status (2026-09-20): phases A-E have landed. The default runtime is the
 MAVSDK transport, the ROS 2 adapter builds the same transport, and the legacy
 codec plus its generated dialect headers are deleted, so the transport exit items
 are met at the code and local-evidence level. G-M itself stays open: the
-supported-firmware matrix is Copter-only (QuadPlane not started), the current-head
-Copter SITL matrix is recorded above, and the install/rollback and packaging
-evidence lives in G8. A completed transport cutover is not a competition release.
+supported-firmware matrix now has a local QuadPlane observation profile but no
+qualified QuadPlane flight operations or hosted pass, the current-head Copter
+SITL matrix is recorded above, and install/rollback evidence remains open. A
+completed transport cutover is not a competition release.
+
+### QuadPlane 4.7.1 observation profile - 2026-09-20
+
+Requirement: G-M aircraft-class qualification. The reference is ArduPlane
+`Plane-4.7.1`, exact commit `dbe792162d06cab66c3475fd5556bf7a120f119e`, built
+by `docker/Dockerfile.sitl-plane` with frame `quadplane-tilttri` and
+`docker/quadplane-tilttri.parm`. The NOMAD baseline remains commit
+`844cfcff3c24a765e8b8688b5332bbd2983237cf`; MAVSDK remains pinned at
+`3f85f6f808b617c736316d7da5f51f3d3eba1737`.
+
+Independent local SITL observation found `MAV_AUTOPILOT_ARDUPILOTMEGA` (3),
+`MAV_TYPE_FIXED_WING` (1) and `Q_ENABLE=1`; it did not report a VTOL MAV type.
+NOMAD therefore classifies this exact combination as QuadPlane. It also treats
+`Q_ENABLE=2` as QuadPlane and zero as Plane; a missing or invalid value leaves
+the fixed-wing identity unresolved as Unknown. The live observer
+also required disarmed state; fresh heartbeat, position, GPS and attitude; and
+aircraft-reported GUIDED=15, QLOITER=19, QRTL=21 and RTL=11 after each command.
+The deterministic peer proves values zero, one and two plus unavailable and
+invalid parameter cases, and proves generic-autopilot and unknown-vehicle
+identities transmit no requested mode command. The stale-position falsification
+test exceeds the 1500 ms bound and is rejected.
+
+Selected mechanisms for the later flight-primitive PR are ArduPlane mission
+semantics: `NAV_VTOL_TAKEOFF`, reviewed fixed-wing waypoint navigation and
+`NAV_VTOL_LAND`, with explicit QRTL/RTL behavior measured separately. They are
+profile inputs, not qualified NOMAD capabilities. Arm/disarm, takeoff, forward
+transition, cruise, return, VTOL transition, landing, link loss and manual
+takeover remain unqualified; body-frame velocity and direct `NAV_LAND` remain
+unsupported for QuadPlane. The workflow job exists but no hosted current-head
+pass is claimed by this local record.
 
 Packaging/install slice (2026-09-20): the Release CMake configuration installs
 only the NOMAD CLI, public headers, configuration template and reviewed license

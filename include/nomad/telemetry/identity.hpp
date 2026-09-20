@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string_view>
 
 namespace nomad::telemetry {
 
@@ -37,6 +38,8 @@ struct VehicleIdentity {
 };
 
 VehicleIdentity identify_vehicle(std::uint8_t autopilot_type, std::uint8_t vehicle_type);
+
+std::string_view aircraft_class_name(AircraftClass aircraft_class);
 
 bool is_supported_aircraft(AircraftClass aircraft_class);
 

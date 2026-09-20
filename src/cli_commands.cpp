@@ -13,14 +13,25 @@
 
 namespace {
 
+using Clock = std::chrono::steady_clock;
+
+long long age_milliseconds(Clock::time_point timestamp) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - timestamp).count();
+}
+
 void print_state(const nomad::telemetry::VehicleState &state) {
     std::cout << "system=" << static_cast<int>(state.system_id) << " component=" << static_cast<int>(state.component_id)
               << " connected=" << (state.connected ? "true" : "false") << " armed=" << (state.armed ? "true" : "false")
               << " mode=" << state.custom_mode << '\n';
+    std::cout << "heartbeat_fresh=" << (state.heartbeat_fresh ? "true" : "false")
+              << " autopilot_type=" << static_cast<int>(state.identity.autopilot_type)
+              << " vehicle_type=" << static_cast<int>(state.identity.vehicle_type)
+              << " aircraft_class=" << nomad::telemetry::aircraft_class_name(state.identity.aircraft_class) << '\n';
     if (state.position_valid) {
         std::cout << "position=" << state.position.latitude_deg << ',' << state.position.longitude_deg
                   << " altitude_m=" << state.position.altitude_m
-                  << " relative_altitude_m=" << state.position.relative_altitude_m << '\n';
+                  << " relative_altitude_m=" << state.position.relative_altitude_m
+                  << " position_age_ms=" << age_milliseconds(state.position_updated_at) << '\n';
     }
     if (state.battery_valid) {
         std::cout << "battery_v=" << state.battery.voltage_v << " remaining_percent=" << state.battery.remaining_percent
@@ -28,7 +39,13 @@ void print_state(const nomad::telemetry::VehicleState &state) {
     }
     if (state.gps_valid) {
         std::cout << "gps_fix=" << static_cast<int>(state.gps.fix_type)
-                  << " satellites=" << static_cast<int>(state.gps.satellites) << '\n';
+                  << " satellites=" << static_cast<int>(state.gps.satellites)
+                  << " gps_age_ms=" << age_milliseconds(state.gps_updated_at) << '\n';
+    }
+    if (state.attitude_valid) {
+        std::cout << "attitude=" << state.attitude.roll_deg << ',' << state.attitude.pitch_deg << ','
+                  << state.attitude.yaw_deg << " attitude_age_ms=" << age_milliseconds(state.attitude_updated_at)
+                  << '\n';
     }
 }
 
@@ -54,7 +71,7 @@ int run_status(nomad::mavlink::MavlinkConnection &connection) {
     nomad::vehicle::Vehicle vehicle(connection);
     const auto state = vehicle.wait_for_telemetry(
         std::chrono::seconds(5), [](const nomad::telemetry::VehicleState &sample) {
-            return sample.position_valid && sample.gps_valid;
+            return sample.heartbeat_fresh && sample.position_valid && sample.gps_valid && sample.attitude_valid;
         });
     if (!state.has_value()) {
         std::cerr << "timed out waiting for ArduPilot telemetry\n";
