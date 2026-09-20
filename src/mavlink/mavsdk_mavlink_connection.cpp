@@ -232,6 +232,7 @@ void MavsdkMavlinkConnection::observe_heartbeat(const mavlink_message_t &message
     state_.component_id = message.compid;
     state_.custom_mode = decoded.custom_mode;
     state_.armed = (decoded.base_mode & kArmModeFlag) != 0;
+    state_.identity = telemetry::identify_vehicle(decoded.autopilot, decoded.type);
     heartbeat_ = Heartbeat{message.sysid, message.compid, decoded.custom_mode, decoded.type, decoded.autopilot,
                            decoded.base_mode};
     last_heartbeat_ = ObservationClock::now();

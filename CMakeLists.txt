@@ -57,6 +57,7 @@ add_library(nomad_core
     src/safety/velocity_config.cpp
     src/safety/vio_source.cpp
     src/safety/watchdog.cpp
+    src/telemetry/identity.cpp
     src/util/parse.cpp
     src/vehicle/output.cpp
     src/vehicle/vehicle.cpp
@@ -172,6 +173,11 @@ if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_link_libraries(nomad_vio_tests PRIVATE nomad_core)
     target_compile_definitions(nomad_vio_tests PRIVATE NOMAD_TESTS)
     add_test(NAME nomad_vio_tests COMMAND nomad_vio_tests)
+
+    add_executable(nomad_aircraft_identity_tests tests/aircraft_identity_test.cpp)
+    target_link_libraries(nomad_aircraft_identity_tests PRIVATE nomad_core)
+    target_compile_definitions(nomad_aircraft_identity_tests PRIVATE NOMAD_TESTS)
+    add_test(NAME nomad_aircraft_identity_tests COMMAND nomad_aircraft_identity_tests)
 
     add_executable(nomad_velocity_config_tests tests/velocity_config_test.cpp)
     target_link_libraries(nomad_velocity_config_tests PRIVATE nomad_core)

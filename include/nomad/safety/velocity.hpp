@@ -44,6 +44,7 @@ struct FlightConditions {
     bool vio_fresh{false};
     float vio_confidence{};
     float min_vio_confidence{0.3F};
+    std::uint32_t guided_mode{kGuidedMode};
 };
 
 struct VelocityDecision {

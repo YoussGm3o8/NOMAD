@@ -4,7 +4,6 @@
 // ends.
 #include "cli_commands.hpp"
 
-#include "nomad/safety/velocity.hpp"
 #include "nomad/safety/watchdog.hpp"
 
 #include <chrono>
@@ -23,8 +22,8 @@ int require_armed_guided(nomad::vehicle::Vehicle &vehicle, const char *verb) {
         std::cerr << "timed out waiting for ArduPilot telemetry\n";
         return EXIT_FAILURE;
     }
-    if (!state->armed || state->custom_mode != nomad::safety::kGuidedMode) {
-        std::cerr << verb << " requires an armed vehicle in GUIDED mode\n";
+    if (!state->armed || !nomad::telemetry::is_guided_mode(state->identity.aircraft_class, state->custom_mode)) {
+        std::cerr << verb << " requires an armed vehicle in its aircraft GUIDED mode\n";
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

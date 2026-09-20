@@ -15,12 +15,26 @@ close its integration or release gate.
   task now records configure/build timing and footprint metrics, while live smoke
   records per-process-tree startup/RSS metrics; hosted jobs retain both artifacts.
   A clean local Windows checkout at the reviewed gitlink passes provenance,
-  build, core/Python suites and deterministic peer cases. Hosted Linux/Windows
-  build samples and a live Linux Copter SITL runtime sample are retained against
-  commit `219133e`. Obtain explicit build-tree, executable, memory, startup and
-  CI-time budget approval before closing Phase A.
+  build, core/Python suites and deterministic peer cases. Retained hosted samples
+  include Linux build-tree `216712508` bytes, Windows build-tree `446186671`
+  bytes, Linux/Windows smoke executables of `4753832`/`2025472` bytes, Linux
+  runtime peak RSS of `10297344` bytes, and a full hosted test run of about 18
+  minutes. The merged-main SITL run retained a Linux build-tree sample of
+  `216679160` bytes and runtime peak RSS samples of `10297344` and `9912320`
+  bytes. These are observations, not approved budgets: the gate is explicitly
+  deferred until a named owner approves build-tree, executable, memory, startup
+  and CI-time limits and the retained artifacts are compared with them.
   Falsification: the reviewed pins stop reproducing, live qualification regresses,
   or measured resources exceed an approved threshold.
+
+- [~] G-M aircraft-class support slice: heartbeat identity is now classified into
+  ArduPilot Copter, Plane, QuadPlane or Unknown, carried in core vehicle state,
+  and used for guided/landing/RTL mode semantics and body-velocity admission.
+  Unknown and unsupported identities fail closed, while fixed-wing body-frame
+  velocity is rejected. Focused CTest coverage passes; Plane/QuadPlane SITL,
+  Task 1 VTOL execution and the complete supported-aircraft release matrix remain
+  open. Falsification: an unsupported identity is admitted, a class-specific
+  mode is not verified, or the focused and hosted regression suites diverge.
 
 - [x] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
   datagram parsing, prove nonzero-then-zero ordering independently, and rerun the
@@ -56,7 +70,8 @@ close its integration or release gate.
   required adapter or SITL gate fails, or the release artifact cannot be
   installed and rolled back safely.
 - [ ] G-M: add ArduPlane/QuadPlane support coverage for Task 1 alongside Copter;
-  prepare focused reviewable implementation changes with independent evidence.
+  the first identity and class-specific mode slice is implemented with focused
+  tests, but Plane/QuadPlane SITL and independent Task 1 evidence are still open.
 - [ ] G-M Phase F: upstream tested ArduPilot fixes; track patches, review status
   and maintenance owner. Upstream acceptance is separate from local parity.
 - [ ] G2 / C04–C09, C13, C15: single persistent command owner, authenticated client

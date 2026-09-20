@@ -16,9 +16,9 @@ merged baseline, hosted qualification results, and remaining fork/adapter work.
 
 | Area | Source and tests inspected | Actual scope and remaining limitation |
 |---|---|---|
-| C++ foundation | CMakeLists.txt; include/nomad; src; nine CTest targets | Library and CLI build against the mandatory MAVSDK transport; no Python or mavgen build dependency, no Python runtime dependency |
+| C++ foundation | CMakeLists.txt; include/nomad; src; ten CTest targets | Library and CLI build against the mandatory MAVSDK transport; no Python or mavgen build dependency, no Python runtime dependency |
 | MAVLink | src/mavlink (MAVSDK transport); core_test, mavsdk_connection_test, mavsdk_zero_delivery_test | MAVSDK owns framing/transport; NOMAD owns ACK classification, typed telemetry, heartbeat/relay handling, the zero-setpoint stop and fence/parameter traffic; native serial/TCP absent |
-| Vehicle | src/vehicle/vehicle.cpp; core_test.cpp | Arm/mode/takeoff/goto/land/RTL and state checks; Copter modes hardcoded; LAND/RTL success verifies mode, not task completion |
+| Vehicle | src/vehicle/vehicle.cpp; src/telemetry/identity.cpp; core_test.cpp; aircraft_identity_test.cpp | Arm/mode/takeoff/goto/land/RTL and state checks; heartbeat identity selects Copter/Plane/QuadPlane mode semantics and unknown identities fail closed; body-frame velocity is not admitted for fixed-wing; Plane/QuadPlane SITL and task-completion verification remain open |
 | Missions | src/mission/executor.cpp; core_test.cpp | Synchronous small step executor; no integrated cancellation, persisted resume, survey or Task 2 workflow |
 | Safety | src/safety; safety_test, fence_config_test, velocity_config_test, vio_source_test | Finite/range gates, VIO-conditioned velocity, watchdog, configured target fence, upload/readback and payload interlock |
 | Stop delivery | tests/mavsdk_zero_delivery_test.cpp; scripts/dev/core_sitl_zero_delivery.py | Live peer-driven wire tests cover every stop path on the MAVSDK transport; whole-link outage cannot guarantee delivery; merged-main Copter SITL evidence is recorded below and must be rerun when the transport, fixture or firmware changes |
@@ -26,7 +26,7 @@ merged baseline, hosted qualification results, and remaining fork/adapter work.
 | ROS 2 | ros2/nomad_ros/src/node.cpp, translation.cpp; tests/ros | Owns a Vehicle, telemetry topics, VIO health/source gate and Trigger services; blocking callbacks, no selected estimator or navigation fusion |
 | Video | python/tools/simple_video_bridge.py, video_bridge_server.py; test_simple_video_bridge.py | ROS image to GStreamer/RTSP; control HTTP is loopback-only; no validated capture/CV/VIO product pipeline |
 | Profiles | scripts/profile.py; three product profile files; test_deployment_profiles.py | Canonical endpoint and stale-setting checks exist; optional workloads and hardware remain unqualified |
-| MAVSDK | CMake mandatory transport; `MavlinkConnection` (commands, telemetry, deterministic peer fixture); qualified telemetry smoke; provenance and CI gates | Phases A-E landed: the transport parity fixture passes (accepted/denied/timeout ACKs, COMMAND_LONG/COMMAND_INT, wrong identity, command parity for mode/takeoff/goto/land/RTL/servo/relay/gimbal-config/user-command, unlatched GCS-heartbeat announcement, coalesced-datagram handling, live-to-stale link observation, body-frame velocity parity with the zero setpoint on disconnect, fence upload/readback/enable-verification and parameter reads), the CLI, the ROS 2 adapter and the CTest targets build it, and the Phase E cutover deleted the hand-written codec; the unused legacy stream-request surface is removed, while explicit vehicle-class identification and QuadPlane coverage remain open |
+| MAVSDK | CMake mandatory transport; `MavlinkConnection` (commands, telemetry, deterministic peer fixture); qualified telemetry smoke; provenance and CI gates | Phases A-E landed: the transport parity fixture passes (accepted/denied/timeout ACKs, COMMAND_LONG/COMMAND_INT, wrong identity, command parity for mode/takeoff/goto/land/RTL/servo/relay/gimbal-config/user-command, unlatched GCS-heartbeat announcement, coalesced-datagram handling, live-to-stale link observation, body-frame velocity parity with the zero setpoint on disconnect, fence upload/readback/enable-verification and parameter reads), the CLI, the ROS 2 adapter and the CTest targets build it, and the Phase E cutover deleted the hand-written codec; the unused legacy stream-request surface is removed, while focused Copter/Plane/QuadPlane identity classification is now present and full supported-aircraft coverage remains open |
 | Competition | No dedicated implementation found in src/include/ROS/Python/plugin scans | Official telemetry, traffic model/deconfliction, herd survey, tracker/path and sampling workflows are open; events await contract |
 
 The working tree removes the Edge Core source/service/API and many camera/
@@ -236,6 +236,15 @@ merged `main` commit `26d7f9b101a029725d06aee2c6716da95e622417`. The full
 telemetry, command, mission, velocity, payload, link, heartbeat, loop-closure
 and geofence sequence passed. ROS, supported-aircraft/QuadPlane, resource-budget,
 packaging and install/rollback gates remain open.
+
+The first supported-aircraft implementation slice now carries the ArduPilot
+autopilot and vehicle type from heartbeat discovery into `VehicleState`. It
+classifies known Copter, Plane and QuadPlane identities, selects their guided,
+landing and return-to-launch modes, rejects unknown identities, and refuses
+fixed-wing body-frame velocity. The focused identity/core/safety tests pass in
+the ten-target CTest suite. This does not close the aircraft gate: Plane and
+QuadPlane SITL, Task 1 VTOL execution, and the complete supported-aircraft
+ROS/SITL and release matrix still require independent evidence.
 
 Create focused, reviewable implementation changes with unit tests, integration
 evidence, requirement mapping and limitations. Under the 2026-09-12 ownership

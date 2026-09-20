@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include "nomad/telemetry/identity.hpp"
+
 #include <chrono>
 #include <cstdint>
 
@@ -57,6 +59,7 @@ struct VehicleState {
     std::chrono::steady_clock::time_point battery_updated_at{};
     std::chrono::steady_clock::time_point gps_updated_at{};
     std::chrono::steady_clock::time_point attitude_updated_at{};
+    VehicleIdentity identity{};
 };
 
 }  // namespace nomad::telemetry

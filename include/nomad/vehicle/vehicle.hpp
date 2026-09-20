@@ -55,6 +55,7 @@ class Vehicle {
     CommandResult arm();
     CommandResult disarm();
     CommandResult set_mode(std::uint32_t custom_mode);
+    CommandResult set_guided_mode();
     CommandResult takeoff(float altitude_m);
     CommandResult update_vio(bool healthy, float confidence);
     CommandResult set_velocity(const safety::VelocityCommand &command);
@@ -84,8 +85,10 @@ class Vehicle {
                                        const StateVerdict &verdict);
     CommandResult wait_for_armed_state(bool expected, const char *name);
     CommandResult wait_for_mode(std::uint32_t expected, const char *name);
+    CommandResult wait_for_mode(const std::function<bool(std::uint32_t)> &matches, const char *name);
     CommandResult wait_for_altitude(float minimum_altitude_m, const char *name);
     CommandResult wait_for_location(const Location &location);
+    CommandResult require_supported_aircraft(const char *operation) const;
     // A fresh heartbeat does not imply a fresh position: callers fail closed
     // when this is true rather than trusting a stale fix.
     bool position_is_stale(const telemetry::VehicleState &state) const;

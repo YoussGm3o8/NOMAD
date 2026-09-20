@@ -49,6 +49,12 @@ CommandResult Vehicle::set_velocity(const safety::VelocityCommand &command) {
     }
     const auto now = std::chrono::steady_clock::now();
     const auto state = connection_.get_state();
+    if (!telemetry::is_supported_aircraft(state.identity.aircraft_class)) {
+        return {false, "velocity requires a supported ArduPilot aircraft identity"};
+    }
+    if (!telemetry::supports_body_velocity(state.identity.aircraft_class)) {
+        return {false, "body-frame velocity is not supported for this aircraft"};
+    }
     const auto conditions = get_flight_conditions(state, now);
     const auto decision = safety::evaluate_velocity(velocity_limits_, conditions, command);
     if (!decision.allowed || !decision.setpoint.has_value()) {
@@ -109,6 +115,7 @@ safety::FlightConditions Vehicle::get_flight_conditions(const telemetry::Vehicle
         state.armed,     state.custom_mode,
         vio_healthy_,    vio_fresh,
         vio_confidence_, watchdog_policy_.min_vio_confidence,
+        telemetry::guided_mode_for(state.identity.aircraft_class).value_or(0),
     };
 }
 
@@ -121,6 +128,7 @@ safety::WatchdogInput Vehicle::get_watchdog_input(const telemetry::VehicleState 
         velocity_control_active_, conditions.connected,   conditions.heartbeat_fresh,
         conditions.armed,         conditions.custom_mode, command_fresh,
         conditions.vio_healthy,   conditions.vio_fresh,   conditions.vio_confidence,
+        conditions.guided_mode,
     };
 }
 
