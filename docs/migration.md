@@ -271,6 +271,18 @@ supported-firmware matrix is Copter-only (QuadPlane not started), the current-he
 Copter SITL matrix is recorded above, and the install/rollback and packaging
 evidence lives in G8. A completed transport cutover is not a competition release.
 
+Packaging/install slice (2026-09-20): the Release CMake configuration installs
+only the NOMAD CLI, public headers, configuration template and reviewed license
+notices; MAVSDK's development install rules are kept outside the selected
+runtime component because its static libraries are linked into the executable.
+`pixi run package-core` produces ZIP and TGZ archives in the build tree, while
+`pixi run verify-core-install` validates a clean staged prefix and
+`pixi run verify-core-package` validates both archives.
+The verifier checks required files, dependency notices, absence of live
+`config/nomad.env`, safe archive paths and the offline CLI usage path. This is
+reproducible packaging/install evidence only; versioned activation, upgrade and
+rollback to a prior qualified build remain open release gates.
+
 ### G2 — One authority and aircraft semantics (core + safety leads; G1/G-M)
 
 Add the small persistent runtime and client boundary; unify mission/payload/
