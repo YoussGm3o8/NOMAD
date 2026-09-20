@@ -9,6 +9,15 @@ close its integration or release gate.
 
 ## Current work
 
+- [~] G-M packaging/install evidence: the Release CMake target now produces
+  NOMAD-only install trees plus reproducible ZIP/TGZ archives with the CLI,
+  public headers, configuration template and dependency notices. The offline
+  verifier rejects live configuration, checks both archive formats and runs the
+  installed usage path. Versioned activation and rollback to a prior qualified
+  build remain open. Falsification: an archive leaks MAVSDK development files,
+  includes live configuration, fails clean extraction, or the installed CLI
+  cannot run its offline usage path.
+
 - [ ] G-M Phase A resource qualification: the published MAVSDK graph now has
   recursive clean-checkout provenance/build evidence, hosted Linux/Windows/ROS
   qualification and a live ArduPilot Copter SITL connect/status pass. The build
