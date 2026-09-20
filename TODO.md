@@ -24,18 +24,20 @@ close its integration or release gate.
 
 - [x] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
   datagram parsing, prove nonzero-then-zero ordering independently, and rerun the
-  complete hosted Copter SITL suite. This repairs evidence collection only; it
-  does not weaken the core watchdog or substitute command acknowledgements for
-  wire evidence. Falsification: the observer misses a valid packed setpoint,
-  accepts zero without a preceding nonzero command, or live wire capture remains
-  empty.
+  complete hosted Copter SITL suite. Merged-main run
+  `35489428247` passed the full matrix at `26d7f9b`; this repairs evidence
+  collection only and does not weaken the core watchdog or substitute command
+  acknowledgements for wire evidence. Falsification: the observer misses a valid
+  packed setpoint, accepts zero without a preceding nonzero command, or live wire
+  capture remains empty.
 
-- [~] G2 / SR-LNK-04 GCS-heartbeat evidence: validate at least three measured
+- [x] G2 / SR-LNK-04 GCS-heartbeat evidence: validate at least three measured
   intervals between 0.9 s and 1.3 s, route MAVSDK's `udpout:` source through the
   heartbeat-gated relay, preserve the dropped-announcement negative control, and
-  rerun the current-head full SITL suite. Falsification: cadence exceeds the
-  owned limit, the relay opens without valid GCS heartbeats, or the complete
-  suite still stops at this gate.
+  rerun the current-head full SITL suite. Merged-main run `35489428247` passed
+  the heartbeat gate and every later Copter scenario at `26d7f9b`. Falsification:
+  cadence exceeds the owned limit, the relay opens without valid GCS heartbeats,
+  or a future complete suite stops at this gate.
 
 ## Ordered implementation backlog
 
@@ -82,13 +84,15 @@ gates. Do not mark multiple work items active or bypass predecessor safety gates
 
 ## Existing slices to preserve
 
-- [x] C++ library/CLI, generated MAVLink UDP transport, telemetry and basic
+- [x] C++ library/CLI, MAVSDK MAVLink transport, telemetry and basic
   Copter vehicle/mission operations exist.
 - [x] Velocity configuration, watchdog, VIO source validation, fence and
   dedicated payload safety paths with unit tests exist.
 - [x] Wire-level zero-delivery tests and named SITL harnesses exist; hosted run
   `34648914427` independently observed the ordered nonzero/zero wire sequence and
-  hover on Copter 4.7.1. Containment gate evidence remains open.
+  hover on Copter 4.7.1, and merged-main run `35489428247` passed the complete
+  Copter matrix including containment. Aircraft-class, all-mode and hardware
+  containment evidence remains open.
 - [x] Mission Planner core client for goto/discrete outputs and ROS adapter exist;
   full command ownership migration remains open.
 - [x] MAVSDK Phase A build/smoke target and fork wiring exist; the production

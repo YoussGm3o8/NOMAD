@@ -50,6 +50,13 @@ SDK system IDs are checked before narrowing, including rejection of ID 257 for
 expected ID 1. Complete Linux, Apple and Windows workflows pass on that revision;
 see the [closeout record](mavsdk-handoff.md) for the final evidence and remaining gates.
 
+The merged-main NOMAD qualification also passed the complete hosted Copter SITL
+matrix in [run 35489428247](https://github.com/YoussGm3o8/NOMAD/actions/runs/35489428247)
+at commit `26d7f9b101a029725d06aee2c6716da95e622417`. The run covered the command,
+mission, velocity, payload, link, heartbeat, loop-closure and geofence paths;
+resource approval, ROS, aircraft-class/QuadPlane, packaging and hardware gates
+remain open.
+
 The original Phase A graph passed recursive hosted qualification. Test
 run `34535620056` completed the Python suite, C++ core, provenance checker,
 deterministic peer fixture and optional MAVSDK build on both Ubuntu and Windows.
@@ -189,7 +196,9 @@ runs recorded above. Run `pixi run check-mavsdk-phase-a` after any source or
 dependency change, and run `pixi run build-core-mavsdk` followed by
 `pixi run test-mavsdk-phase-a` for the deterministic peer contract. The reduced
 mainline SITL job is the live Phase A regression gate; the larger SITL suite stays
-nightly/on-demand because it exercises later safety and parity behavior.
+nightly/on-demand because it exercises later safety and parity behavior. The
+on-demand full suite passed on merged-main run `35489428247` above; it remains
+an on-demand gate by workflow design.
 
 The Phase A build task now measures configure time, target-build time, build-tree
 bytes, smoke-executable bytes and selected static-archive bytes in one record.
@@ -238,7 +247,9 @@ captured no wire setpoints (`wire=[]`); subsequent full-suite scenarios were
 skipped. The observer's `parse_char` misuse was repaired in `6a3e970`; hosted run
 `34648914427` then observed the ordered nonzero/all-zero sequence and post-stop
 hover. That run later failed the separate SR-LNK-04 heartbeat-cadence gate and is
-not counted as a successful full-SITL run.
+not counted as a successful full-SITL run. The merged-main run `35489428247`
+subsequently passed the heartbeat gate and the complete Copter matrix; the earlier
+failure remains historical evidence only.
 
 ## Phase B — Vehicle and output parity
 
