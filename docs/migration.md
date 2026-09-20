@@ -21,7 +21,7 @@ merged baseline, hosted qualification results, and remaining fork/adapter work.
 | Vehicle | src/vehicle/vehicle.cpp; core_test.cpp | Arm/mode/takeoff/goto/land/RTL and state checks; Copter modes hardcoded; LAND/RTL success verifies mode, not task completion |
 | Missions | src/mission/executor.cpp; core_test.cpp | Synchronous small step executor; no integrated cancellation, persisted resume, survey or Task 2 workflow |
 | Safety | src/safety; safety_test, fence_config_test, velocity_config_test, vio_source_test | Finite/range gates, VIO-conditioned velocity, watchdog, configured target fence, upload/readback and payload interlock |
-| Stop delivery | tests/mavsdk_zero_delivery_test.cpp; scripts/dev/core_sitl_zero_delivery.py | Live peer-driven wire tests cover every stop path on the MAVSDK transport; whole-link outage cannot guarantee delivery; current live SITL result still required |
+| Stop delivery | tests/mavsdk_zero_delivery_test.cpp; scripts/dev/core_sitl_zero_delivery.py | Live peer-driven wire tests cover every stop path on the MAVSDK transport; whole-link outage cannot guarantee delivery; merged-main Copter SITL evidence is recorded below and must be rerun when the transport, fixture or firmware changes |
 | Mission Planner | NomadCoreClient, OutputController, FlightModeController, GimbalController, BoundaryManager, MPFenceUploader | goto/discrete outputs use CLI; direct parameter/mode/gimbal/fence paths and UI-owned decisions remain |
 | ROS 2 | ros2/nomad_ros/src/node.cpp, translation.cpp; tests/ros | Owns a Vehicle, telemetry topics, VIO health/source gate and Trigger services; blocking callbacks, no selected estimator or navigation fusion |
 | Video | python/tools/simple_video_bridge.py, video_bridge_server.py; test_simple_video_bridge.py | ROS image to GStreamer/RTSP; control HTTP is loopback-only; no validated capture/CV/VIO product pipeline |
@@ -111,19 +111,21 @@ is not a passed run. A skipped required scenario leaves its gate open.
 
 Historical notes (2026-09-03–06) reported Copter 4.7.0/4.7.1 SITL success for
 status, command flow, mission, velocity watchdog, fence upload/readback, payload,
-link loss/recovery and Linux GCS-heartbeat with negative control. These reports
-have not been independently re-established on this working tree. Historical
-MAVSDK build/footprint measurements remain in its decision record.
+link loss/recovery and Linux GCS-heartbeat with negative control. Those reports
+were not independently re-established on the pre-merge working tree; the
+merged-main qualification below now supersedes them for the pinned Copter path.
+Historical MAVSDK build/footprint measurements remain in its decision record.
 
 Historical live containment and first Linux zero-delivery runs were explicitly
 open despite stronger wording elsewhere. Hosted run `34648914427` at NOMAD
 `6a3e970` on 2026-09-11 resolved the zero-delivery discrepancy: an independent
 pymavlink observer recorded the ordered nonzero then all-zero setpoints, and the
 vehicle held hover afterward. The full run later stopped at SR-LNK-04 because the
-GCS-heartbeat harness measured 2.5 Hz against its documented 1 Hz ceiling, so the
-remaining scenarios and containment gate stay open. No hardware evidence was
-supplied for this review; hardware availability beyond the user's stated
-selections is not inferred.
+GCS-heartbeat harness measured 2.5 Hz against its documented 1 Hz ceiling. That
+historical run did not close the remaining scenarios or containment gate.
+Merged-main run `35489428247` now passes the complete Copter matrix; no hardware
+evidence was supplied for this review, and aircraft-class, all-mode and hardware
+availability beyond the user's stated selections is not inferred.
 
 ## Gate sequence and accountable roles
 
@@ -228,6 +230,13 @@ the current-head integration and release gates are completed. Test both Copter
 and the chosen QuadPlane firmware as support is introduced; existing Copter
 tests alone cannot qualify Task 1.
 
+Current-head hosted Copter evidence is now recorded in run
+[35489428247](https://github.com/YoussGm3o8/NOMAD/actions/runs/35489428247) at
+merged `main` commit `26d7f9b101a029725d06aee2c6716da95e622417`. The full
+telemetry, command, mission, velocity, payload, link, heartbeat, loop-closure
+and geofence sequence passed. ROS, supported-aircraft/QuadPlane, resource-budget,
+packaging and install/rollback gates remain open.
+
 Create focused, reviewable implementation changes with unit tests, integration
 evidence, requirement mapping and limitations. Under the 2026-09-12 ownership
 split, ArduPilot command, mode and telemetry semantics are delivered in the pinned
@@ -243,13 +252,13 @@ maintained and reviewed. G-M is mandatory for G8 and precedes dependent
 integrated competition command work; isolated server/CV prototypes may proceed
 without waiting.
 
-Cutover status (2026-09-12): phases A-E have landed. The default runtime is the
+Cutover status (2026-09-20): phases A-E have landed. The default runtime is the
 MAVSDK transport, the ROS 2 adapter builds the same transport, and the legacy
 codec plus its generated dialect headers are deleted, so the transport exit items
 are met at the code and local-evidence level. G-M itself stays open: the
-supported-firmware matrix is Copter-only (QuadPlane not started), and the
-install/rollback and packaging evidence lives in G8. A completed local cutover is
-not a competition release.
+supported-firmware matrix is Copter-only (QuadPlane not started), the current-head
+Copter SITL matrix is recorded above, and the install/rollback and packaging
+evidence lives in G8. A completed transport cutover is not a competition release.
 
 ### G2 — One authority and aircraft semantics (core + safety leads; G1/G-M)
 
@@ -399,6 +408,29 @@ else.
 
 ## Checks run for this documentation review
 
+### Current-head hosted Copter SITL qualification - 2026-09-20
+
+Requirement: G-M current-head SITL evidence plus the SR-LNK-03, SR-LNK-04 and
+GAP-05 evidence paths. Falsification: any required workflow step fails, the run
+uses a different commit or pin, or a required scenario is skipped.
+
+Workflow-dispatch run
+[35489428247](https://github.com/YoussGm3o8/NOMAD/actions/runs/35489428247)
+ran the full `sitl` job on merged `main` commit
+`26d7f9b101a029725d06aee2c6716da95e622417` with the pinned Copter 4.7.1 image.
+That commit resolves the `YoussGm3o8/MAVSDK:nomad/ardupilot` gitlink at
+`3f85f6f808b617c736316d7da5f51f3d3eba1737`.
+The job passed telemetry smoke, MAVSDK Phase A connect/status, command flow,
+mission execution, velocity watchdog, payload relay, link loss, zero delivery,
+link recovery, GCS-heartbeat relay gating, velocity loop closure, geofence
+containment and geofence upload/readback, followed by teardown. The automatic
+post-merge push run `35489179313` was reduced to Phase A smoke by workflow design
+and is not used as the full-matrix evidence.
+
+This closes the current-head Copter SITL evidence for the pin. It does not close
+Phase A resource-budget approval, ROS qualification, Plane/QuadPlane support,
+packaging/install/rollback, hardware or flight-release gates.
+
 ### MAVSDK Phase A dependency hardening - 2026-09-10
 
 Requirement: project MAVSDK decision / GAP-16. Falsification: change the
@@ -428,8 +460,9 @@ Historical Windows measurements remain diagnostic: the warm build tree measured
 379,308,757 bytes and the smoke executable 2,032,128 bytes. They are not approved
 budgets. Repeatable current build-tree, executable, runtime memory, startup and
 CI-time measurements plus explicit budget approval remain the sole Phase A gate
-items. Production continues to use the legacy transport; command/telemetry parity
-and cutover belong to later G-M phases.
+items. This historical entry predates the Phase E cutover; production now uses
+MAVSDK exclusively, and command/telemetry parity plus cutover are recorded in the
+later G-M entries.
 
 ### MAVSDK ArduPilot ownership - 2026-09-12
 
@@ -653,7 +686,8 @@ UDP transport announced once and then blocked in a receive until the deadline, s
 a closed gate yielded exactly one. The receive is now capped at a short slice
 (measured 2026-09-12: the closed gate captured three announcements at ~1.0 Hz
 before status failed closed, and the open gate relayed the stream). `SR-LNK-04`
-still asks for MAVSDK requalification of this requirement, which remains open.
+still asked for MAVSDK requalification; the current-head hosted requalification
+is recorded above.
 
 ### MAVSDK Phase E cutover - 2026-09-12
 
@@ -711,10 +745,10 @@ The no-transport falsification was executed: configuring with
 MAVSDK-less binary can be configured. Collapsing the two connect diagnostics
 back into one reproduces the client contract failures, so the preserved messages
 are checked rather than incidental.
-Not re-established here: the live SITL matrix over the MAVSDK transport, the ROS
-adapter integration suite on a rebuilt image, and hardware or QuadPlane behavior.
-The default runtime is MAVSDK on every path now, so those runs are remaining G-M
-evidence rather than a fallback comparison.
+The current-head live SITL matrix over the MAVSDK transport is recorded in the
+hosted run above. The ROS adapter integration suite on a rebuilt image, hardware
+and QuadPlane behavior remain outstanding G-M evidence. The default runtime is
+MAVSDK on every path now; this is not a fallback comparison.
 
 debt: remaining generic commands and heartbeat observation use MAVSDK passthrough
 APIs marked deprecated in the pin (`send_command_long`, `subscribe_message`);
@@ -776,9 +810,9 @@ not reinterpret the earlier local pass counts as current hosted or live-SITL
 evidence; the current Phase A evidence is recorded separately above.
 
 No hardware or official-server acceptance was performed by the reconciliation.
-Q04 remains open. MAVSDK production adoption remains incomplete; no release gate
-closes solely because documentation, hosted Phase A smoke, or local regressions
-pass.
+Q04 remains open. MAVSDK production adoption is implemented, but release
+qualification remains incomplete; no release gate closes solely because
+documentation, hosted Phase A smoke, or local regressions pass.
 
 ### Earlier planning review - 2026-09-08
 

@@ -115,7 +115,10 @@ passed. Live Copter 4.7.1 SITL run `34550529273` retained 0.731 s connect and
 RSS respectively. Budget approval, aircraft evidence and flight qualification
 remain open. The enclosing full workflow failed twice afterward in the legacy
 C++ zero-delivery observer with `wire=[]`; this does not invalidate the earlier
-MAVSDK connect/status sample, but it leaves the full SITL safety gate open.
+MAVSDK connect/status sample. The observer was repaired, and merged-main run
+`35489428247` passed the complete Copter SITL matrix, including zero delivery and
+the heartbeat gate. Resource approval, supported-aircraft and release evidence
+remain open.
 
 ## Open release blockers
 
