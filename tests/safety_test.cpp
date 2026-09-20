@@ -36,6 +36,15 @@ void test_safety_velocity_accepts_clamped_frd_command() {
     CHECK(decision.setpoint->yaw_rate == -1.0F);
 }
 
+void test_safety_velocity_accepts_plane_guided_mode_when_selected() {
+    const nomad::safety::FlightConditions conditions{
+        true, true, true, 15, true, true, 1.0F, 0.3F, 15,
+    };
+    const auto decision = nomad::safety::evaluate_velocity({}, conditions, {1.0F, 0.0F, 0.0F, 0.0F});
+
+    CHECK(decision.allowed);
+}
+
 void test_safety_velocity_rejects_each_fault() {
     const nomad::safety::VelocityCommand command{1.0F, 0.0F, 0.0F, 0.0F};
     CHECK(nomad::safety::evaluate_velocity({}, {}, command).reason == nomad::safety::RejectReason::link);
@@ -66,6 +75,28 @@ void test_vehicle_rejects_invalid_watchdog_policy_before_transmission() {
     const auto result = vehicle.set_velocity({1.0F, 0.0F, 0.0F, 0.0F});
 
     CHECK(!result.success);
+    CHECK(connection.velocity_send_count == 0);
+}
+
+void test_vehicle_rejects_body_velocity_for_unsupported_aircraft() {
+    FakeConnection connection;
+    connection.connect();
+    connection.state->armed = true;
+    nomad::vehicle::Vehicle vehicle(connection);
+    CHECK(vehicle.update_vio(true, 1.0F).success);
+
+    connection.state->identity = nomad::telemetry::identify_vehicle(nomad::telemetry::kArduPilotAutopilot,
+                                                                     nomad::telemetry::kFixedWing);
+    CHECK(!vehicle.set_velocity({1.0F, 0.0F, 0.0F, 0.0F}).success);
+    CHECK(connection.velocity_send_count == 0);
+
+    connection.state->identity = nomad::telemetry::identify_vehicle(nomad::telemetry::kArduPilotAutopilot,
+                                                                     nomad::telemetry::kVtolQuadrotor);
+    CHECK(!vehicle.set_velocity({1.0F, 0.0F, 0.0F, 0.0F}).success);
+    CHECK(connection.velocity_send_count == 0);
+
+    connection.state->identity = {};
+    CHECK(!vehicle.set_velocity({1.0F, 0.0F, 0.0F, 0.0F}).success);
     CHECK(connection.velocity_send_count == 0);
 }
 
@@ -433,8 +464,10 @@ void test_vehicle_upload_fence_rejects_invalid_coordinates() {
 int main() {
     return nomad::test::run_tests([] {
         test_safety_velocity_accepts_clamped_frd_command();
+        test_safety_velocity_accepts_plane_guided_mode_when_selected();
         test_safety_velocity_rejects_each_fault();
         test_vehicle_rejects_invalid_watchdog_policy_before_transmission();
+        test_vehicle_rejects_body_velocity_for_unsupported_aircraft();
         test_watchdog_stops_for_each_fault();
         test_vehicle_watchdog_stops_for_command_timeout();
         test_vehicle_watchdog_stops_for_stale_vio_and_mode_loss();

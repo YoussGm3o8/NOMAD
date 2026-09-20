@@ -13,6 +13,11 @@
 
 class FakeConnection final : public nomad::mavlink::MavlinkConnection {
   public:
+    FakeConnection() {
+        state->identity = nomad::telemetry::identify_vehicle(nomad::telemetry::kArduPilotAutopilot,
+                                                              nomad::telemetry::kQuadrotor);
+    }
+
     struct GotoRequest {
         double latitude_deg{};
         double longitude_deg{};
@@ -218,10 +223,24 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
             state->position_valid = true;
             state->position.relative_altitude_m = command.parameters[6];
         } else if (command.id == 21) {
-            state->custom_mode = 9;
-            state->armed = false;
+            if (state->identity.aircraft_class == nomad::telemetry::AircraftClass::Copter) {
+                state->custom_mode = 9;
+                state->armed = false;
+            }
         } else if (command.id == 20) {
-            state->custom_mode = 6;
+            switch (state->identity.aircraft_class) {
+            case nomad::telemetry::AircraftClass::Copter:
+                state->custom_mode = 6;
+                break;
+            case nomad::telemetry::AircraftClass::Plane:
+                state->custom_mode = 11;
+                break;
+            case nomad::telemetry::AircraftClass::QuadPlane:
+                state->custom_mode = 21;
+                break;
+            case nomad::telemetry::AircraftClass::Unknown:
+                break;
+            }
         }
     }
 };

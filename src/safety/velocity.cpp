@@ -45,8 +45,8 @@ VelocityDecision evaluate_velocity(
     if (!conditions.armed) {
         return {false, RejectReason::armed, "vehicle is not armed", std::nullopt};
     }
-    if (conditions.custom_mode != kGuidedMode) {
-        return {false, RejectReason::mode, "vehicle is not in GUIDED mode", std::nullopt};
+    if (conditions.guided_mode == 0 || conditions.custom_mode != conditions.guided_mode) {
+        return {false, RejectReason::mode, "vehicle is not in the required GUIDED mode", std::nullopt};
     }
     if (!is_finite(conditions.min_vio_confidence) || conditions.min_vio_confidence < 0.0F ||
         conditions.min_vio_confidence > 1.0F || !conditions.vio_healthy || !conditions.vio_fresh ||

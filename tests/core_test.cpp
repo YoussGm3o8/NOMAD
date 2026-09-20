@@ -30,6 +30,7 @@ void test_state_is_available_through_vehicle() {
     CHECK(state.has_value());
     CHECK(state->connected);
     CHECK(state->system_id == 1);
+    CHECK(state->identity.aircraft_class == nomad::telemetry::AircraftClass::Copter);
 }
 
 void test_state_requires_connection() {
@@ -91,6 +92,67 @@ void test_land_and_rtl_are_verified() {
     CHECK(vehicle.land().success);
     connection.acknowledgement = nomad::mavlink::CommandAck{20, 0};
     CHECK(vehicle.return_to_launch().success);
+}
+
+void test_plane_uses_plane_mode_semantics() {
+    FakeConnection connection;
+    connection.connect();
+    connection.state->identity =
+        nomad::telemetry::identify_vehicle(nomad::telemetry::kArduPilotAutopilot,
+                                            nomad::telemetry::kFixedWing);
+    nomad::vehicle::Vehicle vehicle(connection);
+
+    connection.acknowledgement = nomad::mavlink::CommandAck{176, 0};
+    CHECK(vehicle.set_guided_mode().success);
+    CHECK(connection.state->custom_mode == 15);
+
+    connection.set_mode(10); // AUTO alone must not satisfy landing verification.
+    connection.acknowledgement = nomad::mavlink::CommandAck{21, 0};
+    const auto command_count_before_land = connection.command_history.size();
+    const auto land_result = vehicle.land();
+    CHECK(!land_result.success);
+    CHECK(land_result.message == "land is not qualified for this aircraft");
+    CHECK(connection.command_history.size() == command_count_before_land);
+    CHECK(connection.state->custom_mode == 10);
+
+    connection.acknowledgement = nomad::mavlink::CommandAck{20, 0};
+    CHECK(vehicle.return_to_launch().success);
+    CHECK(connection.state->custom_mode == 11);
+}
+
+void test_quadplane_land_is_rejected_before_transmission() {
+    FakeConnection connection;
+    connection.connect();
+    connection.state->identity =
+        nomad::telemetry::identify_vehicle(nomad::telemetry::kArduPilotAutopilot,
+                                            nomad::telemetry::kVtolQuadrotor);
+    nomad::vehicle::Vehicle vehicle(connection);
+
+    connection.set_mode(20);
+    connection.acknowledgement = nomad::mavlink::CommandAck{21, 0};
+    const auto command_count_before_land = connection.command_history.size();
+    const auto land_result = vehicle.land();
+    CHECK(!land_result.success);
+    CHECK(land_result.message == "land is not qualified for this aircraft");
+    CHECK(connection.command_history.size() == command_count_before_land);
+    CHECK(connection.state->custom_mode == 20);
+}
+
+void test_unknown_aircraft_rejects_aircraft_specific_commands() {
+    FakeConnection connection;
+    connection.connect();
+    connection.state->identity = {};
+    nomad::vehicle::Vehicle vehicle(connection);
+    connection.acknowledgement = nomad::mavlink::CommandAck{176, 0};
+
+    CHECK(!vehicle.set_guided_mode().success);
+    CHECK(!vehicle.set_mode(4).success);
+    CHECK(!vehicle.takeoff(5.0F).success);
+    CHECK(!vehicle.goto_location({45.5, -73.6, 5.0F}).success);
+    CHECK(!vehicle.land().success);
+    CHECK(!vehicle.return_to_launch().success);
+    CHECK(connection.command_history.empty());
+    CHECK(!connection.last_goto.has_value());
 }
 
 void test_disarm_is_verified() {
@@ -218,6 +280,9 @@ int main() {
         test_takeoff_rejects_invalid_altitude();
         test_mode_and_takeoff_are_verified();
         test_land_and_rtl_are_verified();
+        test_plane_uses_plane_mode_semantics();
+        test_quadplane_land_is_rejected_before_transmission();
+        test_unknown_aircraft_rejects_aircraft_specific_commands();
         test_disarm_is_verified();
         test_goto_location_validates_and_verifies();
         test_goto_location_rejects_invalid_coordinates();
