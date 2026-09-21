@@ -83,6 +83,11 @@ dev-up = "docker compose -f docker/docker-compose.dev.yml --profile sitl up -d -
 dev-down = "docker compose -f docker/docker-compose.dev.yml --profile sitl down"
 dev-logs = "docker compose -f docker/docker-compose.dev.yml --profile sitl logs -f"
 dev-ps = "docker compose -f docker/docker-compose.dev.yml --profile sitl ps"
+quadplane-sitl-build = "docker compose -f docker/docker-compose.quadplane.yml build"
+quadplane-sitl-up = "docker compose -f docker/docker-compose.quadplane.yml up -d --build"
+quadplane-sitl-down = "docker compose -f docker/docker-compose.quadplane.yml down"
+quadplane-sitl-logs = "docker compose -f docker/docker-compose.quadplane.yml logs -f"
+quadplane-sitl-ps = "docker compose -f docker/docker-compose.quadplane.yml ps"
 # SITL loop-closure scenario for the safety-critical velocity core (needs the
 # dev+sitl stack up: `pixi run dev-up`). The scenario drives the C++ core CLI
 # on the host (its UDP copy of the stream arrives on NOMAD_CORE_SITL_PORT) and
@@ -255,6 +260,10 @@ profile-edit = "python scripts/profile.py edit"
 [tasks.core-sitl-status]
 cmd = "pixi run build-core && python scripts/dev/core_sitl_status.py"
 env = { NOMAD_API_KEY = "nomad-dev-sitl-key" }
+
+[tasks.core-sitl-quadplane-observe]
+cmd = "pixi run build-core && python scripts/dev/core_sitl_quadplane_observe.py"
+env = { NOMAD_API_KEY = "nomad-dev-sitl-key", NOMAD_QUADPLANE_SITL_PORT = "14580" }
 
 [tasks.core-sitl-command-flow]
 cmd = "pixi run build-core && python scripts/dev/core_sitl_command_flow.py"

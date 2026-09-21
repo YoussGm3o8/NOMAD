@@ -30,6 +30,12 @@ deterministic ArduPilot-like UDP fixture, pure qualification tests, Linux/Window
 CI jobs, ROS image compile wiring, dependency inventory, root NOTICE and a pinned
 project MAVSDK fork. Command, link, velocity and fence/parameter parity are
 proven by `scripts/dev/mavsdk_connection_fixture.py` and the core test targets.
+ArduPlane QuadPlanes advertise a fixed-wing heartbeat in the pinned 4.7.1 SITL
+profile, so the MAVSDK transport reads ArduPilot's `Q_ENABLE` parameter. Values
+one and two promote an ArduPilot fixed-wing identity to QuadPlane, zero keeps it
+Plane, and a failed read or invalid value leaves it Unknown. A deterministic
+wire fixture proves every branch, and the live QuadPlane observer independently
+confirms the value-one profile.
 The parent gitlink pins `3f85f6f808b617c736316d7da5f51f3d3eba1737`; read
 `.gitmodules`, the gitlinks and the
 [dependency inventory](mavsdk-dependencies.md) for provenance. The Phase A/B

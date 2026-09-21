@@ -27,6 +27,7 @@ namespace nomad::mavlink {
 namespace {
 
 constexpr auto kTelemetryWaitIncrement = std::chrono::milliseconds(20);
+constexpr auto kQuadplaneParameterTimeout = std::chrono::milliseconds(2000);
 
 bool is_zero_setpoint(const VelocitySetpoint &setpoint) {
     return setpoint.vx == 0.0F && setpoint.vy == 0.0F && setpoint.vz == 0.0F && setpoint.yaw_rate == 0.0F;
@@ -111,6 +112,7 @@ bool MavsdkMavlinkConnection::connect() {
     const auto deadline = ObservationClock::now() + discovery_timeout_;
     while (ObservationClock::now() < deadline) {
         if (select_system()) {
+            identify_quadplane_from_parameters(deadline);
             connect_failure_ = ConnectFailure::None;
             return true;
         }
@@ -154,6 +156,37 @@ bool MavsdkMavlinkConnection::select_system() {
     target_component_ = kAutopilotComponent;
     subscribe();
     return true;
+}
+
+void MavsdkMavlinkConnection::identify_quadplane_from_parameters(ObservationClock::time_point deadline) {
+    const auto heartbeat_timeout = remaining_timeout(deadline);
+    if (!heartbeat_timeout || !wait_for_heartbeat(*heartbeat_timeout)) {
+        return;
+    }
+    {
+        std::lock_guard lock(observation_mutex_);
+        if (state_.identity.autopilot_type != telemetry::kArduPilotAutopilot ||
+            state_.identity.vehicle_type != telemetry::kFixedWing) {
+            return;
+        }
+    }
+
+    const auto parameter_budget = remaining_timeout(deadline);
+    if (!parameter_budget) {
+        return;
+    }
+    const auto value = read_param("Q_ENABLE", (std::min)(*parameter_budget, kQuadplaneParameterTimeout));
+    ObservationUpdate update(observation_mutex_, observation_changed_);
+    if (value && (*value == 1.0F || *value == 2.0F)) {
+        quadplane_enabled_ = true;
+        state_.identity.aircraft_class = telemetry::AircraftClass::QuadPlane;
+    } else if (value && *value == 0.0F) {
+        quadplane_enabled_ = false;
+        state_.identity.aircraft_class = telemetry::AircraftClass::Plane;
+    } else {
+        quadplane_enabled_.reset();
+        state_.identity.aircraft_class = telemetry::AircraftClass::Unknown;
+    }
 }
 
 void MavsdkMavlinkConnection::subscribe() {
@@ -217,6 +250,7 @@ void MavsdkMavlinkConnection::close() {
     }
     std::lock_guard lock(observation_mutex_);
     state_ = {};
+    quadplane_enabled_.reset();
     heartbeat_.reset();
     last_heartbeat_ = {};
     velocity_active_ = false;
@@ -233,6 +267,13 @@ void MavsdkMavlinkConnection::observe_heartbeat(const mavlink_message_t &message
     state_.custom_mode = decoded.custom_mode;
     state_.armed = (decoded.base_mode & kArmModeFlag) != 0;
     state_.identity = telemetry::identify_vehicle(decoded.autopilot, decoded.type);
+    if (state_.identity.aircraft_class == telemetry::AircraftClass::Plane) {
+        if (!quadplane_enabled_.has_value()) {
+            state_.identity.aircraft_class = telemetry::AircraftClass::Unknown;
+        } else if (*quadplane_enabled_) {
+            state_.identity.aircraft_class = telemetry::AircraftClass::QuadPlane;
+        }
+    }
     heartbeat_ = Heartbeat{message.sysid, message.compid, decoded.custom_mode, decoded.type, decoded.autopilot,
                            decoded.base_mode};
     last_heartbeat_ = ObservationClock::now();

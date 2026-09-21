@@ -62,6 +62,7 @@ from mavsdk_peer import (
     CommandRecord,
     VehiclePeer,
 )
+from pymavlink.dialects.v20 import ardupilotmega as mavlink
 
 
 def find_parameters(observed: list[CommandRecord], command_id: int, wire_form: str = "COMMAND_LONG"):
@@ -77,6 +78,29 @@ def case_status(cli: Path) -> None:
     require(
         result.returncode == 0 and "position=" in result.stdout, "status telemetry parity", describe(result, observed)
     )
+
+
+def case_quadplane_identity_uses_ardupilot_parameter(cli: Path) -> None:
+    options = {
+        "vehicle_type": mavlink.MAV_TYPE_FIXED_WING,
+        "autopilot_type": mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
+    }
+    cases = (
+        ({"Q_ENABLE": 1.0}, "QuadPlane", "Q_ENABLE=1 identifies QuadPlane"),
+        ({"Q_ENABLE": 2.0}, "QuadPlane", "Q_ENABLE=2 identifies QuadPlane"),
+        ({"Q_ENABLE": 0.0}, "Plane", "Q_ENABLE=0 identifies Plane"),
+        ({}, "Unknown", "unavailable Q_ENABLE leaves identity unresolved"),
+        ({"Q_ENABLE": 3.0}, "Unknown", "invalid Q_ENABLE leaves identity unresolved"),
+    )
+    for params, aircraft_class, name in cases:
+        result, observed = run_cli_case(cli, "status", params=params, **options)
+        require(
+            result.returncode == 0
+            and "vehicle_type=1" in result.stdout
+            and f"aircraft_class={aircraft_class}" in result.stdout,
+            name,
+            describe(result, observed),
+        )
 
 
 def case_arm_accepted(cli: Path) -> None:
@@ -165,6 +189,25 @@ def case_wrong_system(probe: Path) -> None:
         "wrong autopilot identity is refused",
         describe(result, observed),
     )
+
+
+def case_unqualified_identity_sends_no_mode_command(cli: Path) -> None:
+    cases = (
+        {"vehicle_type": mavlink.MAV_TYPE_VTOL_TILTROTOR, "autopilot_type": mavlink.MAV_AUTOPILOT_GENERIC},
+        {"vehicle_type": 99, "autopilot_type": mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA},
+    )
+    for peer_options in cases:
+        result, observed = run_cli_case(cli, "mode", "15", **peer_options)
+        require(
+            result.returncode != 0 and "requires a supported ArduPilot aircraft identity" in result.stdout,
+            "unknown aircraft identity fails closed",
+            describe(result, observed),
+        )
+        require(
+            find_parameters(observed, COMMAND_DO_SET_MODE) is None,
+            "unknown aircraft sends no mode command",
+            describe(result, observed),
+        )
 
 
 def case_mode_is_verified(cli: Path) -> None:
@@ -321,6 +364,7 @@ def main() -> int:
         return 2
 
     case_status(cli)
+    case_quadplane_identity_uses_ardupilot_parameter(cli)
     case_gcs_heartbeat_announces_to_a_silent_peer(probe)
     case_coalesced_telemetry_is_verified(cli)
     case_link_loss_is_observed_as_stale(probe)
@@ -336,6 +380,7 @@ def main() -> int:
     case_command_int(probe)
     case_command_long(probe)
     case_wrong_system(probe)
+    case_unqualified_identity_sends_no_mode_command(cli)
     case_mode_is_verified(cli)
     case_takeoff_is_verified(cli)
     case_goto_is_verified(cli)

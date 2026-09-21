@@ -37,7 +37,7 @@ FENCE_ITEM_FRAME = mavlink.MAV_FRAME_GLOBAL_INT
 # ArduPilot reports that switch as an integer parameter, so keep the fixture's
 # wire type faithful to the real SITL contract.
 DEFAULT_PARAMS = {"FENCE_ENABLE": 1.0}
-INTEGER_PARAMS = {"FENCE_ENABLE"}
+INTEGER_PARAMS = {"FENCE_ENABLE", "Q_ENABLE"}
 
 # Command IDs the parity cases expect on the wire. They come from the dialect so
 # a drift in the core shows up as a mismatch rather than a silently updated
@@ -157,6 +157,8 @@ class VehiclePeer:
         telemetry_seconds: float | None = None,
         bind: bool = False,
         params: dict[str, float] | None = None,
+        vehicle_type: int = mavlink.MAV_TYPE_QUADROTOR,
+        autopilot_type: int = mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
     ) -> None:
         self._address = ("127.0.0.1", port)
         self._system_id = system_id
@@ -168,6 +170,8 @@ class VehiclePeer:
         self._setpoints: list[SetpointRecord] = []
         self._pending_acks: list[Any] = []
         self._params = dict(DEFAULT_PARAMS if params is None else params)
+        self._vehicle_type = vehicle_type
+        self._autopilot_type = autopilot_type
         self._fence_polygon: list[tuple[float, float]] = []
         self._fence_arriving: list[tuple[int, float, float, float]] = []
         self._fence_expected = 0
@@ -178,11 +182,15 @@ class VehiclePeer:
         self._relative_altitude_m = 0.0
         self._commands: list[CommandRecord] = []
         self._stop = threading.Event()
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        if bind:
-            self._socket.bind(self._address)
+        self._socket = self._create_socket(bind)
         self._mavlink = mavlink.MAVLink(None, srcSystem=system_id, srcComponent=1)
         self._thread: threading.Thread | None = None
+
+    def _create_socket(self, bind: bool) -> socket.socket:
+        connection = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        if bind:
+            connection.bind(self._address)
+        return connection
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -396,7 +404,13 @@ class VehiclePeer:
     def _send_telemetry(self) -> None:
         if not self._streaming or self._telemetry_ended():
             return
-        frames = [self._heartbeat_message(), self._position_message(), self._gps_message(), self._sys_status_message()]
+        frames = [
+            self._heartbeat_message(),
+            self._position_message(),
+            self._gps_message(),
+            self._attitude_message(),
+            self._sys_status_message(),
+        ]
         frames.extend(self._pending_acks)
         self._pending_acks = []
         if self._coalesce:
@@ -413,8 +427,8 @@ class VehiclePeer:
         if self._armed:
             base_mode |= mavlink.MAV_MODE_FLAG_SAFETY_ARMED
         return self._mavlink.heartbeat_encode(
-            mavlink.MAV_TYPE_QUADROTOR,
-            mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
+            self._vehicle_type,
+            self._autopilot_type,
             base_mode,
             self._custom_mode,
             mavlink.MAV_STATE_ACTIVE,
@@ -446,6 +460,9 @@ class VehiclePeer:
             0,
             12,
         )
+
+    def _attitude_message(self):
+        return self._mavlink.attitude_encode(1000, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
     def _sys_status_message(self):
         return self._mavlink.sys_status_encode(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 100, 12600, -1, 75, 0, 0, 0, 0, 0, 0)

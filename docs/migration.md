@@ -244,15 +244,23 @@ and return-to-launch modes, rejects unknown identities, and refuses non-Copter
 body-frame velocity. Only Copter landing is supported by this slice. Plane and
 QuadPlane landing are rejected before transmission because their direct
 COMMAND_LONG NAV_LAND behavior has not been qualified. The focused tests pass in
-the ten-target CTest suite. This does not close the aircraft gate: Plane and
-QuadPlane SITL, Task 1 VTOL execution, and the complete supported-aircraft
+the ten-target CTest suite. ArduPlane's fixed-wing heartbeat is classified as
+QuadPlane for `Q_ENABLE=1` or `2`, Plane for zero, and Unknown when the parameter
+is unavailable or invalid.
+The pinned observation harness described below now provides local QuadPlane SITL
+identity, telemetry and baseline-mode evidence. This does not close the aircraft
+gate: Task 1 VTOL execution, hosted evidence, and the complete supported-aircraft
 ROS/SITL and release matrix still require independent evidence.
 
 Create focused, reviewable implementation changes with unit tests, integration
-evidence, requirement mapping and limitations. Under the 2026-09-12 ownership
-split, ArduPilot command, mode and telemetry semantics are delivered in the pinned
-fork and NOMAD does not grow new ArduPilot paths; fork patches need reproducible
-tests and separately tracked upstream changes when publication is authorized.
+evidence, requirement mapping and limitations. Under the clarified ownership
+boundary, MAVSDK and the pinned fork own transport/framing, command encoding and
+low-level ArduPilot protocol behavior. NOMAD may derive safety-relevant aircraft
+identity and operation capabilities from reported heartbeats and parameters when
+needed for admission and authoritative verification, and must fail closed when
+that evidence is missing or ambiguous. New raw wire or command behavior belongs
+in the fork and requires reproducible tests plus separately tracked upstream work
+when publication is authorized.
 
 Implementation exit: phases A-E in [MAVSDK adoption](mavsdk-adoption.md) are
 landed; default production runtime demonstrably uses MAVSDK and legacy deletion
@@ -267,9 +275,40 @@ Cutover status (2026-09-20): phases A-E have landed. The default runtime is the
 MAVSDK transport, the ROS 2 adapter builds the same transport, and the legacy
 codec plus its generated dialect headers are deleted, so the transport exit items
 are met at the code and local-evidence level. G-M itself stays open: the
-supported-firmware matrix is Copter-only (QuadPlane not started), the current-head
-Copter SITL matrix is recorded above, and the install/rollback and packaging
-evidence lives in G8. A completed transport cutover is not a competition release.
+supported-firmware matrix now has a local QuadPlane observation profile but no
+qualified QuadPlane flight operations or hosted pass, the current-head Copter
+SITL matrix is recorded above, and install/rollback evidence remains open. A
+completed transport cutover is not a competition release.
+
+### QuadPlane 4.7.1 observation profile - 2026-09-20
+
+Requirement: G-M aircraft-class qualification. The reference is ArduPlane
+`Plane-4.7.1`, exact commit `dbe792162d06cab66c3475fd5556bf7a120f119e`, built
+by `docker/Dockerfile.sitl-plane` with frame `quadplane-tilttri` and
+`docker/quadplane-tilttri.parm`. The NOMAD baseline remains commit
+`844cfcff3c24a765e8b8688b5332bbd2983237cf`; MAVSDK remains pinned at
+`3f85f6f808b617c736316d7da5f51f3d3eba1737`.
+
+Independent local SITL observation found `MAV_AUTOPILOT_ARDUPILOTMEGA` (3),
+`MAV_TYPE_FIXED_WING` (1) and `Q_ENABLE=1`; it did not report a VTOL MAV type.
+NOMAD therefore classifies this exact combination as QuadPlane. It also treats
+`Q_ENABLE=2` as QuadPlane and zero as Plane; a missing or invalid value leaves
+the fixed-wing identity unresolved as Unknown. The live observer
+also required disarmed state; fresh heartbeat, position, GPS and attitude; and
+aircraft-reported GUIDED=15, QLOITER=19, QRTL=21 and RTL=11 after each command.
+The deterministic peer proves values zero, one and two plus unavailable and
+invalid parameter cases, and proves generic-autopilot and unknown-vehicle
+identities transmit no requested mode command. The stale-position falsification
+test exceeds the 1500 ms bound and is rejected.
+
+Candidate mechanisms for later flight-primitive qualification are ArduPlane
+mission semantics such as `NAV_VTOL_TAKEOFF`, reviewed fixed-wing waypoint
+navigation and `NAV_VTOL_LAND`, with QRTL/RTL behavior measured separately. This
+record does not select or qualify those mechanisms. Arm/disarm, takeoff, forward
+transition, cruise, return, VTOL transition, landing, link loss and manual
+takeover remain unqualified; body-frame velocity and direct `NAV_LAND` remain
+unsupported for QuadPlane. The workflow job exists but no hosted current-head
+pass is claimed by this local record.
 
 Packaging/install slice (2026-09-20): the Release CMake configuration installs
 only the NOMAD CLI, public headers, configuration template and reviewed license
@@ -490,17 +529,25 @@ later G-M entries.
 ### MAVSDK ArduPilot ownership - 2026-09-12
 
 Requirement: project MAVSDK decision / GAP-16 and G-M. Falsification: introduce a
-new ArduPilot-specific command path, mode interpretation or telemetry
-interpretation inside NOMAD that the pinned fork should own, and require review to
-reject it; or change a fork patch without a provenance and requalification update.
+new low-level ArduPilot wire or command-encoding path inside NOMAD that the pinned
+fork should own, silently derive an admitted capability from missing or ambiguous
+reported state, or change a fork patch without a provenance and requalification
+update.
 
-Decision (user-confirmed): the pinned fork owns ArduPilot command, mode and
-telemetry semantics; NOMAD keeps safety policy, validation, authoritative
-verification, deadlines, audit and the client contract. This widens the scope
-recorded in [MAVSDK adoption](mavsdk-adoption.md), which had limited the fork to
-dependency patches and left the gaps in NOMAD's adapter. The measured gap list at
-`9884f109` sits in that document, and the raw-frame paths in
-`MavsdkMavlinkConnection` become transitional rather than the intended shape.
+Decision (user-confirmed): the pinned fork owns ArduPilot transport/framing,
+command encoding and low-level protocol integrations; NOMAD keeps safety policy,
+validation, safety-relevant interpretation of reported state for admission,
+authoritative verification, deadlines, audit and the client contract. This
+clarifies the earlier shorthand that assigned all command/mode/telemetry
+"semantics" to the fork: NOMAD may classify aircraft or capabilities from
+reported heartbeat/parameter state when that interpretation is required to fail
+closed, while new raw wire behavior remains a fork responsibility. The
+`Q_ENABLE`-based fixed-wing/QuadPlane classification is one such admission rule.
+
+The fork scope recorded in [MAVSDK adoption](mavsdk-adoption.md) still covers
+reusable ArduPilot protocol behavior and dependency patches. Raw-frame paths in
+`MavsdkMavlinkConnection` remain transitional where equivalent fork APIs do not
+yet exist.
 
 Sequencing effect: the ArduPilot completeness work in fork Phase F is prerequisite
 work for Phases B-D, not post-cutover maintenance. Unknown work remains large —

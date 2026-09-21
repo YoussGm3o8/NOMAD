@@ -39,13 +39,20 @@ close its integration or release gate.
 - [~] G-M aircraft-class support slice: heartbeat identity is now classified into
   ArduPilot Copter, Plane, QuadPlane or Unknown, carried in core vehicle state,
   and used for guided/landing/RTL mode semantics and body-velocity admission.
+  The reference `quadplane-tilttri` profile is pinned to ArduPlane 4.7.1 commit
+  `dbe792162d06cab66c3475fd5556bf7a120f119e`. Real SITL proved that profile
+  reports `MAV_TYPE_FIXED_WING`, so NOMAD requires the ArduPilot identity plus
+  `Q_ENABLE=1` or `2` before classifying it as QuadPlane. A missing or invalid
+  parameter leaves identity unresolved. Local live evidence observes
+  fresh position/GPS/attitude and GUIDED, QLOITER, QRTL and RTL reported modes.
   Unknown and unsupported identities fail closed, while fixed-wing and QuadPlane
   body-frame velocity is rejected. Plane and QuadPlane landing are rejected
   before transmission because direct COMMAND_LONG NAV_LAND behavior is not
-  qualified for those aircraft. Focused CTest coverage passes; Plane/QuadPlane SITL,
-  Task 1 VTOL execution and the complete supported-aircraft release matrix remain
-  open. Falsification: an unsupported identity is admitted, a class-specific
-  mode is not verified, or the focused and hosted regression suites diverge.
+  qualified for those aircraft. Flight operations, hosted QuadPlane evidence and
+  the complete supported-aircraft release matrix remain open. Falsification: an
+  unsupported identity is admitted, a fixed-wing Plane is upgraded without a
+  valid `Q_ENABLE`, a class-specific mode is not verified, or focused and hosted
+  regression suites diverge.
 
 - [x] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
   datagram parsing, prove nonzero-then-zero ordering independently, and rerun the
@@ -81,8 +88,9 @@ close its integration or release gate.
   required adapter or SITL gate fails, or the release artifact cannot be
   installed and rolled back safely.
 - [ ] G-M: add ArduPlane/QuadPlane support coverage for Task 1 alongside Copter;
-  the first identity and class-specific mode slice is implemented with focused
-  tests, but Plane/QuadPlane SITL and independent Task 1 evidence are still open.
+  the pinned ArduPlane 4.7.1 identity/telemetry/mode harness has local live
+  evidence, but hosted evidence and independent Task 1 flight primitives remain
+  open.
 - [ ] G-M Phase F: upstream tested ArduPilot fixes; track patches, review status
   and maintenance owner. Upstream acceptance is separate from local parity.
 - [ ] G2 / C04–C09, C13, C15: single persistent command owner, authenticated client

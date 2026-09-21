@@ -118,14 +118,27 @@ mode is not a completed landing.
 Existing tasks: core-sitl-status, core-sitl-command-flow, core-sitl-mission,
 core-sitl-velocity-watchdog, core-sitl-geofence, core-sitl-payload,
 core-sitl-link-loss, core-sitl-link-recovery, core-sitl-zero-delivery,
-core-sitl-gcs-heartbeat and sitl-fence. Use them against a configured isolated
-endpoint with no hardware path attached; a live passing run is still required
-before G1 closes.
+core-sitl-gcs-heartbeat, core-sitl-quadplane-observe and sitl-fence. Use them
+against a configured isolated endpoint with no hardware path attached; a live
+passing run is still required before G1 closes.
 
-Add a pinned ArduPlane/QuadPlane SITL path for Task 1. Copter mode numbers and
-velocity-stop behavior cannot stand in for transition, cruise and VTOL landing
-tests. Gazebo/Isaac are optional sensor-evidence tools; they are not prerequisites
-for basic unit or server-contract tests.
+The Task 1 observation reference is ArduPlane 4.7.1 at exact commit
+`dbe792162d06cab66c3475fd5556bf7a120f119e`, using the
+`quadplane-tilttri` frame and `docker/quadplane-tilttri.parm`. Build and start it
+with `pixi run quadplane-sitl-up`, observe it with
+`pixi run core-sitl-quadplane-observe`, and stop it with
+`pixi run quadplane-sitl-down`. The observer requires the real heartbeat,
+`Q_ENABLE=1`, fresh position/GPS/attitude, disarmed state, and aircraft-reported
+GUIDED=15, QLOITER=19, QRTL=21 and RTL=11 modes. ArduPlane reports this profile
+as `MAV_TYPE_FIXED_WING` (1), not a VTOL MAV type. NOMAD combines that heartbeat
+with `Q_ENABLE=1` or `2` to identify `QuadPlane`; zero identifies Plane, while a
+failed read or another value leaves the class unresolved as `Unknown`.
+
+This harness qualifies discovery, telemetry and baseline mode semantics only.
+It does not qualify arm, VTOL takeoff, transition, navigation, return, landing or
+link-loss behavior. Copter mode numbers and velocity-stop behavior cannot stand
+in for those tests. Gazebo/Isaac are optional sensor-evidence tools; they are not
+prerequisites for basic unit or server-contract tests.
 
 ## Adapter and optional build checks
 

@@ -86,6 +86,7 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     void unsubscribe();
     void close();
     bool select_system();
+    void identify_quadplane_from_parameters(ObservationClock::time_point deadline);
 
     void observe_heartbeat(const mavlink_message_t &message);
     void observe_position(const mavsdk::Telemetry::Position &position);
@@ -115,6 +116,9 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     mutable std::mutex observation_mutex_;
     std::condition_variable observation_changed_;
     telemetry::VehicleState state_;
+    // ArduPlane QuadPlanes report MAV_TYPE_FIXED_WING. Q_ENABLE is the
+    // authoritative discriminator; no value means identity is unresolved.
+    std::optional<bool> quadplane_enabled_;
     // True while the last accepted setpoint was non-zero, so shutdown knows the
     // vehicle is still being steered and must be zeroed. Guarded by
     // observation_mutex_ with the rest of the observed state.
