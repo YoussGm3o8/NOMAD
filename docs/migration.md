@@ -253,10 +253,14 @@ gate: Task 1 VTOL execution, hosted evidence, and the complete supported-aircraf
 ROS/SITL and release matrix still require independent evidence.
 
 Create focused, reviewable implementation changes with unit tests, integration
-evidence, requirement mapping and limitations. Under the 2026-09-12 ownership
-split, ArduPilot command, mode and telemetry semantics are delivered in the pinned
-fork and NOMAD does not grow new ArduPilot paths; fork patches need reproducible
-tests and separately tracked upstream changes when publication is authorized.
+evidence, requirement mapping and limitations. Under the clarified ownership
+boundary, MAVSDK and the pinned fork own transport/framing, command encoding and
+low-level ArduPilot protocol behavior. NOMAD may derive safety-relevant aircraft
+identity and operation capabilities from reported heartbeats and parameters when
+needed for admission and authoritative verification, and must fail closed when
+that evidence is missing or ambiguous. New raw wire or command behavior belongs
+in the fork and requires reproducible tests plus separately tracked upstream work
+when publication is authorized.
 
 Implementation exit: phases A-E in [MAVSDK adoption](mavsdk-adoption.md) are
 landed; default production runtime demonstrably uses MAVSDK and legacy deletion
@@ -297,10 +301,10 @@ invalid parameter cases, and proves generic-autopilot and unknown-vehicle
 identities transmit no requested mode command. The stale-position falsification
 test exceeds the 1500 ms bound and is rejected.
 
-Selected mechanisms for the later flight-primitive PR are ArduPlane mission
-semantics: `NAV_VTOL_TAKEOFF`, reviewed fixed-wing waypoint navigation and
-`NAV_VTOL_LAND`, with explicit QRTL/RTL behavior measured separately. They are
-profile inputs, not qualified NOMAD capabilities. Arm/disarm, takeoff, forward
+Candidate mechanisms for later flight-primitive qualification are ArduPlane
+mission semantics such as `NAV_VTOL_TAKEOFF`, reviewed fixed-wing waypoint
+navigation and `NAV_VTOL_LAND`, with QRTL/RTL behavior measured separately. This
+record does not select or qualify those mechanisms. Arm/disarm, takeoff, forward
 transition, cruise, return, VTOL transition, landing, link loss and manual
 takeover remain unqualified; body-frame velocity and direct `NAV_LAND` remain
 unsupported for QuadPlane. The workflow job exists but no hosted current-head
@@ -525,17 +529,25 @@ later G-M entries.
 ### MAVSDK ArduPilot ownership - 2026-09-12
 
 Requirement: project MAVSDK decision / GAP-16 and G-M. Falsification: introduce a
-new ArduPilot-specific command path, mode interpretation or telemetry
-interpretation inside NOMAD that the pinned fork should own, and require review to
-reject it; or change a fork patch without a provenance and requalification update.
+new low-level ArduPilot wire or command-encoding path inside NOMAD that the pinned
+fork should own, silently derive an admitted capability from missing or ambiguous
+reported state, or change a fork patch without a provenance and requalification
+update.
 
-Decision (user-confirmed): the pinned fork owns ArduPilot command, mode and
-telemetry semantics; NOMAD keeps safety policy, validation, authoritative
-verification, deadlines, audit and the client contract. This widens the scope
-recorded in [MAVSDK adoption](mavsdk-adoption.md), which had limited the fork to
-dependency patches and left the gaps in NOMAD's adapter. The measured gap list at
-`9884f109` sits in that document, and the raw-frame paths in
-`MavsdkMavlinkConnection` become transitional rather than the intended shape.
+Decision (user-confirmed): the pinned fork owns ArduPilot transport/framing,
+command encoding and low-level protocol integrations; NOMAD keeps safety policy,
+validation, safety-relevant interpretation of reported state for admission,
+authoritative verification, deadlines, audit and the client contract. This
+clarifies the earlier shorthand that assigned all command/mode/telemetry
+"semantics" to the fork: NOMAD may classify aircraft or capabilities from
+reported heartbeat/parameter state when that interpretation is required to fail
+closed, while new raw wire behavior remains a fork responsibility. The
+`Q_ENABLE`-based fixed-wing/QuadPlane classification is one such admission rule.
+
+The fork scope recorded in [MAVSDK adoption](mavsdk-adoption.md) still covers
+reusable ArduPilot protocol behavior and dependency patches. Raw-frame paths in
+`MavsdkMavlinkConnection` remain transitional where equivalent fork APIs do not
+yet exist.
 
 Sequencing effect: the ArduPilot completeness work in fork Phase F is prerequisite
 work for Phases B-D, not post-cutover maintenance. Unknown work remains large —
