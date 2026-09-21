@@ -22,6 +22,10 @@ CommandResult Vehicle::set_servo(int channel, int pwm_microseconds) {
     if (!decision.allowed) {
         return {false, decision.message};
     }
+    const auto admission = require_operation(VehicleOperation::SetServo);
+    if (!admission.success) {
+        return admission;
+    }
     const auto result =
         send_command(make_command(kSetServoCommand,
                                   {static_cast<float>(channel), static_cast<float>(pwm_microseconds), 0, 0, 0, 0, 0}),
@@ -32,6 +36,10 @@ CommandResult Vehicle::set_servo(int channel, int pwm_microseconds) {
 CommandResult Vehicle::set_relay(int relay_number, bool on) {
     if (!relay_number_is_valid(relay_number)) {
         return {false, kRelayRangeMessage};
+    }
+    const auto admission = require_operation(VehicleOperation::SetRelay);
+    if (!admission.success) {
+        return admission;
     }
     const auto result = send_command(make_command(kSetRelayCommand,
                                                   {static_cast<float>(relay_number), on ? 1.0F : 0.0F, 0, 0, 0, 0, 0}),
@@ -49,6 +57,10 @@ CommandResult Vehicle::motor_test(int motor_instance, int pwm_microseconds, floa
     if (!std::isfinite(timeout_seconds)) {
         return {false, "motor test timeout must be finite"};
     }
+    const auto admission = require_operation(VehicleOperation::MotorTest);
+    if (!admission.success) {
+        return admission;
+    }
     const auto clamped_timeout = std::clamp(timeout_seconds, 0.05F, 3.0F);
     const auto result = send_command(
         make_command(kMotorTestCommand,
@@ -62,6 +74,10 @@ CommandResult Vehicle::configure_gimbal(int mount_mode) {
     if (mount_mode < 0 || mount_mode > 4) {
         return {false, "mount mode must be between zero and four"};
     }
+    const auto admission = require_operation(VehicleOperation::ConfigureGimbal);
+    if (!admission.success) {
+        return admission;
+    }
     const auto result = send_command(make_command(kMountConfigureCommand,
                                                   {static_cast<float>(mount_mode), 1.0F, 1.0F, 1.0F, 2.0F, 2.0F,
                                                    2.0F}),
@@ -74,6 +90,10 @@ CommandResult Vehicle::send_user_command(const std::array<float, 7> &parameters)
         if (!std::isfinite(parameter)) {
             return {false, "user command parameters must be finite"};
         }
+    }
+    const auto admission = require_operation(VehicleOperation::SendUserCommand);
+    if (!admission.success) {
+        return admission;
     }
     const auto result = send_command(make_command(kUserCommand, parameters), "user command");
     return verified(result, "user command verified");

@@ -78,6 +78,10 @@ std::optional<telemetry::VehicleState> Vehicle::wait_for_telemetry(
 }
 
 CommandResult Vehicle::arm() {
+    const auto admission = require_operation(VehicleOperation::Arm);
+    if (!admission.success) {
+        return admission;
+    }
     const auto result = send_command(make_command(kArmDisarmCommand, {1, 0, 0, 0, 0, 0, 0}), "arm");
     if (!result.success) {
         return result;
@@ -86,6 +90,10 @@ CommandResult Vehicle::arm() {
 }
 
 CommandResult Vehicle::disarm() {
+    const auto admission = require_operation(VehicleOperation::Disarm);
+    if (!admission.success) {
+        return admission;
+    }
     const auto result = send_command(make_command(kArmDisarmCommand), "disarm");
     if (!result.success) {
         return result;
@@ -94,33 +102,32 @@ CommandResult Vehicle::disarm() {
 }
 
 CommandResult Vehicle::set_mode(std::uint32_t custom_mode) {
-    const auto aircraft = require_supported_aircraft("set mode");
-    if (!aircraft.success) {
-        return aircraft;
+    const auto admission = require_operation(VehicleOperation::SetMode);
+    if (!admission.success) {
+        return admission;
     }
-    const auto result =
-        send_command(make_command(kSetModeCommand, {1, static_cast<float>(custom_mode), 0, 0, 0, 0, 0}), "set mode");
-    if (!result.success) {
-        return result;
-    }
-    return wait_for_mode(custom_mode, "set mode");
+    return send_mode_and_verify(custom_mode, "set mode");
 }
 
 CommandResult Vehicle::set_guided_mode() {
+    const auto admission = require_operation(VehicleOperation::SetGuidedMode);
+    if (!admission.success) {
+        return admission;
+    }
     const auto mode = telemetry::guided_mode_for(connection_.get_state().identity.aircraft_class);
     if (!mode.has_value()) {
         return {false, "guided mode is unavailable for an unknown or unsupported aircraft"};
     }
-    return set_mode(*mode);
+    return send_mode_and_verify(*mode, "set guided mode");
 }
 
 CommandResult Vehicle::takeoff(float altitude_m) {
     if (!std::isfinite(altitude_m) || altitude_m <= 0.0F) {
         return {false, "takeoff altitude must be finite and greater than zero"};
     }
-    const auto aircraft = require_supported_aircraft("takeoff");
-    if (!aircraft.success) {
-        return aircraft;
+    const auto admission = require_operation(VehicleOperation::Takeoff);
+    if (!admission.success) {
+        return admission;
     }
     const auto result = send_command(make_command(kTakeoffCommand, {0, 0, 0, 0, 0, 0, altitude_m}), "takeoff");
     if (!result.success) {
@@ -144,9 +151,9 @@ CommandResult Vehicle::goto_location(const Location &location) {
     if (!fence_decision.allowed) {
         return {false, fence_decision.message};
     }
-    const auto aircraft = require_supported_aircraft("goto location");
-    if (!aircraft.success) {
-        return aircraft;
+    const auto admission = require_operation(VehicleOperation::GotoLocation);
+    if (!admission.success) {
+        return admission;
     }
     if (!connection_.is_connected()) {
         return {false, "not connected"};
@@ -159,15 +166,11 @@ CommandResult Vehicle::goto_location(const Location &location) {
 }
 
 CommandResult Vehicle::land() {
-    const auto aircraft = require_supported_aircraft("land");
-    if (!aircraft.success) {
-        return aircraft;
+    const auto admission = require_operation(VehicleOperation::Land);
+    if (!admission.success) {
+        return admission;
     }
     const auto aircraft_class = connection_.get_state().identity.aircraft_class;
-    if (aircraft_class == telemetry::AircraftClass::Plane ||
-        aircraft_class == telemetry::AircraftClass::QuadPlane) {
-        return {false, "land is not qualified for this aircraft"};
-    }
     const auto result = send_command(make_command(kLandCommand), "land");
     if (!result.success) {
         return result;
@@ -187,9 +190,9 @@ CommandResult Vehicle::wait_until_disarmed(std::chrono::milliseconds timeout) {
 }
 
 CommandResult Vehicle::return_to_launch() {
-    const auto aircraft = require_supported_aircraft("return to launch");
-    if (!aircraft.success) {
-        return aircraft;
+    const auto admission = require_operation(VehicleOperation::ReturnToLaunch);
+    if (!admission.success) {
+        return admission;
     }
     const auto result = send_command(make_command(kReturnToLaunchCommand), "return to launch");
     if (!result.success) {
@@ -238,6 +241,15 @@ CommandResult Vehicle::wait_for_mode(std::uint32_t expected, const char *name) {
     return wait_for_mode([expected](std::uint32_t mode) { return mode == expected; }, name);
 }
 
+CommandResult Vehicle::send_mode_and_verify(std::uint32_t custom_mode, const char *name) {
+    const auto result = send_command(
+        make_command(kSetModeCommand, {1, static_cast<float>(custom_mode), 0, 0, 0, 0, 0}), name);
+    if (!result.success) {
+        return result;
+    }
+    return wait_for_mode(custom_mode, name);
+}
+
 CommandResult Vehicle::wait_for_mode(const std::function<bool(std::uint32_t)> &matches, const char *name) {
     const auto verdict = [&matches, name](const telemetry::VehicleState &state) -> std::optional<CommandResult> {
         if (!matches(state.custom_mode)) {
@@ -250,12 +262,13 @@ CommandResult Vehicle::wait_for_mode(const std::function<bool(std::uint32_t)> &m
                                 verdict);
 }
 
-CommandResult Vehicle::require_supported_aircraft(const char *operation) const {
+CommandResult Vehicle::require_operation(VehicleOperation operation) const {
     const auto aircraft_class = connection_.get_state().identity.aircraft_class;
-    if (telemetry::is_supported_aircraft(aircraft_class)) {
-        return {true, "aircraft identity verified"};
+    if (supports_operation(aircraft_class, operation)) {
+        return {true, "operation capability verified"};
     }
-    return {false, std::string(operation) + " requires a supported ArduPilot aircraft identity"};
+    return {false, std::string(operation_name(operation)) + " is not qualified for " +
+                       std::string(telemetry::aircraft_class_name(aircraft_class))};
 }
 
 CommandResult Vehicle::wait_for_altitude(float minimum_altitude_m, const char *name) {

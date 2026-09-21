@@ -6,6 +6,7 @@
 #include "nomad/safety/payload.hpp"
 #include "nomad/safety/velocity.hpp"
 #include "nomad/safety/watchdog.hpp"
+#include "nomad/vehicle/operation.hpp"
 
 #include <array>
 #include <chrono>
@@ -86,9 +87,10 @@ class Vehicle {
     CommandResult wait_for_armed_state(bool expected, const char *name);
     CommandResult wait_for_mode(std::uint32_t expected, const char *name);
     CommandResult wait_for_mode(const std::function<bool(std::uint32_t)> &matches, const char *name);
+    CommandResult send_mode_and_verify(std::uint32_t custom_mode, const char *name);
     CommandResult wait_for_altitude(float minimum_altitude_m, const char *name);
     CommandResult wait_for_location(const Location &location);
-    CommandResult require_supported_aircraft(const char *operation) const;
+    CommandResult require_operation(VehicleOperation operation) const;
     // A fresh heartbeat does not imply a fresh position: callers fail closed
     // when this is true rather than trusting a stale fix.
     bool position_is_stale(const telemetry::VehicleState &state) const;

@@ -8,6 +8,7 @@
 #endif
 
 #include <cassert>
+#include <array>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -100,6 +101,35 @@ void test_vehicle_user_command_requires_finite_parameters() {
     CHECK(connection.last_command.parameters[6] == 7.0F);
 }
 
+void test_unqualified_aircraft_reject_outputs_before_transmission() {
+    constexpr std::array unqualified_types{
+        nomad::telemetry::kFixedWing,
+        nomad::telemetry::kVtolQuadrotor,
+        std::uint8_t{0},
+    };
+
+    for (const auto vehicle_type : unqualified_types) {
+        FakeConnection connection;
+        connection.connect();
+        if (vehicle_type == 0) {
+            connection.state->identity = {};
+        } else {
+            connection.state->identity =
+                nomad::telemetry::identify_vehicle(nomad::telemetry::kArduPilotAutopilot, vehicle_type);
+        }
+        nomad::vehicle::Vehicle vehicle(connection);
+
+        CHECK(!vehicle.set_servo(8, 1500).success);
+        CHECK(!vehicle.set_relay(2, true).success);
+        CHECK(!vehicle.motor_test(1, 1200, 1.0F).success);
+        CHECK(!vehicle.configure_gimbal(2).success);
+        CHECK(!vehicle.send_user_command({1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F}).success);
+        CHECK(vehicle.arm_payload().success);
+        CHECK(!vehicle.release_payload(2, 0.05F).success);
+        CHECK(connection.command_history.empty());
+    }
+}
+
 } // namespace
 
 int main() {
@@ -109,5 +139,6 @@ int main() {
         test_vehicle_motor_test_validates_and_clamps_timeout();
         test_vehicle_gimbal_configure_validates_mount_mode();
         test_vehicle_user_command_requires_finite_parameters();
+        test_unqualified_aircraft_reject_outputs_before_transmission();
     });
 }

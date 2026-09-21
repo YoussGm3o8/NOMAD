@@ -199,7 +199,7 @@ def case_unqualified_identity_sends_no_mode_command(cli: Path) -> None:
     for peer_options in cases:
         result, observed = run_cli_case(cli, "mode", "15", **peer_options)
         require(
-            result.returncode != 0 and "requires a supported ArduPilot aircraft identity" in result.stdout,
+            result.returncode != 0 and "set mode is not qualified for Unknown" in result.stdout,
             "unknown aircraft identity fails closed",
             describe(result, observed),
         )

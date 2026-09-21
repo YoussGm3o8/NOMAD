@@ -41,8 +41,6 @@ VehicleIdentity identify_vehicle(std::uint8_t autopilot_type, std::uint8_t vehic
 
 std::string_view aircraft_class_name(AircraftClass aircraft_class);
 
-bool is_supported_aircraft(AircraftClass aircraft_class);
-
 std::optional<std::uint32_t> guided_mode_for(AircraftClass aircraft_class);
 
 bool is_guided_mode(AircraftClass aircraft_class, std::uint32_t custom_mode);
@@ -50,7 +48,5 @@ bool is_guided_mode(AircraftClass aircraft_class, std::uint32_t custom_mode);
 bool is_landing_mode(AircraftClass aircraft_class, std::uint32_t custom_mode);
 
 bool is_return_to_launch_mode(AircraftClass aircraft_class, std::uint32_t custom_mode);
-
-bool supports_body_velocity(AircraftClass aircraft_class);
 
 } // namespace nomad::telemetry

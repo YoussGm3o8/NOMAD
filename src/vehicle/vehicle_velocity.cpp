@@ -49,11 +49,9 @@ CommandResult Vehicle::set_velocity(const safety::VelocityCommand &command) {
     }
     const auto now = std::chrono::steady_clock::now();
     const auto state = connection_.get_state();
-    if (!telemetry::is_supported_aircraft(state.identity.aircraft_class)) {
-        return {false, "velocity requires a supported ArduPilot aircraft identity"};
-    }
-    if (!telemetry::supports_body_velocity(state.identity.aircraft_class)) {
-        return {false, "body-frame velocity is not supported for this aircraft"};
+    const auto admission = require_operation(VehicleOperation::BodyVelocity);
+    if (!admission.success) {
+        return admission;
     }
     const auto conditions = get_flight_conditions(state, now);
     const auto decision = safety::evaluate_velocity(velocity_limits_, conditions, command);
@@ -86,6 +84,12 @@ CommandResult Vehicle::set_velocity(const safety::VelocityCommand &command) {
 
 CommandResult Vehicle::stop_velocity() {
     std::lock_guard lock(velocity_mutex_);
+    if (!velocity_control_active_) {
+        const auto admission = require_operation(VehicleOperation::BodyVelocity);
+        if (!admission.success) {
+            return admission;
+        }
+    }
     const bool sent = connection_.send_velocity({});
     velocity_control_active_ = false;
     last_velocity_stop_reason_ = safety::WatchdogReason::none;

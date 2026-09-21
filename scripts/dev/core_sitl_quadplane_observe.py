@@ -91,15 +91,33 @@ def wait_for_mode(binary: Path, port: str, expected_mode: int, timeout: float = 
     raise ScenarioError(f"mode {expected_mode} was not reported; last status={last}")
 
 
+def request_observed_mode(port: str, mode: int) -> None:
+    """Use an independent test driver without granting the production Vehicle capability."""
+    from pymavlink import mavutil
+
+    connection = mavutil.mavlink_connection(f"udpin:0.0.0.0:{port}", source_system=250)
+    try:
+        heartbeat = connection.wait_heartbeat(timeout=10)
+        if heartbeat is None:
+            raise ScenarioError("test driver did not receive a QuadPlane heartbeat")
+        connection.mav.set_mode_send(
+            connection.target_system,
+            mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+            mode,
+        )
+    finally:
+        connection.close()
+
+
 def verify_baseline_modes(binary: Path, port: str) -> None:
     for mode, name in ((15, "GUIDED"), (19, "QLOITER"), (21, "QRTL")):
-        run_cli(binary, port, "mode", str(mode))
+        request_observed_mode(port, mode)
         wait_for_mode(binary, port, mode)
         print(f"observed {name} custom mode {mode}")
-    run_cli(binary, port, "rtl")
+    request_observed_mode(port, 11)
     wait_for_mode(binary, port, 11)
     print("observed RTL custom mode 11")
-    run_cli(binary, port, "mode", "0")
+    request_observed_mode(port, 0)
     wait_for_mode(binary, port, 0)
 
 

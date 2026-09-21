@@ -40,6 +40,10 @@ CommandResult Vehicle::release_payload(int relay_number, float duration_seconds)
     if (!relay_number_is_valid(relay_number)) {
         return {false, kRelayRangeMessage};
     }
+    const auto admission = require_operation(VehicleOperation::ReleasePayload);
+    if (!admission.success) {
+        return admission;
+    }
 
     std::lock_guard lock(payload_mutex_);
     const auto decision = payload_interlock_.evaluate_release(get_monotonic_seconds());

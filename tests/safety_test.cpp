@@ -88,15 +88,18 @@ void test_vehicle_rejects_body_velocity_for_unsupported_aircraft() {
     connection.state->identity = nomad::telemetry::identify_vehicle(nomad::telemetry::kArduPilotAutopilot,
                                                                      nomad::telemetry::kFixedWing);
     CHECK(!vehicle.set_velocity({1.0F, 0.0F, 0.0F, 0.0F}).success);
+    CHECK(!vehicle.stop_velocity().success);
     CHECK(connection.velocity_send_count == 0);
 
     connection.state->identity = nomad::telemetry::identify_vehicle(nomad::telemetry::kArduPilotAutopilot,
                                                                      nomad::telemetry::kVtolQuadrotor);
     CHECK(!vehicle.set_velocity({1.0F, 0.0F, 0.0F, 0.0F}).success);
+    CHECK(!vehicle.stop_velocity().success);
     CHECK(connection.velocity_send_count == 0);
 
     connection.state->identity = {};
     CHECK(!vehicle.set_velocity({1.0F, 0.0F, 0.0F, 0.0F}).success);
+    CHECK(!vehicle.stop_velocity().success);
     CHECK(connection.velocity_send_count == 0);
 }
 

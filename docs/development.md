@@ -135,6 +135,8 @@ with `Q_ENABLE=1` or `2` to identify `QuadPlane`; zero identifies Plane, while a
 failed read or another value leaves the class unresolved as `Unknown`.
 
 This harness qualifies discovery, telemetry and baseline mode semantics only.
+Its Python test driver requests the observed modes independently; it does not
+use or qualify the production `Vehicle::set_mode` path for QuadPlane.
 It does not qualify arm, VTOL takeoff, transition, navigation, return, landing or
 link-loss behavior. Copter mode numbers and velocity-stop behavior cannot stand
 in for those tests. Gazebo/Isaac are optional sensor-evidence tools; they are not

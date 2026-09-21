@@ -34,6 +34,10 @@ CommandResult Vehicle::upload_fence(const std::vector<safety::GlobalPoint> &boun
     if (boundary.size() < kMinimumFencePoints || boundary.size() > kMaximumFencePoints) {
         return {false, "fence boundary must contain between 3 and 255 points"};
     }
+    const auto admission = require_operation(VehicleOperation::FenceConfiguration);
+    if (!admission.success) {
+        return admission;
+    }
 
     std::vector<mavlink::FencePlanItem> items;
     items.reserve(boundary.size());
@@ -60,6 +64,10 @@ CommandResult Vehicle::upload_fence(const std::vector<safety::GlobalPoint> &boun
 CommandResult Vehicle::verify_fence_uploaded(const std::vector<safety::GlobalPoint> &expected_boundary) {
     if (expected_boundary.size() < kMinimumFencePoints || expected_boundary.size() > kMaximumFencePoints) {
         return {false, "expected fence boundary size is invalid"};
+    }
+    const auto admission = require_operation(VehicleOperation::FenceConfiguration);
+    if (!admission.success) {
+        return admission;
     }
     // A plan on the autopilot is not a fence: ArduPilot only enforces it when
     // FENCE_ENABLE is set. Read the parameter back as authoritative state.

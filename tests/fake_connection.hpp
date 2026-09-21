@@ -121,11 +121,13 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     }
 
     bool upload_fence_plan(const std::vector<nomad::mavlink::FencePlanItem> &items) override {
+        fence_plan_upload_count += 1;
         uploaded_fence_plan = items;
         return fence_plan_upload_result;
     }
 
     std::optional<std::vector<nomad::mavlink::FencePlanItem>> download_fence_plan(std::chrono::milliseconds) override {
+        fence_plan_download_count += 1;
         if (!fence_plan_download_result) {
             return std::nullopt;
         }
@@ -140,6 +142,7 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     }
 
     std::optional<float> read_param(const std::string &param_id, std::chrono::milliseconds) override {
+        parameter_read_count += 1;
         const auto found = parameters.find(param_id);
         if (found == parameters.end()) {
             return std::nullopt;
@@ -174,6 +177,9 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     std::vector<nomad::mavlink::FencePlanItem> uploaded_fence_plan;
     bool fence_plan_upload_result{true};
     bool fence_plan_download_result{true};
+    int fence_plan_upload_count{0};
+    int fence_plan_download_count{0};
+    int parameter_read_count{0};
     std::map<std::string, float> parameters;
     std::vector<std::string> event_log;
 
