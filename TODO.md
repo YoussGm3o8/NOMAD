@@ -36,23 +36,27 @@ close its integration or release gate.
   Falsification: the reviewed pins stop reproducing, live qualification regresses,
   or measured resources exceed an approved threshold.
 
-- [~] G-M aircraft-class support slice: heartbeat identity is now classified into
+- [x] G-M aircraft operation capability boundary: heartbeat identity is classified into
   ArduPilot Copter, Plane, QuadPlane or Unknown, carried in core vehicle state,
-  and used for guided/landing/RTL mode semantics and body-velocity admission.
+  then evaluated by an explicit fail-closed operation policy before any aircraft
+  command, setpoint, output, payload release or fence request reaches transport.
   The reference `quadplane-tilttri` profile is pinned to ArduPlane 4.7.1 commit
   `dbe792162d06cab66c3475fd5556bf7a120f119e`. Real SITL proved that profile
   reports `MAV_TYPE_FIXED_WING`, so NOMAD requires the ArduPilot identity plus
   `Q_ENABLE=1` or `2` before classifying it as QuadPlane. A missing or invalid
   parameter leaves identity unresolved. Local live evidence observes
   fresh position/GPS/attitude and GUIDED, QLOITER, QRTL and RTL reported modes.
-  Unknown and unsupported identities fail closed, while fixed-wing and QuadPlane
-  body-frame velocity is rejected. Plane and QuadPlane landing are rejected
-  before transmission because direct COMMAND_LONG NAV_LAND behavior is not
-  qualified for those aircraft. Flight operations, hosted QuadPlane evidence and
-  the complete supported-aircraft release matrix remain open. Falsification: an
-  unsupported identity is admitted, a fixed-wing Plane is upgraded without a
-  valid `Q_ENABLE`, a class-specific mode is not verified, or focused and hosted
-  regression suites diverge.
+  Only the Copter operational baseline is admitted; Plane, QuadPlane and Unknown
+  command paths have focused non-transmission tests. Falsification: a new class
+  inherits capability, any rejected request reaches transport, or Copter
+  regression coverage fails.
+
+- [~] G-M QuadPlane VTOL takeoff qualification: select one explicit VTOL
+  takeoff mechanism for the pinned ArduPlane 4.7.1 `quadplane-tilttri` profile,
+  then verify actual climb and authoritative state with timeout/failure cases.
+  Do not add transition, route, return or landing behavior in this slice.
+  Falsification: an ACK is accepted as completion, the generic Copter takeoff
+  path is reused silently, or a failed/partial climb reports success.
 
 - [x] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
   datagram parsing, prove nonzero-then-zero ordering independently, and rerun the

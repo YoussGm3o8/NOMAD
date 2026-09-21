@@ -71,6 +71,53 @@ The C++ core owns high-level mission behavior, command validation,
 traffic response decisions, payload authorization and authoritative outcome
 tracking. Perception produces observations; it does not directly steer vehicles.
 
+### Aircraft operation capabilities
+
+Aircraft recognition and operation qualification are separate decisions. The
+heartbeat and required parameters select `Copter`, `Plane`, `QuadPlane` or
+`Unknown`; `VehicleOperation` and `supports_operation` then apply the reviewed
+per-operation policy before any command, setpoint or configuration request can
+reach the transport. The policy fails closed: a new or unresolved aircraft class
+has no aircraft-dependent capability until a test and evidence update explicitly
+add it. MAVLink command availability and an accepted ACK are not qualification.
+
+The audit below records the boundary before this policy was added and the policy
+afterward. `Y` means admitted, `N` means rejected and `L` means local/read-only
+with no aircraft command. Entries are ordered `Copter / Plane / QuadPlane /
+Unknown`.
+
+| Public `Vehicle` operation | Before | Actually qualified before this change | Policy after | Evidence and rationale |
+|---|---|---|---|---|
+| `wait_for_state` | L/L/L/L | Transport observation | L/L/L/L | Read-only; no aircraft operation is admitted |
+| `wait_for_telemetry` | L/L/L/L | Transport observation | L/L/L/L | Read-only; no aircraft operation is admitted |
+| `arm` | Y/Y/Y/Y | Copter only | Y/N/N/N | Hosted Copter command flow; Plane and QuadPlane arm remain unqualified |
+| `disarm` | Y/Y/Y/Y | Copter only | Y/N/N/N | Hosted Copter command flow; Plane and QuadPlane disarm remain unqualified |
+| `set_mode` | Y/Y/Y/N | Copter only | Y/N/N/N | Plane/QuadPlane mode values were observed, but arbitrary mode control was not qualified |
+| `set_guided_mode` | Y/Y/Y/N | Copter only | Y/N/N/N | GUIDED numbers are semantic evidence, not flight-control qualification |
+| `takeoff` | Y/Y/Y/N | Copter only | Y/N/N/N | Copter SITL verifies climb; no Plane or QuadPlane takeoff mechanism was selected |
+| `update_vio` | L/L/L/L | Local validation | L/L/L/L | Updates local safety input and transmits nothing |
+| `set_velocity` | Y/N/N/N | Copter only | Y/N/N/N | Copter loop-closure and zero-delivery evidence; fixed-wing zero-stop semantics are unsafe |
+| `set_servo` | Y/Y/Y/Y | Copter baseline only | Y/N/N/N | Output/channel meaning is not qualified for Plane, QuadPlane or Unknown |
+| `set_relay` | Y/Y/Y/Y | Copter baseline only | Y/N/N/N | Output/channel meaning is not qualified for Plane, QuadPlane or Unknown |
+| `motor_test` | Y/Y/Y/Y | Copter protocol path only | Y/N/N/N | Copter behavior is preserved; its ACK remains insufficient physical motor evidence |
+| `configure_gimbal` | Y/Y/Y/Y | Copter baseline only | Y/N/N/N | Peripheral configuration has no non-Copter profile evidence |
+| `send_user_command` | Y/Y/Y/Y | Copter baseline only | Y/N/N/N | The generic command cannot establish non-Copter qualification by itself |
+| `arm_payload` | L/L/L/L | Local interlock | L/L/L/L | Arms local state only; release remains separately gated |
+| `release_payload` | Y/Y/Y/Y | Copter only | Y/N/N/N | Hosted Copter payload exercise; no Plane/QuadPlane channel or mechanism evidence |
+| `stop_velocity` | Y/Y/Y/Y | Copter only | Y/N/N/N | An inactive fixed-wing call is rejected; safety zero remains available to an already admitted Copter session |
+| `velocity_control_active` | L/L/L/L | Local status | L/L/L/L | Read-only status |
+| `last_velocity_stop_reason` | L/L/L/L | Local status | L/L/L/L | Read-only status |
+| `goto_location` | Y/Y/Y/N | Copter only | Y/N/N/N | Copter SITL verifies arrival; Plane/QuadPlane navigation remains unqualified |
+| `land` | Y/N/N/N | Copter only | Y/N/N/N | Existing direct fixed-wing `NAV_LAND` rejection is retained in the central policy |
+| `wait_until_disarmed` | L/L/L/L | State observation | L/L/L/L | Read-only authoritative-state wait |
+| `return_to_launch` | Y/Y/Y/N | Copter only | Y/N/N/N | Plane/QuadPlane RTL/QRTL modes were observed, but return behavior was not qualified |
+| `upload_fence` | Y/Y/Y/Y | Copter only | Y/N/N/N | Upload/enforcement/readback evidence exists only on the Copter baseline |
+| `verify_fence_uploaded` | Y/Y/Y/Y | Copter only | Y/N/N/N | Aircraft configuration semantics remain unqualified outside the Copter baseline |
+
+These entries are admission policy, not proof that every downstream physical
+effect has been independently observed. In particular, motor/output hardware
+qualification and all QuadPlane flight primitives remain separate gates.
+
 The proposed persistent runtime is a thin C++ executable around the existing
 library, with one connection owner, bounded work, and an explicit shutdown order.
 It is justified by mission cancellation, continuous traffic/telemetry, multiple

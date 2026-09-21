@@ -25,7 +25,6 @@ void test_unsupported_identity_is_unknown() {
     CHECK(unknown_autopilot.aircraft_class == AircraftClass::Unknown);
     CHECK(nomad::telemetry::identify_vehicle(nomad::telemetry::kArduPilotAutopilot, 99).aircraft_class ==
           AircraftClass::Unknown);
-    CHECK(!nomad::telemetry::is_supported_aircraft(AircraftClass::Unknown));
     CHECK(nomad::telemetry::aircraft_class_name(AircraftClass::Unknown) == "Unknown");
     CHECK(nomad::telemetry::aircraft_class_name(AircraftClass::Copter) == "Copter");
     CHECK(nomad::telemetry::aircraft_class_name(AircraftClass::Plane) == "Plane");
@@ -43,9 +42,6 @@ void test_mode_semantics_are_aircraft_specific() {
     CHECK(!nomad::telemetry::is_landing_mode(AircraftClass::QuadPlane, 10));
     CHECK(nomad::telemetry::is_landing_mode(AircraftClass::QuadPlane, 20));
     CHECK(nomad::telemetry::is_return_to_launch_mode(AircraftClass::Plane, 11));
-    CHECK(nomad::telemetry::supports_body_velocity(AircraftClass::Copter));
-    CHECK(!nomad::telemetry::supports_body_velocity(AircraftClass::QuadPlane));
-    CHECK(!nomad::telemetry::supports_body_velocity(AircraftClass::Plane));
 }
 
 } // namespace

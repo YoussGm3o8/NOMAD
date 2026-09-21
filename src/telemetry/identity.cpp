@@ -55,10 +55,6 @@ std::string_view aircraft_class_name(AircraftClass aircraft_class) {
     return "Unknown";
 }
 
-bool is_supported_aircraft(AircraftClass aircraft_class) {
-    return aircraft_class != AircraftClass::Unknown;
-}
-
 std::optional<std::uint32_t> guided_mode_for(AircraftClass aircraft_class) {
     switch (aircraft_class) {
     case AircraftClass::Copter:
@@ -103,10 +99,6 @@ bool is_return_to_launch_mode(AircraftClass aircraft_class, std::uint32_t custom
         return false;
     }
     return false;
-}
-
-bool supports_body_velocity(AircraftClass aircraft_class) {
-    return aircraft_class == AircraftClass::Copter;
 }
 
 } // namespace nomad::telemetry

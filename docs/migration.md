@@ -16,9 +16,9 @@ merged baseline, hosted qualification results, and remaining fork/adapter work.
 
 | Area | Source and tests inspected | Actual scope and remaining limitation |
 |---|---|---|
-| C++ foundation | CMakeLists.txt; include/nomad; src; ten CTest targets | Library and CLI build against the mandatory MAVSDK transport; no Python or mavgen build dependency, no Python runtime dependency |
+| C++ foundation | CMakeLists.txt; include/nomad; src; eleven CTest targets | Library and CLI build against the mandatory MAVSDK transport; no Python or mavgen build dependency, no Python runtime dependency |
 | MAVLink | src/mavlink (MAVSDK transport); core_test, mavsdk_connection_test, mavsdk_zero_delivery_test | MAVSDK owns framing/transport; NOMAD owns ACK classification, typed telemetry, heartbeat/relay handling, the zero-setpoint stop and fence/parameter traffic; native serial/TCP absent |
-| Vehicle | src/vehicle/vehicle.cpp; src/telemetry/identity.cpp; core_test.cpp; aircraft_identity_test.cpp | Arm/mode/takeoff/goto/land/RTL and state checks; heartbeat identity selects Copter/Plane/QuadPlane mode semantics and unknown identities fail closed; body-frame velocity is admitted only for Copter; Plane and QuadPlane landing are rejected before transmission because direct COMMAND_LONG NAV_LAND behavior is unqualified; Plane/QuadPlane SITL and task-completion verification remain open |
+| Vehicle | src/vehicle/operation.cpp; src/vehicle/vehicle*.cpp; src/telemetry/identity.cpp; core_test.cpp; operation_capability_test.cpp | Aircraft recognition is separate from a fail-closed per-operation capability policy; only the qualified Copter baseline can transmit flight, output, payload or fence operations, while Plane, QuadPlane and Unknown are rejected before transport; local/read-only operations remain available; Plane/QuadPlane flight qualification remains open |
 | Missions | src/mission/executor.cpp; core_test.cpp | Synchronous small step executor; no integrated cancellation, persisted resume, survey or Task 2 workflow |
 | Safety | src/safety; safety_test, fence_config_test, velocity_config_test, vio_source_test | Finite/range gates, VIO-conditioned velocity, watchdog, configured target fence, upload/readback and payload interlock |
 | Stop delivery | tests/mavsdk_zero_delivery_test.cpp; scripts/dev/core_sitl_zero_delivery.py | Live peer-driven wire tests cover every stop path on the MAVSDK transport; whole-link outage cannot guarantee delivery; merged-main Copter SITL evidence is recorded below and must be rerun when the transport, fixture or firmware changes |
@@ -309,6 +309,24 @@ transition, cruise, return, VTOL transition, landing, link loss and manual
 takeover remain unqualified; body-frame velocity and direct `NAV_LAND` remain
 unsupported for QuadPlane. The workflow job exists but no hosted current-head
 pass is claimed by this local record.
+
+### Aircraft operation capability boundary - 2026-09-20
+
+`VehicleOperation` and `supports_operation` now make command admission an
+explicit policy rather than a consequence of recognizing an aircraft class.
+The full before/after audit is in [Aircraft operation capabilities](architecture.md#aircraft-operation-capabilities).
+Only Copter is admitted for aircraft-dependent operations in this slice. Plane,
+QuadPlane and Unknown are rejected before command, relative-goto, body-velocity,
+payload/output or fence transport calls. Focused tests inspect each policy cell
+and the fake transport histories/counters, including command, goto, velocity,
+parameter and fence paths. Local telemetry waits, VIO input, payload-interlock
+arming and status accessors do not transmit and therefore remain class-neutral.
+
+The QuadPlane observation profile still proves only recognition, telemetry and
+baseline mode values. It does not qualify arm/disarm, arbitrary modes, generic
+takeoff/goto/land/RTL, VTOL takeoff, transition, fixed-wing route execution,
+return strategy, VTOL landing, link-loss behavior or manual takeover. No VTOL
+command or transition state machine is introduced here.
 
 Packaging/install slice (2026-09-20): the Release CMake configuration installs
 only the NOMAD CLI, public headers, configuration template and reviewed license

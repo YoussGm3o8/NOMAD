@@ -94,7 +94,7 @@ void test_land_and_rtl_are_verified() {
     CHECK(vehicle.return_to_launch().success);
 }
 
-void test_plane_uses_plane_mode_semantics() {
+void test_plane_commands_are_rejected_before_transmission() {
     FakeConnection connection;
     connection.connect();
     connection.state->identity =
@@ -102,25 +102,23 @@ void test_plane_uses_plane_mode_semantics() {
                                             nomad::telemetry::kFixedWing);
     nomad::vehicle::Vehicle vehicle(connection);
 
-    connection.acknowledgement = nomad::mavlink::CommandAck{176, 0};
-    CHECK(vehicle.set_guided_mode().success);
-    CHECK(connection.state->custom_mode == 15);
-
-    connection.set_mode(10); // AUTO alone must not satisfy landing verification.
-    connection.acknowledgement = nomad::mavlink::CommandAck{21, 0};
-    const auto command_count_before_land = connection.command_history.size();
-    const auto land_result = vehicle.land();
-    CHECK(!land_result.success);
-    CHECK(land_result.message == "land is not qualified for this aircraft");
-    CHECK(connection.command_history.size() == command_count_before_land);
-    CHECK(connection.state->custom_mode == 10);
-
-    connection.acknowledgement = nomad::mavlink::CommandAck{20, 0};
-    CHECK(vehicle.return_to_launch().success);
-    CHECK(connection.state->custom_mode == 11);
+    CHECK(!vehicle.arm().success);
+    CHECK(!vehicle.disarm().success);
+    CHECK(!vehicle.set_guided_mode().success);
+    CHECK(!vehicle.set_mode(15).success);
+    const auto takeoff_result = vehicle.takeoff(5.0F);
+    CHECK(!takeoff_result.success);
+    CHECK(takeoff_result.message == "takeoff is not qualified for Plane");
+    const auto goto_result = vehicle.goto_location({45.5, -73.6, 5.0F});
+    CHECK(!goto_result.success);
+    CHECK(goto_result.message == "goto location is not qualified for Plane");
+    CHECK(!vehicle.land().success);
+    CHECK(!vehicle.return_to_launch().success);
+    CHECK(connection.command_history.empty());
+    CHECK(!connection.last_goto.has_value());
 }
 
-void test_quadplane_land_is_rejected_before_transmission() {
+void test_quadplane_flight_commands_are_rejected_before_transmission() {
     FakeConnection connection;
     connection.connect();
     connection.state->identity =
@@ -128,14 +126,20 @@ void test_quadplane_land_is_rejected_before_transmission() {
                                             nomad::telemetry::kVtolQuadrotor);
     nomad::vehicle::Vehicle vehicle(connection);
 
-    connection.set_mode(20);
-    connection.acknowledgement = nomad::mavlink::CommandAck{21, 0};
-    const auto command_count_before_land = connection.command_history.size();
-    const auto land_result = vehicle.land();
-    CHECK(!land_result.success);
-    CHECK(land_result.message == "land is not qualified for this aircraft");
-    CHECK(connection.command_history.size() == command_count_before_land);
-    CHECK(connection.state->custom_mode == 20);
+    CHECK(!vehicle.arm().success);
+    CHECK(!vehicle.disarm().success);
+    CHECK(!vehicle.set_guided_mode().success);
+    CHECK(!vehicle.set_mode(15).success);
+    const auto takeoff_result = vehicle.takeoff(5.0F);
+    CHECK(!takeoff_result.success);
+    CHECK(takeoff_result.message == "takeoff is not qualified for QuadPlane");
+    const auto goto_result = vehicle.goto_location({45.5, -73.6, 5.0F});
+    CHECK(!goto_result.success);
+    CHECK(goto_result.message == "goto location is not qualified for QuadPlane");
+    CHECK(!vehicle.land().success);
+    CHECK(!vehicle.return_to_launch().success);
+    CHECK(connection.command_history.empty());
+    CHECK(!connection.last_goto.has_value());
 }
 
 void test_unknown_aircraft_rejects_aircraft_specific_commands() {
@@ -146,6 +150,8 @@ void test_unknown_aircraft_rejects_aircraft_specific_commands() {
     connection.acknowledgement = nomad::mavlink::CommandAck{176, 0};
 
     CHECK(!vehicle.set_guided_mode().success);
+    CHECK(!vehicle.arm().success);
+    CHECK(!vehicle.disarm().success);
     CHECK(!vehicle.set_mode(4).success);
     CHECK(!vehicle.takeoff(5.0F).success);
     CHECK(!vehicle.goto_location({45.5, -73.6, 5.0F}).success);
@@ -280,8 +286,8 @@ int main() {
         test_takeoff_rejects_invalid_altitude();
         test_mode_and_takeoff_are_verified();
         test_land_and_rtl_are_verified();
-        test_plane_uses_plane_mode_semantics();
-        test_quadplane_land_is_rejected_before_transmission();
+        test_plane_commands_are_rejected_before_transmission();
+        test_quadplane_flight_commands_are_rejected_before_transmission();
         test_unknown_aircraft_rejects_aircraft_specific_commands();
         test_disarm_is_verified();
         test_goto_location_validates_and_verifies();
