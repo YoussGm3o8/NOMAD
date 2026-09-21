@@ -136,9 +136,12 @@ failed read or another value leaves the class unresolved as `Unknown`.
 
 This harness qualifies discovery, telemetry and baseline mode semantics, then
 qualifies one explicit NOMAD startup path: QuadPlane GUIDED, authoritative arm,
-and ArduPlane's direct GUIDED `MAV_CMD_NAV_TAKEOFF` climb to the requested
-altitude. The Python mode driver requests the observed modes independently; it
-does not use or qualify the production `Vehicle::set_mode` path for QuadPlane.
+and ArduPlane's direct GUIDED `MAV_CMD_NAV_TAKEOFF` climb by the requested
+delta from the final pre-command relative altitude. NOMAD revalidates heartbeat,
+fresh position, 3D GPS, armed state and GUIDED mode immediately before sending
+the command, then requires the derived target within a fixed 0.5 m margin. The
+Python mode driver requests the observed modes independently; it does not use
+or qualify the production `Vehicle::set_mode` path for QuadPlane.
 It does not qualify disarm, arbitrary modes, generic takeoff/goto, transition,
 navigation, return, landing or link-loss behavior. Copter mode numbers and
 velocity-stop behavior cannot stand in for those tests. Gazebo/Isaac are

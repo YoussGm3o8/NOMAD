@@ -98,7 +98,7 @@ and `L` means local/read-only with no aircraft command. Entries are ordered
 | `set_mode` | Y/Y/Y/N | Copter only | Y/N/N/N | Plane/QuadPlane mode values were observed, but arbitrary mode control was not qualified |
 | `set_guided_mode` | Y/Y/Y/N | Copter only | Y/N/Y/N | Copter SITL and the QuadPlane guided takeoff sequence verify the narrow semantic mode; arbitrary `set_mode` remains rejected |
 | `takeoff` | Y/Y/Y/N | Copter only | Y/N/N/N | Copter SITL verifies climb; no Plane or QuadPlane takeoff mechanism was selected |
-| `vtol_takeoff` | N/N/N/N | None | N/N/Y/N | Pinned QuadPlane GUIDED `MAV_CMD_NAV_TAKEOFF` path verifies arm, GUIDED mode and fresh-position climb; it is not generic Copter takeoff |
+| `vtol_takeoff` | N/N/N/N | None | N/N/Y/N | Pinned QuadPlane GUIDED `MAV_CMD_NAV_TAKEOFF` path captures final post-arm telemetry, treats the command altitude as a climb delta, and verifies the derived target within a fixed 0.5 m margin; it is not generic Copter takeoff |
 | `update_vio` | L/L/L/L | Local validation | L/L/L/L | Updates local safety input and transmits nothing |
 | `set_velocity` | Y/N/N/N | Copter only | Y/N/N/N | Copter loop-closure and zero-delivery evidence; fixed-wing zero-stop semantics are unsafe |
 | `set_servo` | Y/Y/Y/Y | Copter baseline only | Y/N/N/N | Output/channel meaning is not qualified for Plane, QuadPlane or Unknown |

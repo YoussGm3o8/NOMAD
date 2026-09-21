@@ -22,7 +22,8 @@ evidence; merge requests must link a successful current-head live run.
   GUIDED/QLOITER/QRTL/RTL modes. It does not exercise flight primitives.
 - scripts/dev/core_sitl_quadplane_vtol_takeoff.py drives the qualified NOMAD
   GUIDED arm + direct `MAV_CMD_NAV_TAKEOFF` path and verifies armed state,
-  GUIDED mode and a fresh-position climb above 80% of the requested altitude.
+  GUIDED mode and a fresh-position climb to the requested delta from the
+  observed baseline, within a fixed 0.5 m completion margin.
 
 The obsolete sitl-gimbal task was removed with runtime wiring repair. No successful gimbal evidence is claimed.
 

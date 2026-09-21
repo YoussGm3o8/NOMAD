@@ -53,8 +53,9 @@ close its integration or release gate.
 
 - [x] G-M QuadPlane arm and VTOL takeoff qualification: qualify NOMAD arming,
   select one explicit VTOL takeoff mechanism for the pinned ArduPlane 4.7.1
-  `quadplane-tilttri` profile, then verify armed state, actual climb and
-  authoritative state with timeout/failure cases.
+  `quadplane-tilttri` profile, then verify armed state, the requested climb
+  delta from the final pre-command relative altitude, and authoritative state
+  with a fixed 0.5 m completion margin plus timeout/failure cases.
   Do not add transition, route, return or landing behavior in this slice.
   Falsification: an ACK is accepted as completion, the generic Copter takeoff
   path is reused silently, or a failed/partial climb reports success.

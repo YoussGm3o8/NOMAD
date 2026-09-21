@@ -304,10 +304,14 @@ test exceeds the 1500 ms bound and is rejected.
 
 The first selected QuadPlane flight mechanism is ArduPlane's direct GUIDED
 `MAV_CMD_NAV_TAKEOFF` dispatch (command 22), which enters GUIDED, arms through
-the qualified NOMAD arm path, and verifies a fresh-position climb. It is a
+the qualified NOMAD arm path, and treats its altitude parameter as a climb
+delta from the final pre-command relative altitude. NOMAD captures and validates
+fresh heartbeat, position, 3D GPS, armed state and GUIDED mode after preparation,
+then verifies the derived target within a fixed 0.5 m completion margin. It is a
 QuadPlane-specific semantic operation, not reuse of generic Copter `takeoff`.
-The hosted pinned profile proves the command sequence and rejects a partial
-climb or disarm after the ACK. Mission semantics such as `NAV_VTOL_TAKEOFF`,
+The focused fake-transport tests reject a 4 m partial climb or disarm after the
+ACK, while the hosted pinned profile proves the live command sequence and full
+target climb. Mission semantics such as `NAV_VTOL_TAKEOFF`,
 reviewed fixed-wing waypoint navigation and `NAV_VTOL_LAND` remain candidates
 for later independent qualification. Disarm, arbitrary modes, generic
 takeoff/goto, forward transition, cruise, return, VTOL transition, landing,
@@ -338,9 +342,10 @@ fixed-wing route execution, return strategy, VTOL landing, link-loss behavior
 or manual takeover. No transition state machine or mission implementation is
 introduced here.
 
-The next slice is QuadPlane VTOL-to-fixed-wing transition qualification.
-External test-side arming is not used as evidence for this startup sequence;
-transition, route, return and landing remain later independent slices.
+The next slice is QuadPlane VTOL-to-fixed-wing transition qualification. The
+startup gate now includes NOMAD arming; no external arming is used as evidence
+for the takeoff sequence. Transition, route, return and landing remain later
+independent slices.
 
 Packaging/install slice (2026-09-20): the Release CMake configuration installs
 only the NOMAD CLI, public headers, configuration template and reviewed license

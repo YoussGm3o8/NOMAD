@@ -26,17 +26,23 @@ constexpr auto kNavigationStateTimeout = std::chrono::seconds(60);
 constexpr auto kStatePollTimeout = std::chrono::milliseconds(500);
 constexpr double kLocationToleranceDegrees = 0.00002;
 constexpr float kAltitudeToleranceMeters = 2.0F;
+// The pinned QuadPlane SITL profile settles at the requested target; keep a
+// bounded 0.5 m margin for telemetry/control settling instead of accepting a
+// percentage of the requested climb.
+constexpr float kVtolTakeoffCompletionToleranceMeters = 0.5F;
 
 } // namespace
 
 Vehicle::Vehicle(mavlink::MavlinkConnection &connection, safety::WatchdogPolicy watchdog_policy,
                  safety::GlobalFencePolicy fence_policy, safety::VelocityLimits velocity_limits,
-                 std::chrono::milliseconds position_freshness_timeout)
+                 std::chrono::milliseconds position_freshness_timeout,
+                 std::chrono::milliseconds takeoff_state_timeout)
     : connection_(connection),
       watchdog_policy_(watchdog_policy),
       fence_policy_(std::move(fence_policy)),
       velocity_limits_(velocity_limits),
-      position_freshness_timeout_(position_freshness_timeout) {}
+      position_freshness_timeout_(position_freshness_timeout),
+      takeoff_state_timeout_(takeoff_state_timeout) {}
 
 Vehicle::~Vehicle() {
     {
@@ -157,25 +163,36 @@ CommandResult Vehicle::vtol_takeoff(float altitude_m) {
     if (!guided_result.success) {
         return guided_result;
     }
-    const auto pre_takeoff_state = connection_.get_state();
-    if (pre_takeoff_state.identity.aircraft_class != telemetry::AircraftClass::QuadPlane) {
+    const auto state_before_arm = connection_.get_state();
+    if (state_before_arm.identity.aircraft_class != telemetry::AircraftClass::QuadPlane) {
         return {false, "vtol takeoff identity is no longer QuadPlane"};
     }
-    if (!pre_takeoff_state.armed) {
+    if (!state_before_arm.armed) {
         const auto arm_result = arm();
         if (!arm_result.success) {
             return arm_result;
         }
     }
 
+    const auto pre_takeoff_state = connection_.get_state();
+    if (const auto error = vtol_takeoff_state_error(pre_takeoff_state); error.has_value()) {
+        return {false, *error};
+    }
+    const auto target_altitude_m = pre_takeoff_state.position.relative_altitude_m + altitude_m;
+    if (!std::isfinite(target_altitude_m)) {
+        return {false, "vtol takeoff target altitude is invalid"};
+    }
+
     // ArduPlane's direct QuadPlane GUIDED path accepts NAV_TAKEOFF (22), not a
-    // generic Copter interpretation. Completion is checked from telemetry below.
+    // generic Copter interpretation. Its altitude parameter is a climb offset
+    // from the final pre-command position, so completion uses the derived
+    // absolute relative-altitude target below.
     const auto result = send_command(
         make_command(kQuadplaneGuidedTakeoffCommand, {0, 0, 0, 0, 0, 0, altitude_m}), "vtol takeoff");
     if (!result.success) {
         return result;
     }
-    return wait_for_vtol_takeoff(altitude_m);
+    return wait_for_vtol_takeoff(target_altitude_m);
 }
 
 CommandResult Vehicle::goto_location(const Location &location) {
@@ -334,31 +351,51 @@ CommandResult Vehicle::wait_for_altitude(float minimum_altitude_m, const char *n
         verdict);
 }
 
+std::optional<std::string> Vehicle::vtol_takeoff_state_error(const telemetry::VehicleState &state) const {
+    if (state.identity.aircraft_class != telemetry::AircraftClass::QuadPlane) {
+        return "aircraft identity changed";
+    }
+    if (!state.connected || !state.heartbeat_fresh) {
+        return "heartbeat is stale";
+    }
+    if (!state.position_valid) {
+        return "position is invalid";
+    }
+    if (position_is_stale(state)) {
+        return "position feed is stale";
+    }
+    if (!state.gps_valid || state.gps.fix_type < 3 || state.gps.satellites == 0) {
+        return "a valid 3D GPS fix is required";
+    }
+    if (state.gps_updated_at == std::chrono::steady_clock::time_point{} ||
+        std::chrono::steady_clock::now() - state.gps_updated_at > position_freshness_timeout_) {
+        return "GPS feed is stale";
+    }
+    if (!state.armed) {
+        return "vehicle disarmed";
+    }
+    if (!telemetry::is_guided_mode(telemetry::AircraftClass::QuadPlane, state.custom_mode)) {
+        return "guided mode was lost";
+    }
+    if (!std::isfinite(state.position.relative_altitude_m)) {
+        return "relative altitude is invalid";
+    }
+    return {};
+}
+
 CommandResult Vehicle::wait_for_vtol_takeoff(float target_altitude_m) {
-    const auto minimum_altitude_m = target_altitude_m * 0.8F;
+    const auto minimum_altitude_m = target_altitude_m - kVtolTakeoffCompletionToleranceMeters;
     const auto verdict = [this, minimum_altitude_m](const telemetry::VehicleState &state)
         -> std::optional<CommandResult> {
-        if (state.identity.aircraft_class != telemetry::AircraftClass::QuadPlane) {
-            return CommandResult{false, "vtol takeoff verification failed: aircraft identity changed"};
-        }
-        if (!state.armed) {
-            return CommandResult{false, "vtol takeoff verification failed: vehicle disarmed"};
-        }
-        if (!telemetry::is_guided_mode(telemetry::AircraftClass::QuadPlane, state.custom_mode)) {
-            return CommandResult{false, "vtol takeoff verification failed: guided mode was lost"};
-        }
-        if (!state.position_valid) {
-            return std::nullopt;
-        }
-        if (position_is_stale(state)) {
-            return CommandResult{false, "vtol takeoff verification failed: position feed is stale"};
+        if (const auto error = vtol_takeoff_state_error(state); error.has_value()) {
+            return CommandResult{false, "vtol takeoff verification failed: " + *error};
         }
         if (state.position.relative_altitude_m < minimum_altitude_m) {
             return std::nullopt;
         }
         return CommandResult{true, "vtol takeoff verified"};
     };
-    return wait_for_state_until(kTakeoffStateTimeout,
+    return wait_for_state_until(takeoff_state_timeout_,
                                 "vtol takeoff acknowledgement received but climb verification timed out", verdict);
 }
 
