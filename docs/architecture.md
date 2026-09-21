@@ -80,6 +80,9 @@ per-operation policy before any command, setpoint or configuration request can
 reach the transport. The policy fails closed: a new or unresolved aircraft class
 has no aircraft-dependent capability until a test and evidence update explicitly
 add it. MAVLink command availability and an accepted ACK are not qualification.
+Semantic operations gate once and then use private transport helpers; for
+example, `set_guided_mode` does not also require the arbitrary `SetMode`
+capability. This permits a narrow operation to be qualified independently.
 
 The audit below records the boundary before this policy was added and the policy
 afterward. `Y` means admitted, `N` means rejected and `L` means local/read-only

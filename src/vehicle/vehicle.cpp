@@ -106,12 +106,7 @@ CommandResult Vehicle::set_mode(std::uint32_t custom_mode) {
     if (!admission.success) {
         return admission;
     }
-    const auto result =
-        send_command(make_command(kSetModeCommand, {1, static_cast<float>(custom_mode), 0, 0, 0, 0, 0}), "set mode");
-    if (!result.success) {
-        return result;
-    }
-    return wait_for_mode(custom_mode, "set mode");
+    return send_mode_and_verify(custom_mode, "set mode");
 }
 
 CommandResult Vehicle::set_guided_mode() {
@@ -123,7 +118,7 @@ CommandResult Vehicle::set_guided_mode() {
     if (!mode.has_value()) {
         return {false, "guided mode is unavailable for an unknown or unsupported aircraft"};
     }
-    return set_mode(*mode);
+    return send_mode_and_verify(*mode, "set guided mode");
 }
 
 CommandResult Vehicle::takeoff(float altitude_m) {
@@ -244,6 +239,15 @@ CommandResult Vehicle::wait_for_armed_state(bool expected, const char *name) {
 
 CommandResult Vehicle::wait_for_mode(std::uint32_t expected, const char *name) {
     return wait_for_mode([expected](std::uint32_t mode) { return mode == expected; }, name);
+}
+
+CommandResult Vehicle::send_mode_and_verify(std::uint32_t custom_mode, const char *name) {
+    const auto result = send_command(
+        make_command(kSetModeCommand, {1, static_cast<float>(custom_mode), 0, 0, 0, 0, 0}), name);
+    if (!result.success) {
+        return result;
+    }
+    return wait_for_mode(custom_mode, name);
 }
 
 CommandResult Vehicle::wait_for_mode(const std::function<bool(std::uint32_t)> &matches, const char *name) {

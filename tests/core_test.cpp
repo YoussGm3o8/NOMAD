@@ -83,6 +83,20 @@ void test_mode_and_takeoff_are_verified() {
     CHECK(takeoff_result.message == "takeoff verified");
 }
 
+void test_guided_mode_uses_its_semantic_operation() {
+    FakeConnection connection;
+    connection.connect();
+    nomad::vehicle::Vehicle vehicle(connection);
+    connection.acknowledgement = nomad::mavlink::CommandAck{176, 0};
+
+    const auto result = vehicle.set_guided_mode();
+
+    CHECK(result.success);
+    CHECK(result.message == "set guided mode verified");
+    CHECK(connection.last_command.id == 176);
+    CHECK(connection.last_command.parameters[1] == 4.0F);
+}
+
 void test_land_and_rtl_are_verified() {
     FakeConnection connection;
     connection.connect();
@@ -285,6 +299,7 @@ int main() {
         test_arm_sends_arm_command();
         test_takeoff_rejects_invalid_altitude();
         test_mode_and_takeoff_are_verified();
+        test_guided_mode_uses_its_semantic_operation();
         test_land_and_rtl_are_verified();
         test_plane_commands_are_rejected_before_transmission();
         test_quadplane_flight_commands_are_rejected_before_transmission();

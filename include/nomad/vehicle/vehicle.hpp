@@ -87,6 +87,7 @@ class Vehicle {
     CommandResult wait_for_armed_state(bool expected, const char *name);
     CommandResult wait_for_mode(std::uint32_t expected, const char *name);
     CommandResult wait_for_mode(const std::function<bool(std::uint32_t)> &matches, const char *name);
+    CommandResult send_mode_and_verify(std::uint32_t custom_mode, const char *name);
     CommandResult wait_for_altitude(float minimum_altitude_m, const char *name);
     CommandResult wait_for_location(const Location &location);
     CommandResult require_operation(VehicleOperation operation) const;

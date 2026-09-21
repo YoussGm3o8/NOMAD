@@ -77,3 +77,9 @@ def test_quadplane_observer_rejects_wrong_identity() -> None:
             {"autopilot_type": "0", "vehicle_type": "21", "aircraft_class": "Unknown"},
             quadplane.EXPECTED_IDENTITY,
         )
+
+
+def test_quadplane_observer_does_not_use_production_mode_admission() -> None:
+    source = (ROOT / "scripts" / "dev" / "core_sitl_quadplane_observe.py").read_text(encoding="utf-8")
+    assert 'run_cli(binary, port, "mode"' not in source
+    assert "connection.mav.set_mode_send" in source

@@ -323,10 +323,16 @@ parameter and fence paths. Local telemetry waits, VIO input, payload-interlock
 arming and status accessors do not transmit and therefore remain class-neutral.
 
 The QuadPlane observation profile still proves only recognition, telemetry and
-baseline mode values. It does not qualify arm/disarm, arbitrary modes, generic
-takeoff/goto/land/RTL, VTOL takeoff, transition, fixed-wing route execution,
-return strategy, VTOL landing, link-loss behavior or manual takeover. No VTOL
-command or transition state machine is introduced here.
+baseline mode values. Its independent Python driver requests those modes without
+granting `Vehicle::set_mode` capability. It does not qualify arm/disarm,
+arbitrary modes, generic takeoff/goto/land/RTL, VTOL takeoff, transition,
+fixed-wing route execution, return strategy, VTOL landing, link-loss behavior
+or manual takeover. No VTOL command or transition state machine is introduced
+here.
+
+The next slice must qualify NOMAD arming together with one VTOL takeoff
+mechanism. External test-side arming is not sufficient evidence for the startup
+sequence; transition, route, return and landing remain later independent slices.
 
 Packaging/install slice (2026-09-20): the Release CMake configuration installs
 only the NOMAD CLI, public headers, configuration template and reviewed license
