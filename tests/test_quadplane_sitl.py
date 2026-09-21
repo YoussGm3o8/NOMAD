@@ -15,16 +15,23 @@ sys.path.insert(0, str(ROOT / "scripts" / "dev"))
 import core_sitl_quadplane_observe as quadplane  # noqa: E402
 
 
-def test_quadplane_profile_pins_firmware_frame_and_identity() -> None:
+def test_quadplane_profile_pins_firmware_tooling_frame_and_identity() -> None:
     yaml = pytest.importorskip("yaml")
     compose = yaml.safe_load((ROOT / "docker" / "docker-compose.quadplane.yml").read_text(encoding="utf-8"))
     service = compose["services"]["quadplane_sitl"]
     dockerfile = (ROOT / service["build"]["dockerfile"]).read_text(encoding="utf-8")
     entrypoint = (ROOT / "docker" / "sitl-quadplane-entrypoint.sh").read_text(encoding="utf-8")
 
-    revision = service["build"]["args"]["ARDUPILOT_REVISION"]
+    build_args = service["build"]["args"]
+    revision = build_args["ARDUPILOT_REVISION"]
     assert revision == quadplane.EXPECTED_ARDUPILOT_REVISION
     assert f"ARG ARDUPILOT_REVISION={revision}" in dockerfile
+    assert build_args["MAVPROXY_VERSION"] == "1.8.74"
+    assert build_args["PYMAVLINK_VERSION"] == "2.4.49"
+    assert "ARG MAVPROXY_VERSION=1.8.74" in dockerfile
+    assert "ARG PYMAVLINK_VERSION=2.4.49" in dockerfile
+    assert '"MAVProxy==${MAVPROXY_VERSION}"' in dockerfile
+    assert '"pymavlink==${PYMAVLINK_VERSION}"' in dockerfile
     assert "./waf plane" in dockerfile
     assert "--vehicle ArduPlane" in entrypoint
     assert "--frame quadplane-tilttri" in entrypoint

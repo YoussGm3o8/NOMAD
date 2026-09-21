@@ -118,7 +118,7 @@ def main() -> int:
     except (ValueError, ScenarioError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
-    print(f"QuadPlane observation passed for ArduPilot {EXPECTED_ARDUPILOT_REVISION}")
+    print("QuadPlane identity/telemetry observation passed")
     return 0
 
 
