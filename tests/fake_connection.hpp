@@ -168,6 +168,7 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     std::vector<nomad::mavlink::Command> command_history;
     std::vector<bool> velocity_send_results;
     std::vector<bool> command_send_results;
+    bool disarm_on_takeoff{false};
     std::vector<nomad::mavlink::FencePoint> fence_points;
     std::vector<std::uint8_t> fence_indices;
     std::uint8_t fence_total{0};
@@ -228,6 +229,9 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
         } else if (command.id == 22) {
             state->position_valid = true;
             state->position.relative_altitude_m = command.parameters[6];
+            if (disarm_on_takeoff) {
+                state->armed = false;
+            }
         } else if (command.id == 21) {
             if (state->identity.aircraft_class == nomad::telemetry::AircraftClass::Copter) {
                 state->custom_mode = 9;

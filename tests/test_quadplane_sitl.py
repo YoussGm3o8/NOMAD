@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts" / "dev"))
 
 import core_sitl_quadplane_observe as quadplane  # noqa: E402
+import core_sitl_quadplane_vtol_takeoff as vtol_takeoff  # noqa: E402
 
 
 def test_quadplane_profile_pins_firmware_tooling_frame_and_identity() -> None:
@@ -83,3 +84,11 @@ def test_quadplane_observer_does_not_use_production_mode_admission() -> None:
     source = (ROOT / "scripts" / "dev" / "core_sitl_quadplane_observe.py").read_text(encoding="utf-8")
     assert 'run_cli(binary, port, "mode"' not in source
     assert "connection.mav.set_mode_send" in source
+
+
+def test_quadplane_takeoff_harness_requires_authoritative_climb_state() -> None:
+    source = (ROOT / "scripts" / "dev" / "core_sitl_quadplane_vtol_takeoff.py").read_text(encoding="utf-8")
+    assert 'run_cli(binary, port, "vtol-takeoff"' in source
+    assert "require_climb_status" in source
+    assert "relative_altitude_m" in source
+    assert vtol_takeoff.MINIMUM_VERIFIED_ALTITUDE_M == 4.0

@@ -240,6 +240,35 @@ def case_takeoff_is_verified(cli: Path) -> None:
     )
 
 
+def case_quadplane_vtol_takeoff_is_verified(cli: Path) -> None:
+    result, observed = run_cli_case(
+        cli,
+        "vtol-takeoff",
+        "5",
+        params={"Q_ENABLE": 1.0},
+        vehicle_type=mavlink.MAV_TYPE_FIXED_WING,
+        autopilot_type=mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
+    )
+    expected_commands = {COMMAND_DO_SET_MODE, COMMAND_ARM_DISARM, COMMAND_NAV_TAKEOFF}
+    command_ids = [command for _kind, command, _frame, _parameters in observed if command in expected_commands]
+    parameters = find_parameters(observed, COMMAND_NAV_TAKEOFF)
+    require(
+        result.returncode == 0 and "vtol takeoff verified" in result.stdout,
+        "QuadPlane VTOL takeoff is verified from armed guided climb state",
+        describe(result, observed),
+    )
+    require(
+        command_ids == [COMMAND_DO_SET_MODE, COMMAND_ARM_DISARM, COMMAND_NAV_TAKEOFF],
+        "QuadPlane startup uses semantic GUIDED, arm and dedicated takeoff commands",
+        describe(result, observed),
+    )
+    require(
+        parameters is not None and parameters[6] == 5.0,
+        "QuadPlane takeoff carries the requested altitude",
+        describe(result, observed),
+    )
+
+
 def case_goto_is_verified(cli: Path) -> None:
     result, observed = run_cli_case(cli, "goto", "45.5027", "-73.5663", "5")
     parameters = find_parameters(observed, COMMAND_DO_REPOSITION, "COMMAND_INT")
@@ -383,6 +412,7 @@ def main() -> int:
     case_unqualified_identity_sends_no_mode_command(cli)
     case_mode_is_verified(cli)
     case_takeoff_is_verified(cli)
+    case_quadplane_vtol_takeoff_is_verified(cli)
     case_goto_is_verified(cli)
     case_rtl_is_verified(cli)
     case_land_is_verified(cli)

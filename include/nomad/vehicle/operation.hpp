@@ -13,6 +13,7 @@ enum class VehicleOperation {
     SetMode,
     SetGuidedMode,
     Takeoff,
+    VtolTakeoff,
     GotoLocation,
     Land,
     ReturnToLaunch,

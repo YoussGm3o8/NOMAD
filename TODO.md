@@ -51,13 +51,20 @@ close its integration or release gate.
   inherits capability, any rejected request reaches transport, or Copter
   regression coverage fails.
 
-- [~] G-M QuadPlane arm and VTOL takeoff qualification: qualify NOMAD arming,
+- [x] G-M QuadPlane arm and VTOL takeoff qualification: qualify NOMAD arming,
   select one explicit VTOL takeoff mechanism for the pinned ArduPlane 4.7.1
   `quadplane-tilttri` profile, then verify armed state, actual climb and
   authoritative state with timeout/failure cases.
   Do not add transition, route, return or landing behavior in this slice.
   Falsification: an ACK is accepted as completion, the generic Copter takeoff
   path is reused silently, or a failed/partial climb reports success.
+
+- [~] G-M QuadPlane transition qualification: qualify one reviewed
+  QuadPlane VTOL-to-fixed-wing transition mechanism for the pinned profile and
+  verify authoritative transition state with timeout/failure cases. Do not add
+  route, return, VTOL landing or link-loss strategy in this slice.
+  Falsification: a transition ACK is treated as completion, fixed-wing mode is
+  inferred from a command alone, or a partial transition reports success.
 
 - [x] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
   datagram parsing, prove nonzero-then-zero ordering independently, and rerun the

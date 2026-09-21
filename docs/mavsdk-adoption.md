@@ -274,7 +274,7 @@ accepted `--transport mavsdk` only as a historical selector. `nomad_mavsdk_conne
 `scripts/dev/mavsdk_connection_fixture.py` (driving the deterministic vehicle
 in `scripts/dev/mavsdk_peer.py`) cover accepted, denied, timeout,
 no-peer, stale-telemetry, COMMAND_INT frame and wrong-identity cases, plus
-per-command parity for mode, takeoff, goto, land, RTL, servo, relay,
+per-command parity for mode, takeoff, QuadPlane VTOL takeoff, goto, land, RTL, servo, relay,
 gimbal-config and user-command. In those cases the peer applies the state change
 each accepted command asks for and its initial state is observably different
 from the required result, so they assert the core's state verification rather
@@ -289,8 +289,10 @@ motor-test is unproven
 because `Vehicle::motor_test` sends command ID 139, which is not a `MAV_CMD`
 entry in the pinned dialect (`MAV_CMD_DO_MOTOR_TEST` is 209); that is recorded
 as C23 in the migration contradictions. Explicit vehicle-class identification
-and QuadPlane coverage are still open; everything up to and including the
-production cutover has landed.
+is landed for the pinned profiles, and the deterministic peer now covers the
+QuadPlane startup operation; transitions, navigation, return and landing
+coverage remain open. Everything up to and including the production cutover has
+landed.
 
 Cover arm/disarm, mode, takeoff, land/RTL, goto, servo, relay, motor-test,
 gimbal-config and user-command. Unsupported verbs now belong in the fork: add the

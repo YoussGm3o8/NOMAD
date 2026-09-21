@@ -10,9 +10,10 @@ The working migration tree contains a tested C++ core, UDP MAVLink implementatio
 basic Copter operations, safety/watchdog/fence/payload primitives and adapters.
 Edge Core source has been removed. Build and profile/service wiring repairs are
 recorded in the migration gates, and setup/provisioning now targets the C++ core.
-MAVSDK is an early competition prerequisite but currently only has an optional
-smoke target. QuadPlane, competition telemetry/traffic and task workflows remain
-implementation work.
+MAVSDK is an early competition prerequisite with deterministic parity and smoke
+targets. The pinned QuadPlane profile now has identity/telemetry plus one
+qualified arm + VTOL takeoff startup path; transitions, navigation, return and
+landing remain implementation work.
 
 Task 1 targets a lightweight VTOL with ground GPU vision. Task 2 targets a quad
 below 15 kg with optional onboard compute. All three product profiles remain:

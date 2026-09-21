@@ -84,20 +84,21 @@ Semantic operations gate once and then use private transport helpers; for
 example, `set_guided_mode` does not also require the arbitrary `SetMode`
 capability. This permits a narrow operation to be qualified independently.
 
-The audit below records the boundary before this policy was added and the policy
-afterward. `Y` means admitted, `N` means rejected and `L` means local/read-only
-with no aircraft command. Entries are ordered `Copter / Plane / QuadPlane /
-Unknown`.
+The audit below records the broad admission that preceded the capability
+boundary and the policy after this slice. `Y` means admitted, `N` means rejected
+and `L` means local/read-only with no aircraft command. Entries are ordered
+`Copter / Plane / QuadPlane / Unknown`.
 
 | Public `Vehicle` operation | Before | Actually qualified before this change | Policy after | Evidence and rationale |
 |---|---|---|---|---|
 | `wait_for_state` | L/L/L/L | Transport observation | L/L/L/L | Read-only; no aircraft operation is admitted |
 | `wait_for_telemetry` | L/L/L/L | Transport observation | L/L/L/L | Read-only; no aircraft operation is admitted |
-| `arm` | Y/Y/Y/Y | Copter only | Y/N/N/N | Hosted Copter command flow; Plane and QuadPlane arm remain unqualified |
+| `arm` | Y/Y/Y/Y | Copter only | Y/N/Y/N | Hosted Copter flow plus the pinned QuadPlane arm + takeoff qualification; Plane and Unknown remain unqualified |
 | `disarm` | Y/Y/Y/Y | Copter only | Y/N/N/N | Hosted Copter command flow; Plane and QuadPlane disarm remain unqualified |
 | `set_mode` | Y/Y/Y/N | Copter only | Y/N/N/N | Plane/QuadPlane mode values were observed, but arbitrary mode control was not qualified |
-| `set_guided_mode` | Y/Y/Y/N | Copter only | Y/N/N/N | GUIDED numbers are semantic evidence, not flight-control qualification |
+| `set_guided_mode` | Y/Y/Y/N | Copter only | Y/N/Y/N | Copter SITL and the QuadPlane guided takeoff sequence verify the narrow semantic mode; arbitrary `set_mode` remains rejected |
 | `takeoff` | Y/Y/Y/N | Copter only | Y/N/N/N | Copter SITL verifies climb; no Plane or QuadPlane takeoff mechanism was selected |
+| `vtol_takeoff` | N/N/N/N | None | N/N/Y/N | Pinned QuadPlane GUIDED `MAV_CMD_NAV_TAKEOFF` path verifies arm, GUIDED mode and fresh-position climb; it is not generic Copter takeoff |
 | `update_vio` | L/L/L/L | Local validation | L/L/L/L | Updates local safety input and transmits nothing |
 | `set_velocity` | Y/N/N/N | Copter only | Y/N/N/N | Copter loop-closure and zero-delivery evidence; fixed-wing zero-stop semantics are unsafe |
 | `set_servo` | Y/Y/Y/Y | Copter baseline only | Y/N/N/N | Output/channel meaning is not qualified for Plane, QuadPlane or Unknown |

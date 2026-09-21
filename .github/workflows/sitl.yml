@@ -215,7 +215,7 @@ jobs:
         run: pixi run dev-down
 
   quadplane-observation:
-    name: QuadPlane identity and telemetry observation
+    name: QuadPlane identity, arm and VTOL takeoff qualification
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -255,6 +255,9 @@ jobs:
 
       - name: Observe identity, telemetry and baseline modes
         run: pixi run core-sitl-quadplane-observe
+
+      - name: Qualify NOMAD arm and QuadPlane VTOL takeoff
+        run: pixi run core-sitl-quadplane-vtol-takeoff
 
       - name: QuadPlane SITL logs on failure
         if: failure()

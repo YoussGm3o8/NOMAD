@@ -58,6 +58,7 @@ class Vehicle {
     CommandResult set_mode(std::uint32_t custom_mode);
     CommandResult set_guided_mode();
     CommandResult takeoff(float altitude_m);
+    CommandResult vtol_takeoff(float altitude_m);
     CommandResult update_vio(bool healthy, float confidence);
     CommandResult set_velocity(const safety::VelocityCommand &command);
     CommandResult set_servo(int channel, int pwm_microseconds);
@@ -89,6 +90,7 @@ class Vehicle {
     CommandResult wait_for_mode(const std::function<bool(std::uint32_t)> &matches, const char *name);
     CommandResult send_mode_and_verify(std::uint32_t custom_mode, const char *name);
     CommandResult wait_for_altitude(float minimum_altitude_m, const char *name);
+    CommandResult wait_for_vtol_takeoff(float target_altitude_m);
     CommandResult wait_for_location(const Location &location);
     CommandResult require_operation(VehicleOperation operation) const;
     // A fresh heartbeat does not imply a fresh position: callers fail closed

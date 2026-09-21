@@ -34,6 +34,7 @@ PINNED_COMMAND_IDS = {
         "kArmDisarmCommand": "MAV_CMD_COMPONENT_ARM_DISARM",
         "kSetModeCommand": "MAV_CMD_DO_SET_MODE",
         "kTakeoffCommand": "MAV_CMD_NAV_TAKEOFF",
+        "kQuadplaneGuidedTakeoffCommand": "MAV_CMD_NAV_TAKEOFF",
         "kLandCommand": "MAV_CMD_NAV_LAND",
         "kReturnToLaunchCommand": "MAV_CMD_NAV_RETURN_TO_LAUNCH",
         "kSetServoCommand": "MAV_CMD_DO_SET_SERVO",

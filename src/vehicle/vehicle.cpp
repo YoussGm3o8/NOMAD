@@ -136,6 +136,48 @@ CommandResult Vehicle::takeoff(float altitude_m) {
     return wait_for_altitude(altitude_m * 0.8F, "takeoff");
 }
 
+CommandResult Vehicle::vtol_takeoff(float altitude_m) {
+    if (!std::isfinite(altitude_m) || altitude_m <= 0.0F) {
+        return {false, "vtol takeoff altitude must be finite and greater than zero"};
+    }
+    const auto admission = require_operation(VehicleOperation::VtolTakeoff);
+    if (!admission.success) {
+        return admission;
+    }
+
+    const auto initial_state = connection_.get_state();
+    if (!initial_state.position_valid) {
+        return {false, "vtol takeoff requires a valid position"};
+    }
+    if (position_is_stale(initial_state)) {
+        return {false, "vtol takeoff requires a fresh position"};
+    }
+
+    const auto guided_result = set_guided_mode();
+    if (!guided_result.success) {
+        return guided_result;
+    }
+    const auto pre_takeoff_state = connection_.get_state();
+    if (pre_takeoff_state.identity.aircraft_class != telemetry::AircraftClass::QuadPlane) {
+        return {false, "vtol takeoff identity is no longer QuadPlane"};
+    }
+    if (!pre_takeoff_state.armed) {
+        const auto arm_result = arm();
+        if (!arm_result.success) {
+            return arm_result;
+        }
+    }
+
+    // ArduPlane's direct QuadPlane GUIDED path accepts NAV_TAKEOFF (22), not a
+    // generic Copter interpretation. Completion is checked from telemetry below.
+    const auto result = send_command(
+        make_command(kQuadplaneGuidedTakeoffCommand, {0, 0, 0, 0, 0, 0, altitude_m}), "vtol takeoff");
+    if (!result.success) {
+        return result;
+    }
+    return wait_for_vtol_takeoff(altitude_m);
+}
+
 CommandResult Vehicle::goto_location(const Location &location) {
     if (!std::isfinite(location.latitude_deg) || location.latitude_deg < -90.0 || location.latitude_deg > 90.0) {
         return {false, "latitude must be finite and between -90 and 90 degrees"};
@@ -290,6 +332,34 @@ CommandResult Vehicle::wait_for_altitude(float minimum_altitude_m, const char *n
     return wait_for_state_until(
         kTakeoffStateTimeout, std::string(name) + " acknowledgement received but altitude verification timed out",
         verdict);
+}
+
+CommandResult Vehicle::wait_for_vtol_takeoff(float target_altitude_m) {
+    const auto minimum_altitude_m = target_altitude_m * 0.8F;
+    const auto verdict = [this, minimum_altitude_m](const telemetry::VehicleState &state)
+        -> std::optional<CommandResult> {
+        if (state.identity.aircraft_class != telemetry::AircraftClass::QuadPlane) {
+            return CommandResult{false, "vtol takeoff verification failed: aircraft identity changed"};
+        }
+        if (!state.armed) {
+            return CommandResult{false, "vtol takeoff verification failed: vehicle disarmed"};
+        }
+        if (!telemetry::is_guided_mode(telemetry::AircraftClass::QuadPlane, state.custom_mode)) {
+            return CommandResult{false, "vtol takeoff verification failed: guided mode was lost"};
+        }
+        if (!state.position_valid) {
+            return std::nullopt;
+        }
+        if (position_is_stale(state)) {
+            return CommandResult{false, "vtol takeoff verification failed: position feed is stale"};
+        }
+        if (state.position.relative_altitude_m < minimum_altitude_m) {
+            return std::nullopt;
+        }
+        return CommandResult{true, "vtol takeoff verified"};
+    };
+    return wait_for_state_until(kTakeoffStateTimeout,
+                                "vtol takeoff acknowledgement received but climb verification timed out", verdict);
 }
 
 CommandResult Vehicle::wait_for_location(const Location &location) {
