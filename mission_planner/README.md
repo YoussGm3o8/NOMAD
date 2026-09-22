@@ -36,3 +36,19 @@ termination behavior is changed or flight-qualified by the requirements review.
 Pure helper checks are available through the `test-plugin-*` Pixi tasks. See
 [the canonical architecture](../docs/architecture.md) and
 [development workflow](../docs/development.md) for ownership and verification.
+
+## Multi-Link routing configuration
+
+Link Status now renders configured physical links and provides manual selection
+per stable ID. Existing LTE/RadioMaster fields remain a compatibility input; add
+`RouterLinks` and `RouterConsumers` to the plugin JSON for additional links.
+See the [shared router reference](../infra/transport/ground_router/README.md) for
+field names, a complete host JSON example, port ownership and recovery policy.
+The plugin's default C++ listener is now loopback `14601`, separate from physical
+RadioMaster `14550`; the router feeds it from `14602`.
+
+For standalone ownership disable embedded Multi-Link routing and connect native
+MP via UDPCl to the host's `14600`. MP restart then leaves the host running.
+Remote host status/control from the plugin is not yet implemented. The plugin
+still launches one-shot C++ commands; do not start simultaneous CLI processes
+that bind the same consumer endpoint.

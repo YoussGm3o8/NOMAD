@@ -166,6 +166,16 @@ namespace NOMAD.MissionPlanner
             // router toggle in lockstep unless a future UI exposes them separately.
             RouterEnabled = DualLinkEnabled;
 
+            if (DualLinkEnabled && CoreMavlinkEndpoint == "udpin:0.0.0.0:14550")
+            {
+                CoreMavlinkEndpoint = Connectivity.NomadCoreClient.DefaultEndpoint;
+            }
+            if (RouterConsumers != null)
+            {
+                var mp = RouterConsumers.Find(c => c.Id == "mission_planner");
+                if (mp != null) { mp.RouterPort = RouterLocalPort; }
+            }
+
             // Keep FOV within a practical range for 3D view usability.
             if (SlamCameraFovDeg < 30.0f || SlamCameraFovDeg > 140.0f)
             {
@@ -264,6 +274,8 @@ namespace NOMAD.MissionPlanner
             ActiveProfile = defaults.ActiveProfile;
             CoreExePath = defaults.CoreExePath;
             CoreMavlinkEndpoint = defaults.CoreMavlinkEndpoint;
+            RouterLinks = defaults.RouterLinks;
+            RouterConsumers = defaults.RouterConsumers;
             CoreApiKey = defaults.CoreApiKey;
             VideoUrl = defaults.VideoUrl;
             VideoNetworkCaching = defaults.VideoNetworkCaching;

@@ -50,6 +50,14 @@ internal static partial class DualLinkStressTests
 
     private static async Task RunAll()
     {
+        await RunAsync("multi-link: one, two and four enabled links", LinkCollectionSizes);
+        Run("review: local address and topology guard", LocalAddressGuardChecks);
+        Run("review: generic link status and membership", LinkStatusDisplayChecks);
+        await RunAsync("review: resolved local destination rejected", ResolvedLocalDestination);
+        Run("multi-link: configuration rejection", MultiConfigValidation);
+        await RunAsync("multi-link: three links, consumers, pinning and cleanup", MultiLinkRouting);
+        await RunAsync("multi-link: initial announcement", InitialAnnouncement);
+        await RunAsync("multi-link: TCP isolation and reconnect", TcpIsolation);
         Run("parser: single v2 frame", ParserSingleV2);
         Run("parser: single v1 frame", ParserSingleV1);
         Run("parser: byte-by-byte split delivery", ParserByteSplit);

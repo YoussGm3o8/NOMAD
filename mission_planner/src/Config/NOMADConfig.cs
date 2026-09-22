@@ -39,7 +39,13 @@ namespace NOMAD.MissionPlanner
         /// Endpoint the core binds (listen mode) for the MAVLink stream.
         /// Must match the core's NOMAD_MAVLINK_ENDPOINT on the same host.
         /// </summary>
-        public string CoreMavlinkEndpoint { get; set; } = "udpin:0.0.0.0:14550";
+        public string CoreMavlinkEndpoint { get; set; } = "udpin:127.0.0.1:14601";
+        public List<LinkConfig> RouterLinks { get; set; }
+        public List<ConsumerConfig> RouterConsumers { get; set; } = new List<ConsumerConfig>
+        {
+            new ConsumerConfig { Id = "mission_planner", RouterPort = 14600 },
+            new ConsumerConfig { Id = "nomad_core", RouterPort = 14602, ClientPort = 14601 }
+        };
 
         /// <summary>
         /// API key passed to the core as NOMAD_API_KEY. Must match the key the

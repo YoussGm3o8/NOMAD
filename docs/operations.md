@@ -211,3 +211,19 @@ firmware pairs; test clean install and rollback. Plugin build/install scripts
 may overwrite an installed plugin, and profile-load changes local runtime state.
 Perform those only as separately authorized operations. No runtime infrastructure
 was changed by this planning review.
+
+## Ground router process and endpoints
+
+Use the [ground router configuration](https://github.com/YoussGm3o8/NOMAD/blob/main/infra/transport/ground_router/README.md)
+for generic N-link deployment and the standalone host build/run commands. The
+example reserves physical UDP `14560`, `14550` and `14570` for the router. MP uses
+UDPCl to router-owned loopback `14600`; C++ alone binds loopback `14601`, receiving
+from the separate router-owned `14602` socket. Do not bind C++ to the RadioMaster
+physical port. Stop the embedded router before starting the standalone host with
+the same endpoints. An absent consumer does not stop other consumers.
+
+The standalone host can outlive Mission Planner; its plugin status/config client
+is still pending. Select either embedded or standalone ownership explicitly.
+Multiple raw clients can issue MAVLink, so integrated operation still needs
+command-authority handover/inhibition. Stateful mission/fence/FTP exchanges have
+no router transaction coordinator and require caller recovery on link changes.

@@ -29,7 +29,7 @@ namespace NOMAD.MissionPlanner.Connectivity
         /// The core binds this endpoint in listen mode and learns the vehicle
         /// peer from the first datagram (same as the SITL runners).
         /// </summary>
-        public const string DefaultEndpoint = "udpin:0.0.0.0:14550";
+        public const string DefaultEndpoint = "udpin:127.0.0.1:14601";
 
         public string ExecutablePath { get; }
         public string Endpoint { get; }

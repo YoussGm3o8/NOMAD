@@ -935,3 +935,25 @@ documentation, hosted Phase A smoke, or local regressions pass.
   compared against the pre-edit snapshot to verify preservation.
 - No SITL startup, hardware actuation, deployment, hosted CI or MAVSDK rebuild
   was performed in this review. Earlier pass counts are historical only.
+
+## Ground router extraction
+
+The transport slice based on PR #20's merged `main`
+(`c4a82b74d931d1022f9c4c9742c96d51e6245380`) replaces the hard-coded two-link router
+with owned per-link UDP/TCP/COM state and arbitrary stable IDs. Legacy settings
+translate to two configured entries. The shared MP-independent implementation,
+standalone host, collection-based plugin status and two-consumer socket topology
+are described in the [router README](https://github.com/YoussGm3o8/NOMAD/blob/main/infra/transport/ground_router/README.md).
+
+`pixi run test-ground-router` builds the standalone library/host and runs legacy
+router regressions, three-link handover dedup, single-recipient outbound commands,
+parameter pinning, invalid configuration/override checks, per-source parser and
+sequence isolation, TCP reconnect, consumer isolation and a standalone loopback
+process smoke with failover and immediate port reuse.
+
+The plugin remains an optional embedded host; remote standalone status/control is
+follow-up work. This does not implement persistent C++ IPC, remove one-shot CLI
+clients, arbitrate global command authority, qualify an aircraft operation or
+establish independent physical redundancy. Mission/fence/FTP transaction pinning
+is not implemented. QuadPlane transition qualification remains the active G-M
+item; aircraft capability and flight-operation sources are unchanged.

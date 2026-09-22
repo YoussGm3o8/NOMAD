@@ -137,6 +137,7 @@
       SDK-style project). obj/ and bin/ are excluded so generated
       AssemblyAttributes and prior build output are never compiled.
     -->
+    <Compile Include="..\..\infra\transport\ground_router\*.cs" />
     <Compile Include="**\*.cs" Exclude="obj\**\*.cs;bin\**\*.cs" />
   </ItemGroup>
 

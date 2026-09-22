@@ -46,12 +46,12 @@ namespace NOMAD.MissionPlanner
 
         private TabPage CreateDualLinkTab()
         {
-            var tab = CreateTabPage("Dual Link");
+            var tab = CreateTabPage("Multi-Link");
             int y = 15;
 
-            AddSectionLabel(tab, "MAVLink Dual Link (LTE + RadioMaster)", ref y);
+            AddSectionLabel(tab, "MAVLink Multi-Link (LTE + RadioMaster)", ref y);
 
-            _chkDualLinkEnabled = AddCheckBox(tab, "Enable NOMAD dual-link router", 20, y, Color.LimeGreen);
+            _chkDualLinkEnabled = AddCheckBox(tab, "Enable NOMAD multi-link router", 20, y, Color.LimeGreen);
             _chkDualLinkEnabled.CheckedChanged += (s, e) => UpdateDualLinkControlsState();
             y += 35;
 
