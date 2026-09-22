@@ -218,14 +218,14 @@ internal static partial class DualLinkStressTests
         using (var mp = UdpSink.ConnectedTo(port))
         {
             var config = MultiConfig(port);
-            config.Links[0].RemoteHost = "127.0.0.1";
+            config.Links[0].RemoteHost = "localhost";
             config.Links[0].RemotePort = ((IPEndPoint)aircraft.Client.Client.LocalEndPoint).Port;
             config.Links[1].RemoteHost = "127.0.0.1";
             config.Links[1].RemotePort = ((IPEndPoint)standby.Client.Client.LocalEndPoint).Port;
             using (var router = new GroundLinkRouter(config))
             {
                 router.Start();
-                await Task.Delay(100);
+                Check(await WaitUntil(() => router.Links[0].IsOpen, 2000), "UDP hostname resolves");
                 mp.Send(Frames.Heartbeat(255, 190, 1));
                 var received = new List<byte[]>();
                 Check(await WaitUntil(() => { received.AddRange(aircraft.Drain()); return received.Count == 1; },

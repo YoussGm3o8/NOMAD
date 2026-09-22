@@ -102,9 +102,9 @@ namespace NOMAD.MissionPlanner
                 throw new ArgumentException("TCP host required");
             }
             if (link.Transport == "UDP" && !string.IsNullOrEmpty(link.RemoteHost) &&
-                (!IPAddress.TryParse(link.RemoteHost, out address) || !Port(link.RemotePort)))
+                (Uri.CheckHostName(link.RemoteHost) == UriHostNameType.Unknown || !Port(link.RemotePort)))
             {
-                throw new ArgumentException("UDP remote requires an IP address and port");
+                throw new ArgumentException("UDP remote requires a valid host and port");
             }
         }
 

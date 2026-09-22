@@ -3,6 +3,7 @@
 
 using System;
 using System.IO.Ports;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
@@ -22,13 +23,16 @@ namespace NOMAD.MissionPlanner
         private UdpClient _udp;
         private TcpClient _tcp;
         private Task _connecting;
+        private Task<IPAddress[]> _resolving;
+        private readonly System.Collections.Generic.HashSet<int> _localPorts;
         private SerialPort _serial;
         private IPEndPoint _remote;
         private readonly byte[] _buffer = new byte[8192];
 
-        internal PhysicalLink(LinkConfig config)
+        internal PhysicalLink(LinkConfig config, System.Collections.Generic.HashSet<int> localPorts)
         {
             Config = config;
+            _localPorts = localPorts;
             Stats = new LinkSourceStats { Type = config.Id, Name = config.Name ?? config.Id,
                 Endpoint = config.Transport == "COM" ? config.Device : config.Transport + ":" + config.Port };
         }
@@ -44,9 +48,16 @@ namespace NOMAD.MissionPlanner
                 _udp = OpenUdp(IPAddress.Parse(Config.BindAddress), Config.Port);
                 if (!string.IsNullOrEmpty(Config.RemoteHost))
                 {
-                    _remote = new IPEndPoint(IPAddress.Parse(Config.RemoteHost), Config.RemotePort);
+                    if (IPAddress.TryParse(Config.RemoteHost, out var address))
+                    {
+                        SetRemote(address);
+                    }
+                    else
+                    {
+                        _resolving = Dns.GetHostAddressesAsync(Config.RemoteHost);
+                    }
                 }
-                Stats.IsOpen = true;
+                Stats.IsOpen = _resolving == null;
             }
             else if (Config.Transport == "TCP")
             {
@@ -84,6 +95,10 @@ namespace NOMAD.MissionPlanner
 
         internal void Poll(Action<byte[], int> receive, DateTime now)
         {
+            if (!ResolveRemote(now))
+            {
+                return;
+            }
             if (_connecting != null)
             {
                 if (!_connecting.IsCompleted && (now - LastAttempt).TotalSeconds < 2)
@@ -134,6 +149,41 @@ namespace NOMAD.MissionPlanner
             }
         }
 
+        private bool ResolveRemote(DateTime now)
+        {
+            if (_resolving == null)
+            {
+                return true;
+            }
+            if (!_resolving.IsCompleted)
+            {
+                if ((now - LastAttempt).TotalSeconds >= 2)
+                {
+                    throw new TimeoutException("UDP peer lookup timeout");
+                }
+                return false;
+            }
+            var address = _resolving.GetAwaiter().GetResult()
+                .FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork);
+            if (address == null)
+            {
+                throw new ArgumentException("UDP peer must resolve to IPv4");
+            }
+            SetRemote(address);
+            _resolving = null;
+            Stats.IsOpen = true;
+            return true;
+        }
+
+        private void SetRemote(IPAddress address)
+        {
+            if (IPAddress.IsLoopback(address) && _localPorts.Contains(Config.RemotePort))
+            {
+                throw new ArgumentException("Physical remote resolves into the local router topology");
+            }
+            _remote = new IPEndPoint(address, Config.RemotePort);
+        }
+
         internal void Send(byte[] bytes)
         {
             if (!Stats.IsOpen)
@@ -163,11 +213,11 @@ namespace NOMAD.MissionPlanner
         internal bool CanAnnounce => Stats.IsOpen && Stats.LastPacketTime == DateTime.MinValue &&
             (Config.Transport != "UDP" || _remote != null);
 
-        internal bool Opening => _connecting != null;
+        internal bool Opening => _connecting != null || _resolving != null;
         public void Dispose()
         {
             _udp?.Close(); _tcp?.Close(); _serial?.Dispose();
-            _udp = null; _tcp = null; _serial = null; _connecting = null; _remote = null;
+            _udp = null; _tcp = null; _serial = null; _connecting = null; _resolving = null; _remote = null;
             Stats.IsOpen = false; Stats.IsConnected = false; Stats.Health = LinkHealth.Disconnected;
             Stats.LastRemote = null; Stats.LastPacketTime = DateTime.MinValue;
             Stats.LastHeartbeatTime = DateTime.MinValue; HealthySince = DateTime.MinValue;

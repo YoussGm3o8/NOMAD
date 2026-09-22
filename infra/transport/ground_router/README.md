@@ -63,7 +63,8 @@ contains between 1 and 64 entries, at least one enabled. Each link has:
 - `Name`: optional display name; `Enabled`: default true.
 - `Transport`: `UDP`, `TCP`, or `COM`.
 - `Port`: UDP listener port or TCP server port; `BindAddress`: IPv4 UDP bind address.
-- `RemoteHost`: optional numeric UDP peer address, or required TCP hostname/address.
+- `RemoteHost`: optional UDP hostname/address, or required TCP hostname/address.
+  UDP hostname lookup is asynchronous and must resolve to IPv4.
   A configured UDP peer also requires `RemotePort`; otherwise replies use the
   latest UDP sender. Configure a fixed peer when source restriction is required.
 - `Device` and `BaudRate`: serial port configuration for `COM` transport.
