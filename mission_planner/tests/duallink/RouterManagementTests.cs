@@ -144,6 +144,8 @@ internal static partial class DualLinkStressTests
                     return received.Contains(93001);
                 }, 1000), "slow management client does not block MAVLink forwarding");
             }
+            Check(await RepeatedManagementDisconnects(managementPort),
+                "repeated management client disconnects are cleaned up");
 
             server.Stop();
             var rebound = new TcpListener(IPAddress.Loopback, managementPort);
@@ -210,6 +212,24 @@ internal static partial class DualLinkStressTests
             manager.StopMonitoring();
             Check(router.IsRunning, "client exit leaves physical router running");
         }
+    }
+
+    private static async Task<bool> RepeatedManagementDisconnects(int port)
+    {
+        for (var i = 0; i < 128; i++)
+        {
+            using (var client = ConnectManagement(port))
+            {
+                if (!IsOk(Exchange(client, Message("hello", 100 + i))) ||
+                    !IsOk(Exchange(client, Message("ping", 300 + i))))
+                {
+                    return false;
+                }
+            }
+            await Task.Delay(2);
+        }
+
+        return true;
     }
 
     private static bool EventSubscriptionReportsFailover(GroundLinkRouter router, int port)

@@ -116,6 +116,7 @@ internal static partial class DualLinkStressTests
         rejects(c => c.Consumers[0].ClientPort = c.Links[0].Port);
         rejects(c => { c.Links[0].RemoteHost = "127.0.0.1"; c.Links[0].RemotePort = c.Consumers[0].RouterPort; });
         rejects(c => c.BindAddress = "0.0.0.0");
+        rejects(c => c.ManagementPort = 0);
     }
 
     private static async Task MultiLinkRouting()

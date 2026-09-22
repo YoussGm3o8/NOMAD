@@ -25,6 +25,7 @@ namespace NOMAD.MissionPlanner
             private Thread _writer;
             private bool _subscribed;
             private bool _stopping;
+            private bool _disposed;
 
             internal ManagementSession(RouterManagementServer server, TcpClient client, int maxQueuedMessages)
             {
@@ -51,18 +52,25 @@ namespace NOMAD.MissionPlanner
 
             internal void Start()
             {
-                _writer = new Thread(WriteLoop)
+                lock (_gate)
                 {
-                    IsBackground = true,
-                    Name = "NOMAD router management writer",
-                };
-                _reader = new Thread(ReadLoop)
-                {
-                    IsBackground = true,
-                    Name = "NOMAD router management client",
-                };
-                _writer.Start();
-                _reader.Start();
+                    if (_disposed)
+                    {
+                        return;
+                    }
+                    _writer = new Thread(WriteLoop)
+                    {
+                        IsBackground = true,
+                        Name = "NOMAD router management writer",
+                    };
+                    _reader = new Thread(ReadLoop)
+                    {
+                        IsBackground = true,
+                        Name = "NOMAD router management client",
+                    };
+                    _writer.Start();
+                    _reader.Start();
+                }
             }
 
             internal void EnqueueResponse(byte[] message)
@@ -77,17 +85,26 @@ namespace NOMAD.MissionPlanner
 
             internal void Stop()
             {
+                Thread reader;
+                Thread writer;
                 lock (_gate)
                 {
+                    if (_disposed)
+                    {
+                        return;
+                    }
+                    _disposed = true;
                     _stopping = true;
                     _subscribed = false;
                     _outgoing.Clear();
                     _pendingEventKinds.Clear();
+                    reader = _reader;
+                    writer = _writer;
                 }
                 _outgoingReady.Set();
                 try { _client.Close(); } catch { }
-                if (_reader != null && _reader != Thread.CurrentThread) _reader.Join(500);
-                if (_writer != null && _writer != Thread.CurrentThread) _writer.Join(500);
+                if (reader != null && reader != Thread.CurrentThread) reader.Join();
+                if (writer != null && writer != Thread.CurrentThread) writer.Join();
                 _outgoingReady.Dispose();
             }
 
@@ -129,8 +146,8 @@ namespace NOMAD.MissionPlanner
                 }
                 finally
                 {
+                    Stop();
                     _server.RemoveSession(this);
-                    StopTransport();
                 }
             }
 
@@ -163,7 +180,11 @@ namespace NOMAD.MissionPlanner
                 }
                 catch (Exception)
                 {
-                    StopTransport();
+                }
+                finally
+                {
+                    Stop();
+                    _server.RemoveSession(this);
                 }
             }
 
@@ -188,8 +209,8 @@ namespace NOMAD.MissionPlanner
                         return;
                     }
                     _outgoing.Enqueue(message);
+                    _outgoingReady.Set();
                 }
-                _outgoingReady.Set();
             }
 
             private bool DropOldestEvent()
@@ -247,13 +268,6 @@ namespace NOMAD.MissionPlanner
             private bool IsStopping()
             {
                 lock (_gate) { return _stopping; }
-            }
-
-            private void StopTransport()
-            {
-                lock (_gate) { _stopping = true; }
-                try { _client.Close(); } catch { }
-                _outgoingReady.Set();
             }
 
             private sealed class OutboundMessage
