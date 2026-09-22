@@ -148,7 +148,10 @@ does not qualify disarm, arbitrary modes, generic takeoff/goto, navigation,
 return, landing or link-loss behavior. Copter mode numbers and
 velocity-stop behavior cannot stand in for those tests. Gazebo/Isaac are
 optional sensor-evidence tools; they are not prerequisites for basic unit or
-server-contract tests.
+server-contract tests. The independent pymavlink mode driver establishes
+`AUTO` because NOMAD deliberately rejects arbitrary QuadPlane `set_mode`; this
+does not qualify an autonomous GUIDED -> AUTO -> transition sequence or transfer
+command authority to the test driver.
 
 ## Adapter and optional build checks
 

@@ -96,7 +96,7 @@ class Vehicle {
     CommandResult wait_for_vtol_takeoff(float target_altitude_m);
     std::optional<std::string> vtol_takeoff_state_error(const telemetry::VehicleState &state) const;
     CommandResult wait_for_fixed_wing_transition(std::uint8_t expected_system_id,
-                                                 std::chrono::steady_clock::time_point command_state_timestamp);
+                                                 std::chrono::steady_clock::time_point ack_boundary);
     std::optional<std::string> vtol_transition_state_error(const telemetry::VehicleState &state,
                                                             std::uint8_t expected_system_id,
                                                             bool require_precondition) const;

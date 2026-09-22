@@ -368,6 +368,14 @@ command, records the independent `MC -> TRANSITION_TO_FW -> FW` sequence and
 reports success only after fresh `FW`. The forward waypoint is test setup for
 this flight primitive; it is not fixed-wing route qualification.
 
+Authority boundary: this primitive requires ArduPlane `AUTO`, but NOMAD still
+rejects arbitrary QuadPlane `set_mode`. NOMAD therefore cannot yet autonomously
+perform the complete `GUIDED` VTOL-takeoff -> `AUTO` -> fixed-wing-transition
+sequence. The live harness uses an independent pymavlink operator/test driver
+to establish `AUTO`; that driver is qualification setup, not a NOMAD capability
+or a command-authority handover. The new capability admits only the already-
+established, narrowly validated transition operation.
+
 Focused falsification covers QuadPlane capability admission and zero
 transmission for Copter, Plane and Unknown; command 3000 construction with
 parameter 4; rejected ACKs; ACK-without-completion; an intermediate-state

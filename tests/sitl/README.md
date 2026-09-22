@@ -25,11 +25,14 @@ evidence; merge requests must link a successful current-head live run.
   GUIDED mode and a fresh-position climb to the requested delta from the
   observed baseline, within a fixed 0.5 m completion margin.
 - scripts/dev/core_sitl_quadplane_transition.py starts a fresh pinned profile,
-  establishes `AUTO` with authoritative `EXTENDED_SYS_STATE` multicopter state,
+  uses the independent pymavlink operator/test driver to establish `AUTO` with
+  authoritative `EXTENDED_SYS_STATE` multicopter state,
   issues `MAV_CMD_DO_VTOL_TRANSITION` with `MAV_VTOL_STATE_FW`, and requires a
   newer authoritative `fixed_wing` state. Its forward waypoint supplies the
   tilt-tri airspeed condition; it is setup for this primitive, not route
-  qualification.
+  qualification. NOMAD deliberately rejects arbitrary QuadPlane `set_mode`, so
+  this does not qualify a complete autonomous GUIDED -> AUTO -> transition
+  sequence.
 
 The obsolete sitl-gimbal task was removed with runtime wiring repair. No successful gimbal evidence is claimed.
 

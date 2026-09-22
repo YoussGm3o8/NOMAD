@@ -29,6 +29,9 @@ void test_quadplane_transition_constructs_command_and_verifies_fixed_wing_state(
     FakeConnection connection;
     connection.connect();
     configure_quadplane_transition_state(connection);
+    connection.auto_stamp_fresh_fields = false;
+    connection.complete_transition_on_command = false;
+    connection.complete_transition_after_ack_on_poll = true;
     nomad::vehicle::Vehicle vehicle(connection);
 
     const auto result = vehicle.transition_to_fixed_wing();
@@ -38,6 +41,23 @@ void test_quadplane_transition_constructs_command_and_verifies_fixed_wing_state(
     CHECK(connection.command_history.size() == 1);
     CHECK(connection.command_history.front().id == 3000);
     CHECK(connection.command_history.front().parameters[0] == 4.0F);
+    CHECK(connection.state->vtol_state == nomad::telemetry::VtolState::FixedWing);
+}
+
+void test_quadplane_transition_does_not_accept_fixed_wing_state_before_ack() {
+    FakeConnection connection;
+    connection.connect();
+    configure_quadplane_transition_state(connection);
+    connection.auto_stamp_fresh_fields = false;
+    connection.complete_transition_on_command = true;
+    nomad::vehicle::Vehicle vehicle(connection, {}, {}, {}, std::chrono::milliseconds(2000),
+                                    std::chrono::seconds(30), std::chrono::milliseconds(20));
+
+    const auto result = vehicle.transition_to_fixed_wing();
+
+    CHECK(!result.success);
+    CHECK(result.message ==
+          "transition to fixed wing acknowledgement received but fixed-wing state verification timed out");
     CHECK(connection.state->vtol_state == nomad::telemetry::VtolState::FixedWing);
 }
 
@@ -177,6 +197,7 @@ void test_unsupported_transition_aircrafts_reject_before_transmission() {
 int main() {
     return nomad::test::run_tests([] {
         test_quadplane_transition_constructs_command_and_verifies_fixed_wing_state();
+        test_quadplane_transition_does_not_accept_fixed_wing_state_before_ack();
         test_quadplane_transition_requires_auto_and_fresh_authoritative_state();
         test_quadplane_transition_propagates_ack_failure();
         test_quadplane_transition_fails_when_state_disappears_after_ack();

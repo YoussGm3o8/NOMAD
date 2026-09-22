@@ -28,7 +28,6 @@ CommandResult Vehicle::transition_to_fixed_wing() {
         return {false, "transition to fixed wing rejected: " + *error};
     }
 
-    const auto command_state_timestamp = initial_state.vtol_state_updated_at;
     const auto result = send_command(
         make_command(kQuadplaneTransitionCommand,
                      {static_cast<float>(static_cast<std::uint8_t>(telemetry::VtolState::FixedWing)), 0, 0, 0, 0, 0,
@@ -37,7 +36,9 @@ CommandResult Vehicle::transition_to_fixed_wing() {
     if (!result.success) {
         return result;
     }
-    return wait_for_fixed_wing_transition(initial_state.system_id, command_state_timestamp);
+    // A fixed-wing observation received while waiting for the ACK is not post-ACK proof.
+    const auto ack_boundary = std::chrono::steady_clock::now();
+    return wait_for_fixed_wing_transition(initial_state.system_id, ack_boundary);
 }
 
 std::optional<std::string> Vehicle::vtol_transition_state_error(const telemetry::VehicleState &state,
@@ -74,13 +75,13 @@ std::optional<std::string> Vehicle::vtol_transition_state_error(const telemetry:
 }
 
 CommandResult Vehicle::wait_for_fixed_wing_transition(
-    std::uint8_t expected_system_id, std::chrono::steady_clock::time_point command_state_timestamp) {
-    const auto verdict = [this, expected_system_id, command_state_timestamp](const telemetry::VehicleState &state)
+    std::uint8_t expected_system_id, std::chrono::steady_clock::time_point ack_boundary) {
+    const auto verdict = [this, expected_system_id, ack_boundary](const telemetry::VehicleState &state)
         -> std::optional<CommandResult> {
         if (const auto error = vtol_transition_state_error(state, expected_system_id, false); error.has_value()) {
             return CommandResult{false, "transition to fixed wing verification failed: " + *error};
         }
-        if (state.vtol_state_updated_at <= command_state_timestamp) {
+        if (state.vtol_state_updated_at <= ack_boundary) {
             return std::nullopt;
         }
         switch (state.vtol_state) {

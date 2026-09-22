@@ -69,6 +69,10 @@ close its integration or release gate.
   authoritative multicopter state. Live pinned SITL observed
   `MC -> TRANSITION_TO_FW -> FW`; completion required a newer fresh
   `EXTENDED_SYS_STATE.vtol_state=FW` observation after an accepted ACK.
+  The primitive assumes `AUTO` has already been established by an
+  operator/test authority; NOMAD still rejects arbitrary QuadPlane
+  `set_mode` and cannot yet perform the complete autonomous
+  `GUIDED` VTOL-takeoff -> `AUTO` -> transition sequence.
   Focused tests cover unsupported non-transmission, rejected ACK, ACK without
   completion, intermediate timeout, stale/missing state and link interruption.
   Fixed-wing route, return, VTOL-back, landing, link-loss strategy and hardware
