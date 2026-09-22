@@ -59,10 +59,9 @@ namespace NOMAD.MissionPlanner
             ValidateConsumers(consumers, ports);
             foreach (var link in links.Where(l => l.Enabled && l.Transport == "UDP"))
             {
-                if (IPAddress.TryParse(link.RemoteHost, out var remote) && IPAddress.IsLoopback(remote) &&
-                    ports.Contains(link.RemotePort))
+                if (IPAddress.TryParse(link.RemoteHost, out var remote))
                 {
-                    throw new ArgumentException("Physical remote points back into the local router topology");
+                    LocalAddressGuard.ValidateRemote(remote, link.RemotePort, ports);
                 }
             }
         }

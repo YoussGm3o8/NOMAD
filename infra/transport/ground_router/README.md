@@ -86,7 +86,9 @@ consumers. Exact downlink reflections within the 750 ms dedup window are dropped
 Do not add an external relay that loops traffic back after that window.
 
 Configuration rejects overlapping physical UDP/router/client ports and physical
-UDP destinations that point into the local topology. Port binds are exclusive.
+UDP destinations that point into the local topology through loopback or any local
+IPv4 interface address. The same check runs after hostname resolution and reads
+the current interface addresses on each validation/reconnect. Port binds are exclusive.
 A failed physical connection retries independently; a local bind failure aborts
 startup and closes resources already opened. Missing consumers do not stop delivery.
 Structural configuration changes require restart; per-link settings are copied

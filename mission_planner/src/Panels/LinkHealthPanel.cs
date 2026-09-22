@@ -246,16 +246,16 @@ namespace NOMAD.MissionPlanner
             var row = new FlowLayoutPanel
             { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true, BackColor = Color.Transparent };
             _linkRow = row;
-            RebuildLinkCards();
+            RebuildLinkCards(_cm.LinkStatistics);
             return row;
         }
 
-        private void RebuildLinkCards()
+        private void RebuildLinkCards(IReadOnlyList<LinkStatistics> links)
         {
             foreach (var card in _cards.Values) { card.Dispose(); }
             _cards.Clear();
             _linkRow.Controls.Clear();
-            foreach (var stats in _cm.LinkStatistics)
+            foreach (var stats in links)
             {
                 var id = stats.Type;
                 var card = new LinkCard(stats.Name, id) { Width = 330, Height = 270 };
@@ -489,31 +489,28 @@ namespace NOMAD.MissionPlanner
         {
             try
             {
+                var links = _cm.LinkStatistics;
                 var active = _cm.ActiveLink;
                 var ovr = _cm.ManualOverride;
 
                 _lblActive.Text = $"Active: {(active == LinkType.None ? "—" : active.ToString())}";
-                _lblActive.ForeColor = active switch
-                {
-                    LinkType.LTE => NOMADTheme.SUCCESS,
-                    LinkType.RadioMaster => Color.MediumTurquoise,
-                    _ => NOMADTheme.WARNING,
-                };
+                _lblActive.ForeColor = string.IsNullOrEmpty(active)
+                    ? NOMADTheme.WARNING : NOMADTheme.TEXT_PRIMARY;
 
                 bool running = _cm.IsMonitoring;
-                _lblRouterStatus.Text = running ? "Router: running — both links open" : "Router: stopped";
+                _lblRouterStatus.Text = LinkStatusDisplay.FormatRouterStatus(running, links);
                 _lblRouterStatus.ForeColor = running ? NOMADTheme.TEXT_SECONDARY : NOMADTheme.ERROR;
                 _lblLocalEndpoint.Text = $"Local: {_cm.LocalMergedEndpoint}   (set Mission Planner to UDP Client / UDPCl to this port)";
 
-                if (!_cm.LinkStatistics.Select(stats => stats.Type).SequenceEqual(_cards.Keys))
+                if (LinkStatusDisplay.HasMembershipChanged(links, _cards.Keys))
                 {
-                    RebuildLinkCards();
+                    RebuildLinkCards(links);
                     _cmbPreferred.Items.Clear();
                     _cmbPreferred.Items.Add("");
-                    foreach (var stats in _cm.LinkStatistics) { _cmbPreferred.Items.Add(stats.Type); }
+                    foreach (var stats in links) { _cmbPreferred.Items.Add(stats.Type); }
                     _cmbPreferred.SelectedItem = _cm.Config.PreferredLink;
                 }
-                foreach (var stats in _cm.LinkStatistics)
+                foreach (var stats in links)
                 {
                     if (_cards.TryGetValue(stats.Type, out var card))
                     { card.Update(stats, active == stats.Type, ovr == stats.Type); }

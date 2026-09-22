@@ -177,10 +177,7 @@ namespace NOMAD.MissionPlanner
 
         private void SetRemote(IPAddress address)
         {
-            if (IPAddress.IsLoopback(address) && _localPorts.Contains(Config.RemotePort))
-            {
-                throw new ArgumentException("Physical remote resolves into the local router topology");
-            }
+            LocalAddressGuard.ValidateRemote(address, Config.RemotePort, _localPorts);
             _remote = new IPEndPoint(address, Config.RemotePort);
         }
 
