@@ -32,13 +32,13 @@ def get_sitl_port() -> str:
     return port
 
 
-def run_cli(binary: Path, port: str, *arguments: str) -> str:
+def run_cli(binary: Path, port: str, *arguments: str, timeout: int = 30) -> str:
     endpoint = f"udpin:0.0.0.0:{port}"
     result = subprocess.run(
         [str(binary), *arguments, "--endpoint", endpoint],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=timeout,
         check=False,
     )
     if result.returncode != 0:

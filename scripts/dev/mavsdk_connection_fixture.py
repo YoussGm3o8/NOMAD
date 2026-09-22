@@ -53,6 +53,7 @@ from mavsdk_peer import (
     COMMAND_DO_SET_MODE,
     COMMAND_DO_SET_RELAY,
     COMMAND_DO_SET_SERVO,
+    COMMAND_DO_VTOL_TRANSITION,
     COMMAND_NAV_LAND,
     COMMAND_NAV_RETURN_TO_LAUNCH,
     COMMAND_NAV_TAKEOFF,
@@ -269,6 +270,35 @@ def case_quadplane_vtol_takeoff_is_verified(cli: Path) -> None:
     )
 
 
+def case_quadplane_transition_is_verified(cli: Path) -> None:
+    result, observed = run_cli_case(
+        cli,
+        "transition-to-fixed-wing",
+        params={"Q_ENABLE": 1.0},
+        vehicle_type=mavlink.MAV_TYPE_FIXED_WING,
+        autopilot_type=mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
+        initial_mode=10,
+        initial_armed=True,
+        vtol_state=mavlink.MAV_VTOL_STATE_MC,
+        transition_reports_intermediate=True,
+        transition_reaches_fixed_wing=True,
+    )
+    parameters = find_parameters(observed, COMMAND_DO_VTOL_TRANSITION)
+    command_ids = [command for _kind, command, _frame, _parameters in observed if command == COMMAND_DO_VTOL_TRANSITION]
+    require(
+        result.returncode == 0 and "transition to fixed wing verified" in result.stdout,
+        "QuadPlane transition is verified from EXTENDED_SYS_STATE fixed-wing state",
+        describe(result, observed),
+    )
+    require(
+        command_ids == [COMMAND_DO_VTOL_TRANSITION]
+        and parameters is not None
+        and parameters[0] == float(mavlink.MAV_VTOL_STATE_FW),
+        "QuadPlane transition uses DO_VTOL_TRANSITION with MAV_VTOL_STATE_FW",
+        describe(result, observed),
+    )
+
+
 def case_goto_is_verified(cli: Path) -> None:
     result, observed = run_cli_case(cli, "goto", "45.5027", "-73.5663", "5")
     parameters = find_parameters(observed, COMMAND_DO_REPOSITION, "COMMAND_INT")
@@ -413,6 +443,7 @@ def main() -> int:
     case_mode_is_verified(cli)
     case_takeoff_is_verified(cli)
     case_quadplane_vtol_takeoff_is_verified(cli)
+    case_quadplane_transition_is_verified(cli)
     case_goto_is_verified(cli)
     case_rtl_is_verified(cli)
     case_land_is_verified(cli)

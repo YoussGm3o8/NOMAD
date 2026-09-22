@@ -141,6 +141,11 @@ def test_quadplane_vtol_takeoff_is_verified_from_climb_state() -> None:
 
 
 @requires_mavsdk_build
+def test_quadplane_transition_is_verified_from_vtol_state() -> None:
+    fixture.case_quadplane_transition_is_verified(CLI)
+
+
+@requires_mavsdk_build
 def test_goto_is_verified_from_position() -> None:
     fixture.case_goto_is_verified(CLI)
 

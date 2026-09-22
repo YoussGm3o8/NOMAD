@@ -56,16 +56,30 @@ close its integration or release gate.
   `quadplane-tilttri` profile, then verify armed state, the requested climb
   delta from the final pre-command relative altitude, and authoritative state
   with a fixed 0.5 m completion margin plus timeout/failure cases.
-  Do not add transition, route, return or landing behavior in this slice.
+  Transition qualification is recorded separately; route, return and landing
+  remain independent slices.
   Falsification: an ACK is accepted as completion, the generic Copter takeoff
   path is reused silently, or a failed/partial climb reports success.
 
-- [~] G-M QuadPlane transition qualification: qualify one reviewed
-  QuadPlane VTOL-to-fixed-wing transition mechanism for the pinned profile and
-  verify authoritative transition state with timeout/failure cases. Do not add
-  route, return, VTOL landing or link-loss strategy in this slice.
-  Falsification: a transition ACK is treated as completion, fixed-wing mode is
-  inferred from a command alone, or a partial transition reports success.
+- [x] G-M QuadPlane transition qualification: the pinned ArduPlane 4.7.1
+  `quadplane-tilttri` profile explicitly uses `Q_ENABLE=2`, `Q_ASSIST_SPEED=6`,
+  `Q_TRANSITION_MS=5000`, and disabled ArduPilot transition-failure action.
+  NOMAD qualifies exactly one mechanism: `MAV_CMD_DO_VTOL_TRANSITION` with
+  `param1=MAV_VTOL_STATE_FW`, admitted only for QuadPlane in fresh `AUTO` /
+  authoritative multicopter state. Live pinned SITL observed
+  `MC -> TRANSITION_TO_FW -> FW`; completion required a newer fresh
+  `EXTENDED_SYS_STATE.vtol_state=FW` observation after an accepted ACK.
+  Focused tests cover unsupported non-transmission, rejected ACK, ACK without
+  completion, intermediate timeout, stale/missing state and link interruption.
+  Fixed-wing route, return, VTOL-back, landing, link-loss strategy and hardware
+  qualification remain open.
+
+- [~] G-M standalone-router status/config slice: define a versioned local
+  status/config protocol for `nomad-link-router.exe` and a Mission Planner
+  client for that standalone host. This slice must not carry flight command
+  authority; persistent C++ IPC and explicit command-authority handover remain
+  later work. Falsification: an unversioned client silently changes behavior,
+  or the status/config path can issue flight commands.
 
 - [x] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
   datagram parsing, prove nonzero-then-zero ordering independently, and rerun the

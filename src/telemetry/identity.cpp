@@ -73,6 +73,19 @@ bool is_guided_mode(AircraftClass aircraft_class, std::uint32_t custom_mode) {
     return guided_mode.has_value() && custom_mode == *guided_mode;
 }
 
+bool is_auto_mode(AircraftClass aircraft_class, std::uint32_t custom_mode) {
+    switch (aircraft_class) {
+    case AircraftClass::Copter:
+        return custom_mode == 3; // ArduPilot Copter AUTO.
+    case AircraftClass::Plane:
+    case AircraftClass::QuadPlane:
+        return custom_mode == 10; // ArduPilot Plane AUTO.
+    case AircraftClass::Unknown:
+        return false;
+    }
+    return false;
+}
+
 bool is_landing_mode(AircraftClass aircraft_class, std::uint32_t custom_mode) {
     switch (aircraft_class) {
     case AircraftClass::Copter:

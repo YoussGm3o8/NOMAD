@@ -173,6 +173,10 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     bool stale_position_after_arm{false};
     bool stale_heartbeat_after_arm{false};
     bool invalidate_gps_after_arm{false};
+    bool complete_transition_on_command{true};
+    bool transition_stays_intermediate{false};
+    bool transition_state_unavailable_on_command{false};
+    bool transition_loses_link_on_command{false};
     std::vector<nomad::mavlink::FencePoint> fence_points;
     std::vector<std::uint8_t> fence_indices;
     std::uint8_t fence_total{0};
@@ -217,6 +221,9 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
         if (state->attitude_valid) {
             state->attitude_updated_at = now;
         }
+        if (state->vtol_state_valid) {
+            state->vtol_state_updated_at = now;
+        }
     }
 
     bool take_fence_send_result() {
@@ -253,6 +260,21 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
             }
             if (disarm_on_takeoff) {
                 state->armed = false;
+            }
+        } else if (command.id == 3000) {
+            if (transition_state_unavailable_on_command) {
+                state->vtol_state_valid = false;
+            } else if (transition_loses_link_on_command) {
+                state->connected = false;
+                state->heartbeat_fresh = false;
+            } else if (transition_stays_intermediate) {
+                state->vtol_state = nomad::telemetry::VtolState::TransitionToFixedWing;
+                state->vtol_state_valid = true;
+                state->vtol_state_updated_at = std::chrono::steady_clock::now();
+            } else if (complete_transition_on_command) {
+                state->vtol_state = nomad::telemetry::VtolState::FixedWing;
+                state->vtol_state_valid = true;
+                state->vtol_state_updated_at = std::chrono::steady_clock::now();
             }
         } else if (command.id == 21) {
             if (state->identity.aircraft_class == nomad::telemetry::AircraftClass::Copter) {

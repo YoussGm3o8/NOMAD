@@ -38,7 +38,8 @@ class Vehicle {
     explicit Vehicle(mavlink::MavlinkConnection &connection, safety::WatchdogPolicy watchdog_policy = {},
                      safety::GlobalFencePolicy fence_policy = {}, safety::VelocityLimits velocity_limits = {},
                      std::chrono::milliseconds position_freshness_timeout = std::chrono::milliseconds(2000),
-                     std::chrono::milliseconds takeoff_state_timeout = std::chrono::seconds(30));
+                     std::chrono::milliseconds takeoff_state_timeout = std::chrono::seconds(30),
+                     std::chrono::milliseconds transition_state_timeout = std::chrono::seconds(90));
     ~Vehicle();
 
     Vehicle(const Vehicle &) = delete;
@@ -60,6 +61,7 @@ class Vehicle {
     CommandResult set_guided_mode();
     CommandResult takeoff(float altitude_m);
     CommandResult vtol_takeoff(float altitude_m);
+    CommandResult transition_to_fixed_wing();
     CommandResult update_vio(bool healthy, float confidence);
     CommandResult set_velocity(const safety::VelocityCommand &command);
     CommandResult set_servo(int channel, int pwm_microseconds);
@@ -93,6 +95,11 @@ class Vehicle {
     CommandResult wait_for_altitude(float minimum_altitude_m, const char *name);
     CommandResult wait_for_vtol_takeoff(float target_altitude_m);
     std::optional<std::string> vtol_takeoff_state_error(const telemetry::VehicleState &state) const;
+    CommandResult wait_for_fixed_wing_transition(std::uint8_t expected_system_id,
+                                                 std::chrono::steady_clock::time_point command_state_timestamp);
+    std::optional<std::string> vtol_transition_state_error(const telemetry::VehicleState &state,
+                                                            std::uint8_t expected_system_id,
+                                                            bool require_precondition) const;
     CommandResult wait_for_location(const Location &location);
     CommandResult require_operation(VehicleOperation operation) const;
     // A fresh heartbeat does not imply a fresh position: callers fail closed
@@ -114,6 +121,8 @@ class Vehicle {
     // Bounds the authoritative climb wait; tests use a short deadline for a
     // deterministic partial-climb falsification while production keeps 30 s.
     std::chrono::milliseconds takeoff_state_timeout_{std::chrono::seconds(30)};
+    // Bounds the authoritative fixed-wing transition wait.
+    std::chrono::milliseconds transition_state_timeout_{std::chrono::seconds(90)};
     safety::ReleaseInterlock payload_interlock_;
     mutable std::mutex payload_mutex_;
     mutable std::mutex velocity_mutex_;

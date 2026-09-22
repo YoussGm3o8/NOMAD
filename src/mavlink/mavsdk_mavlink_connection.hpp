@@ -94,6 +94,7 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     void observe_battery(const mavsdk::Telemetry::Battery &battery);
     void observe_gps(const mavsdk::Telemetry::GpsInfo &gps);
     void observe_attitude(const mavsdk::Telemetry::EulerAngle &attitude);
+    void observe_vtol_state(mavsdk::Telemetry::VtolState state);
 
     mavsdk::MavlinkPassthrough::Result send_long(const Command &command, std::chrono::milliseconds timeout);
     mavsdk::Offboard::Result queue_velocity_setpoint(const VelocitySetpoint &setpoint);
@@ -135,6 +136,7 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     std::optional<mavsdk::Telemetry::BatteryHandle> battery_handle_;
     std::optional<mavsdk::Telemetry::GpsInfoHandle> gps_handle_;
     std::optional<mavsdk::Telemetry::AttitudeEulerHandle> attitude_handle_;
+    std::optional<mavsdk::Telemetry::VtolStateHandle> vtol_state_handle_;
     std::optional<mavsdk::MavlinkPassthrough::MessageHandle> heartbeat_handle_;
 };
 

@@ -27,6 +27,7 @@ constexpr std::uint16_t kTakeoffCommand = 22;         // MAV_CMD_NAV_TAKEOFF
 // ArduPlane's QuadPlane GUIDED handler dispatches this same command id through
 // QuadPlane::do_user_takeoff; it is a distinct NOMAD semantic operation.
 constexpr std::uint16_t kQuadplaneGuidedTakeoffCommand = 22; // MAV_CMD_NAV_TAKEOFF
+constexpr std::uint16_t kQuadplaneTransitionCommand = 3000; // MAV_CMD_DO_VTOL_TRANSITION
 constexpr std::uint16_t kLandCommand = 21;            // MAV_CMD_NAV_LAND
 constexpr std::uint16_t kReturnToLaunchCommand = 20;  // MAV_CMD_NAV_RETURN_TO_LAUNCH
 constexpr std::uint16_t kSetServoCommand = 183;       // MAV_CMD_DO_SET_SERVO

@@ -36,13 +36,15 @@ constexpr float kVtolTakeoffCompletionToleranceMeters = 0.5F;
 Vehicle::Vehicle(mavlink::MavlinkConnection &connection, safety::WatchdogPolicy watchdog_policy,
                  safety::GlobalFencePolicy fence_policy, safety::VelocityLimits velocity_limits,
                  std::chrono::milliseconds position_freshness_timeout,
-                 std::chrono::milliseconds takeoff_state_timeout)
+                 std::chrono::milliseconds takeoff_state_timeout,
+                 std::chrono::milliseconds transition_state_timeout)
     : connection_(connection),
       watchdog_policy_(watchdog_policy),
       fence_policy_(std::move(fence_policy)),
       velocity_limits_(velocity_limits),
       position_freshness_timeout_(position_freshness_timeout),
-      takeoff_state_timeout_(takeoff_state_timeout) {}
+      takeoff_state_timeout_(takeoff_state_timeout),
+      transition_state_timeout_(transition_state_timeout) {}
 
 Vehicle::~Vehicle() {
     {

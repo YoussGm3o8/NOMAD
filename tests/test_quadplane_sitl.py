@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts" / "dev"))
 
 import core_sitl_quadplane_observe as quadplane  # noqa: E402
+import core_sitl_quadplane_transition as transition  # noqa: E402
 import core_sitl_quadplane_vtol_takeoff as vtol_takeoff  # noqa: E402
 
 
@@ -36,6 +37,8 @@ def test_quadplane_profile_pins_firmware_tooling_frame_and_identity() -> None:
     assert "./waf plane" in dockerfile
     assert "--vehicle ArduPlane" in entrypoint
     assert "--frame quadplane-tilttri" in entrypoint
+    assert service["environment"]["SITL_UDP_OBSERVER_ADDRESS"].endswith(":14581")
+    assert "SITL_UDP_OBSERVER_ADDRESS" in entrypoint
     assert quadplane.EXPECTED_IDENTITY == {
         "autopilot_type": "3",
         "vehicle_type": "1",
@@ -46,10 +49,14 @@ def test_quadplane_profile_pins_firmware_tooling_frame_and_identity() -> None:
 def test_quadplane_profile_supplies_identity_and_telemetry_parameters() -> None:
     profile = (ROOT / "docker" / "quadplane-tilttri.parm").read_text(encoding="utf-8")
     for parameter in (
-        "Q_ENABLE 1",
+        "Q_ENABLE 2",
         "Q_FRAME_CLASS 7",
         "Q_TILT_ENABLE 1",
         "Q_TILT_MASK 3",
+        "Q_ASSIST_SPEED 6",
+        "Q_TRANSITION_MS 5000",
+        "Q_TRANS_FAIL 0",
+        "Q_TRANS_FAIL_ACT 0",
         "SR0_POSITION 5",
         "SR0_EXT_STAT 2",
         "SR0_EXTRA1 5",
@@ -118,3 +125,27 @@ def test_quadplane_takeoff_harness_verifies_delta_target_with_strict_tolerance()
     fields["relative_altitude_m"] = "6.4"
     with pytest.raises(quadplane.ScenarioError, match="below 6.5 m"):
         vtol_takeoff.require_climb_status(fields, 7.0)
+
+
+def test_quadplane_transition_harness_requires_authoritative_fixed_wing_state() -> None:
+    source = (ROOT / "scripts" / "dev" / "core_sitl_quadplane_transition.py").read_text(encoding="utf-8")
+    assert "run_cli(" in source
+    assert '"transition-to-fixed-wing"' in source
+    assert "MAV_CMD_DO_VTOL_TRANSITION" in source
+    assert "MAV_VTOL_STATE_FW" in source
+    assert "vtol_state_age_ms" in source
+    assert "EXTENDED_SYS_STATE" in source
+    assert "request_observed_mode(port, MODE_AUTO)" in source
+    assert "transition_to_fixed_wing" in source
+    assert "fixed_wing" in source
+
+
+def test_quadplane_transition_state_sequence_is_collapsed_without_fabrication() -> None:
+    states = [
+        (0.0, transition.VTOL_STATE_MC),
+        (0.2, transition.VTOL_STATE_MC),
+        (0.4, transition.VTOL_STATE_TRANSITION_TO_FW),
+        (0.6, transition.VTOL_STATE_TRANSITION_TO_FW),
+        (0.8, transition.VTOL_STATE_FW),
+    ]
+    assert transition.observed_state_names(states) == ["multicopter", "transition_to_fixed_wing", "fixed_wing"]

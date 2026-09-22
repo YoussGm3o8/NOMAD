@@ -18,7 +18,7 @@ merged baseline, hosted qualification results, and remaining fork/adapter work.
 |---|---|---|
 | C++ foundation | CMakeLists.txt; include/nomad; src; eleven CTest targets | Library and CLI build against the mandatory MAVSDK transport; no Python or mavgen build dependency, no Python runtime dependency |
 | MAVLink | src/mavlink (MAVSDK transport); core_test, mavsdk_connection_test, mavsdk_zero_delivery_test | MAVSDK owns framing/transport; NOMAD owns ACK classification, typed telemetry, heartbeat/relay handling, the zero-setpoint stop and fence/parameter traffic; native serial/TCP absent |
-| Vehicle | src/vehicle/operation.cpp; src/vehicle/vehicle*.cpp; src/telemetry/identity.cpp; core_test.cpp; operation_capability_test.cpp | Aircraft recognition is separate from a fail-closed per-operation capability policy; Copter retains its qualified baseline and the pinned QuadPlane profile now admits only semantic GUIDED arm + VTOL takeoff, while Plane, Unknown and all other QuadPlane operations are rejected before transport |
+| Vehicle | src/vehicle/operation.cpp; src/vehicle/vehicle*.cpp; src/telemetry/identity.cpp; core_test.cpp; operation_capability_test.cpp | Aircraft recognition is separate from a fail-closed per-operation capability policy; Copter retains its qualified baseline and the pinned QuadPlane profile now admits only semantic GUIDED arm, VTOL takeoff and the qualified AUTO forward transition, while Plane, Unknown and all other QuadPlane operations are rejected before transport |
 | Missions | src/mission/executor.cpp; core_test.cpp | Synchronous small step executor; no integrated cancellation, persisted resume, survey or Task 2 workflow |
 | Safety | src/safety; safety_test, fence_config_test, velocity_config_test, vio_source_test | Finite/range gates, VIO-conditioned velocity, watchdog, configured target fence, upload/readback and payload interlock |
 | Stop delivery | tests/mavsdk_zero_delivery_test.cpp; scripts/dev/core_sitl_zero_delivery.py | Live peer-driven wire tests cover every stop path on the MAVSDK transport; whole-link outage cannot guarantee delivery; merged-main Copter SITL evidence is recorded below and must be rerun when the transport, fixture or firmware changes |
@@ -248,10 +248,11 @@ the ten-target CTest suite. ArduPlane's fixed-wing heartbeat is classified as
 QuadPlane for `Q_ENABLE=1` or `2`, Plane for zero, and Unknown when the parameter
 is unavailable or invalid.
 The pinned observation harness described below now provides QuadPlane SITL
-identity, telemetry, baseline-mode evidence and one hosted NOMAD arm + VTOL
-takeoff qualification. This does not close the aircraft gate: Task 1 transition,
-route, return, landing, hosted fault evidence and the complete supported-aircraft
-ROS/SITL and release matrix still require independent evidence.
+identity, telemetry, baseline-mode evidence, NOMAD arm + VTOL takeoff
+qualification and one live NOMAD VTOL-to-fixed-wing transition qualification.
+This does not close the aircraft gate: Task 1 route, return, landing, hosted
+fault evidence and the complete supported-aircraft ROS/SITL and release matrix
+still require independent evidence.
 
 Create focused, reviewable implementation changes with unit tests, integration
 evidence, requirement mapping and limitations. Under the clarified ownership
@@ -272,14 +273,15 @@ maintained and reviewed. G-M is mandatory for G8 and precedes dependent
 integrated competition command work; isolated server/CV prototypes may proceed
 without waiting.
 
-Cutover status (2026-09-20): phases A-E have landed. The default runtime is the
+Cutover status (2026-09-22): phases A-E have landed. The default runtime is the
 MAVSDK transport, the ROS 2 adapter builds the same transport, and the legacy
 codec plus its generated dialect headers are deleted, so the transport exit items
 are met at the code and local-evidence level. G-M itself stays open: the
-supported-firmware matrix now has a pinned QuadPlane observation plus arm/VTOL
-takeoff qualification profile; transition, route and landing remain open. The current-head Copter
-SITL matrix is recorded above, and install/rollback evidence remains open. A
-completed transport cutover is not a competition release.
+supported-firmware matrix now has pinned QuadPlane observation, arm/VTOL takeoff
+and forward-transition qualification; route, return, landing and release gates
+remain open. The current-head Copter SITL matrix is recorded above, and
+install/rollback evidence remains open. A completed transport cutover is not a
+competition release.
 
 ### QuadPlane 4.7.1 observation and startup qualification profile - 2026-09-21
 
@@ -291,7 +293,8 @@ by `docker/Dockerfile.sitl-plane` with frame `quadplane-tilttri` and
 `3f85f6f808b617c736316d7da5f51f3d3eba1737`.
 
 Independent local SITL observation found `MAV_AUTOPILOT_ARDUPILOTMEGA` (3),
-`MAV_TYPE_FIXED_WING` (1) and `Q_ENABLE=1`; it did not report a VTOL MAV type.
+`MAV_TYPE_FIXED_WING` (1) and the explicit reference-profile value `Q_ENABLE=2`;
+it did not report a VTOL MAV type.
 NOMAD therefore classifies this exact combination as QuadPlane. It also treats
 `Q_ENABLE=2` as QuadPlane and zero as Plane; a missing or invalid value leaves
 the fixed-wing identity unresolved as Unknown. The live observer
@@ -314,17 +317,74 @@ ACK, while the hosted pinned profile proves the live command sequence and full
 target climb. Mission semantics such as `NAV_VTOL_TAKEOFF`,
 reviewed fixed-wing waypoint navigation and `NAV_VTOL_LAND` remain candidates
 for later independent qualification. Disarm, arbitrary modes, generic
-takeoff/goto, forward transition, cruise, return, VTOL transition, landing,
-link loss and manual takeover remain unqualified; body-frame velocity and
+takeoff/goto, cruise, return, VTOL transition, landing, link loss and manual
+takeover remain unqualified; body-frame velocity and
 direct `NAV_LAND` remain unsupported for QuadPlane.
+
+### QuadPlane VTOL-to-fixed-wing transition qualification - 2026-09-22
+
+Requirement: G-M QuadPlane transition qualification. The selected mechanism is
+ArduPlane's `MAV_CMD_DO_VTOL_TRANSITION` (command 3000), sent with
+`param1=MAV_VTOL_STATE_FW` (4). The pinned source dispatches this command from
+`ArduPlane/GCS_MAVLink_Plane.cpp` to
+`QuadPlane::handle_do_vtol_transition`; `ArduPlane/quadplane.cpp` accepts it
+only in `AUTO` and accepts only `MAV_VTOL_STATE_MC` and `MAV_VTOL_STATE_FW`.
+The fixed-wing case clears `auto_state.vtol_mode`. This is the reviewed
+ArduPilot mechanism, not a generic mode change and not a Copter takeoff
+interpretation.
+
+The exact reference remains ArduPlane 4.7.1 at
+`dbe792162d06cab66c3475fd5556bf7a120f119e`, frame `quadplane-tilttri`, with
+`MAV_TYPE_FIXED_WING`. The qualification profile explicitly sets
+`Q_ENABLE=2` (ArduPlane's “Enable VTOL AUTO”), `Q_FRAME_CLASS=7`,
+`Q_TILT_ENABLE=1`, `Q_TILT_MASK=3`, `Q_TILT_TYPE=0`, `Q_ASSIST_SPEED=6`,
+`Q_TRANSITION_MS=5000`, `Q_TRANS_FAIL=0` and `Q_TRANS_FAIL_ACT=0`.
+`Q_ENABLE=2` is required because the pinned `ModeAuto::_enter()` starts AUTO
+in VTOL AUTO only for value 2. `Q_ASSIST_SPEED=6` is explicit because the
+inherited 18 m/s value left this SITL tilt-tri in `AIRSPEED_WAIT`; the selected
+forward waypoint reaches the pinned transition's airspeed condition at the
+lower profile value. `Q_TRANS_FAIL=0` leaves ArduPilot's optional transition
+failure action disabled; NOMAD owns the bounded verification deadline.
+
+The authoritative completion signal is `EXTENDED_SYS_STATE.vtol_state`. The
+pinned `GCS_MAVLink_Plane.cpp` implementation returns
+`QuadPlane::transition->get_mav_vtol_state()`, and the pinned
+`SLT_Transition::get_mav_vtol_state()` maps `MC` to 3,
+`TRANSITION_TO_FW` to 1 and `DONE` to `FW` (4). NOMAD maps MAVSDK's existing
+typed `subscribe_vtol_state` callback into a typed, timestamped `VehicleState`.
+It admits the command only for QuadPlane with fresh heartbeat, matching system
+ID, armed state, `AUTO` mode and fresh `MC` state. After an accepted ACK it
+requires a newer VTOL-state observation, keeps `MC` and `TRANSITION_TO_FW` as
+incomplete, rejects undefined/back-transition states, fails stale or interrupted
+telemetry closed, and times out after the 90-second vehicle deadline. An ACK,
+mode name, elapsed time, pitch or airspeed alone cannot complete the operation.
+
+The live positive sequence is driven by
+`scripts/dev/core_sitl_quadplane_transition.py`: it starts a fresh profile,
+observes identity and telemetry, records the initial state, performs the
+already-qualified NOMAD VTOL takeoff, establishes a long forward AUTO waypoint
+as safe transition setup, observes `MC`, issues the single NOMAD transition
+command, records the independent `MC -> TRANSITION_TO_FW -> FW` sequence and
+reports success only after fresh `FW`. The forward waypoint is test setup for
+this flight primitive; it is not fixed-wing route qualification.
+
+Focused falsification covers QuadPlane capability admission and zero
+transmission for Copter, Plane and Unknown; command 3000 construction with
+parameter 4; rejected ACKs; ACK-without-completion; an intermediate-state
+timeout; stale/missing authoritative state; a stopped link during verification;
+and fixed-wing completion only after a newer state sample. The deterministic
+MAVSDK peer also reports an intermediate state before `FW`, so the success path
+does not depend on the ACK alone. No VTOL-back operation is implemented or
+claimed.
 
 ### Aircraft operation capability boundary - 2026-09-21
 
 `VehicleOperation` and `supports_operation` now make command admission an
 explicit policy rather than a consequence of recognizing an aircraft class.
 The full before/after audit is in [Aircraft operation capabilities](architecture.md#aircraft-operation-capabilities).
-The policy now admits only the evidence-backed startup subset for QuadPlane:
-`arm`, semantic `set_guided_mode` and the dedicated `vtol_takeoff` operation.
+The policy now admits only the evidence-backed QuadPlane subset: `arm`, semantic
+`set_guided_mode`, dedicated `vtol_takeoff`, and the dedicated
+`transition_to_fixed_wing` operation.
 Generic `takeoff`, arbitrary mode setting, goto, landing, return, body velocity,
 payload/output and fence transport remain rejected before transmission. Plane
 and Unknown remain fail-closed for every aircraft-dependent command. Focused
@@ -335,17 +395,18 @@ status accessors do not transmit and therefore remain class-neutral.
 
 The QuadPlane profile proves recognition, telemetry and baseline mode values.
 Its independent Python driver requests those modes without granting
-`Vehicle::set_mode` capability. The same pinned job now qualifies only the
-NOMAD GUIDED arm + direct NAV_TAKEOFF climb sequence; it does not qualify
-disarm, arbitrary modes, generic takeoff/goto/land/RTL, transition,
-fixed-wing route execution, return strategy, VTOL landing, link-loss behavior
-or manual takeover. No transition state machine or mission implementation is
-introduced here.
+`Vehicle::set_mode` capability. Separate fresh pinned runs qualify the NOMAD
+GUIDED arm + direct NAV_TAKEOFF climb sequence and the dedicated forward
+transition; they do not qualify disarm, arbitrary modes, generic
+takeoff/goto/land/RTL, fixed-wing route execution, return strategy, VTOL
+landing, link-loss behavior or manual takeover. No route or mission
+implementation is introduced here.
 
-The next slice is QuadPlane VTOL-to-fixed-wing transition qualification. The
-startup gate now includes NOMAD arming; no external arming is used as evidence
-for the takeoff sequence. Transition, route, return and landing remain later
-independent slices.
+The transition slice above is complete for the pinned profile. The next separate
+ground-router slice is the versioned local status/config protocol and Mission
+Planner client; it must not carry flight command authority. Fixed-wing route,
+return, VTOL-back, landing, link-loss strategy and hardware qualification remain
+later independent slices.
 
 Packaging/install slice (2026-09-20): the Release CMake configuration installs
 only the NOMAD CLI, public headers, configuration template and reviewed license
@@ -957,5 +1018,6 @@ client selected explicitly by `RouterMode`. The local protocol is limited to
 status, events, and safe link selection; it does not implement persistent C++ IPC,
 remove one-shot CLI clients, arbitrate global command authority, qualify an
 aircraft operation or establish independent physical redundancy. Mission/fence/FTP
-transaction pinning is not implemented. QuadPlane transition qualification remains
-the active G-M item; aircraft capability and flight-operation sources are unchanged.
+transaction pinning is not implemented. QuadPlane transition qualification is
+complete for its stated pinned profile; aircraft route, return, landing and
+hardware qualification remain open.

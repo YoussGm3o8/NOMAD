@@ -20,6 +20,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from mavsdk_peer_transition import TransitionModel
 from pymavlink.dialects.v20 import ardupilotmega as mavlink
 
 ACCEPTED = mavlink.MAV_RESULT_ACCEPTED
@@ -46,6 +47,7 @@ COMMAND_NAV_RETURN_TO_LAUNCH = mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH
 COMMAND_NAV_LAND = mavlink.MAV_CMD_NAV_LAND
 COMMAND_NAV_TAKEOFF = mavlink.MAV_CMD_NAV_TAKEOFF
 COMMAND_DO_SET_MODE = mavlink.MAV_CMD_DO_SET_MODE
+COMMAND_DO_VTOL_TRANSITION = mavlink.MAV_CMD_DO_VTOL_TRANSITION
 COMMAND_ARM_DISARM = mavlink.MAV_CMD_COMPONENT_ARM_DISARM
 COMMAND_DO_REPOSITION = mavlink.MAV_CMD_DO_REPOSITION
 COMMAND_DO_SET_SERVO = mavlink.MAV_CMD_DO_SET_SERVO
@@ -159,27 +161,28 @@ class VehiclePeer:
         params: dict[str, float] | None = None,
         vehicle_type: int = mavlink.MAV_TYPE_QUADROTOR,
         autopilot_type: int = mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
+        initial_mode: int = 0,
+        initial_armed: bool = False,
+        vtol_state: int | None = None,
+        transition_reaches_fixed_wing: bool = True,
+        transition_reports_intermediate: bool = True,
     ) -> None:
-        self._address = ("127.0.0.1", port)
-        self._system_id = system_id
-        self._ack_result = ack_result
-        self._streaming = stream
-        self._coalesce = coalesce
+        self._address, self._system_id, self._ack_result = ("127.0.0.1", port), system_id, ack_result
+        self._streaming, self._coalesce = stream, coalesce
         self._telemetry_deadline = None if telemetry_seconds is None else time.monotonic() + telemetry_seconds
         self._messages: list[ReceivedMessage] = []
         self._setpoints: list[SetpointRecord] = []
         self._pending_acks: list[Any] = []
         self._params = dict(DEFAULT_PARAMS if params is None else params)
-        self._vehicle_type = vehicle_type
-        self._autopilot_type = autopilot_type
+        self._vehicle_type, self._autopilot_type = vehicle_type, autopilot_type
         self._fence_polygon: list[tuple[float, float]] = []
         self._fence_arriving: list[tuple[int, float, float, float]] = []
-        self._fence_expected = 0
-        self._armed = False
-        self._custom_mode = 0
-        self._latitude_deg = HOME_LATITUDE_DEG
-        self._longitude_deg = HOME_LONGITUDE_DEG
-        self._relative_altitude_m = 0.0
+        self._fence_expected, self._relative_altitude_m = 0, 0.0
+        self._armed, self._custom_mode = initial_armed, initial_mode
+        self._transition = TransitionModel.create(
+            vtol_state, vehicle_type, self._params, transition_reaches_fixed_wing, transition_reports_intermediate
+        )
+        self._latitude_deg, self._longitude_deg = HOME_LATITUDE_DEG, HOME_LONGITUDE_DEG
         self._commands: list[CommandRecord] = []
         self._stop = threading.Event()
         self._socket = self._create_socket(bind)
@@ -390,6 +393,15 @@ class VehiclePeer:
             self._armed = float(message.param1) > 0.0
         elif command == COMMAND_DO_SET_MODE:
             self._custom_mode = int(float(message.param2))
+        elif command == COMMAND_DO_VTOL_TRANSITION and int(float(message.param1)) == mavlink.MAV_VTOL_STATE_FW:
+            if self._ack_result != ACCEPTED:
+                return
+            if self._transition.reports_intermediate:
+                self._transition.vtol_state = mavlink.MAV_VTOL_STATE_TRANSITION_TO_FW
+                if self._transition.reaches_fixed_wing:
+                    self._transition.finish_at = time.monotonic() + 0.6
+            elif self._transition.reaches_fixed_wing:
+                self._transition.vtol_state = mavlink.MAV_VTOL_STATE_FW
         elif command == COMMAND_NAV_TAKEOFF:
             self._relative_altitude_m = float(message.param7)
         elif command == COMMAND_DO_REPOSITION and kind == "COMMAND_INT":
@@ -404,12 +416,16 @@ class VehiclePeer:
     def _send_telemetry(self) -> None:
         if not self._streaming or self._telemetry_ended():
             return
+        if self._transition.finish_at is not None and time.monotonic() >= self._transition.finish_at:
+            self._transition.vtol_state = mavlink.MAV_VTOL_STATE_FW
+            self._transition.finish_at = None
         frames = [
             self._heartbeat_message(),
             self._position_message(),
             self._gps_message(),
             self._attitude_message(),
             self._sys_status_message(),
+            self._extended_sys_state_message(),
         ]
         frames.extend(self._pending_acks)
         self._pending_acks = []
@@ -466,3 +482,9 @@ class VehiclePeer:
 
     def _sys_status_message(self):
         return self._mavlink.sys_status_encode(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 100, 12600, -1, 75, 0, 0, 0, 0, 0, 0)
+
+    def _extended_sys_state_message(self):
+        landed_state = (
+            mavlink.MAV_LANDED_STATE_IN_AIR if self._relative_altitude_m > 0.5 else mavlink.MAV_LANDED_STATE_ON_GROUND
+        )
+        return self._mavlink.extended_sys_state_encode(self._transition.vtol_state, landed_state)

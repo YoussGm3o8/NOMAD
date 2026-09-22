@@ -118,6 +118,9 @@ int run_command(nomad::mavlink::MavlinkConnection &connection, const Arguments &
     if (arguments.command == "vtol-takeoff" && arguments.altitude.has_value()) {
         return print_result(vehicle.vtol_takeoff(*arguments.altitude));
     }
+    if (arguments.command == "transition-to-fixed-wing") {
+        return print_result(vehicle.transition_to_fixed_wing());
+    }
     if (arguments.command == "goto" && arguments.latitude.has_value() && arguments.longitude.has_value() &&
         arguments.altitude.has_value()) {
         const nomad::vehicle::Location target{*arguments.latitude, *arguments.longitude, *arguments.altitude};

@@ -128,7 +128,7 @@ The Task 1 observation reference is ArduPlane 4.7.1 at exact commit
 with `pixi run quadplane-sitl-up`, observe it with
 `pixi run core-sitl-quadplane-observe`, and stop it with
 `pixi run quadplane-sitl-down`. The observer requires the real heartbeat,
-`Q_ENABLE=1`, fresh position/GPS/attitude, disarmed state, and aircraft-reported
+`Q_ENABLE=2`, fresh position/GPS/attitude, disarmed state, and aircraft-reported
 GUIDED=15, QLOITER=19, QRTL=21 and RTL=11 modes. ArduPlane reports this profile
 as `MAV_TYPE_FIXED_WING` (1), not a VTOL MAV type. NOMAD combines that heartbeat
 with `Q_ENABLE=1` or `2` to identify `QuadPlane`; zero identifies Plane, while a
@@ -142,8 +142,10 @@ fresh position, 3D GPS, armed state and GUIDED mode immediately before sending
 the command, then requires the derived target within a fixed 0.5 m margin. The
 Python mode driver requests the observed modes independently; it does not use
 or qualify the production `Vehicle::set_mode` path for QuadPlane.
-It does not qualify disarm, arbitrary modes, generic takeoff/goto, transition,
-navigation, return, landing or link-loss behavior. Copter mode numbers and
+The separate transition harness qualifies only the dedicated
+`Vehicle::transition_to_fixed_wing` operation after this startup sequence; it
+does not qualify disarm, arbitrary modes, generic takeoff/goto, navigation,
+return, landing or link-loss behavior. Copter mode numbers and
 velocity-stop behavior cannot stand in for those tests. Gazebo/Isaac are
 optional sensor-evidence tools; they are not prerequisites for basic unit or
 server-contract tests.
