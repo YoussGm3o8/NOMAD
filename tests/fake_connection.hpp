@@ -168,6 +168,11 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     std::vector<nomad::mavlink::Command> command_history;
     std::vector<bool> velocity_send_results;
     std::vector<bool> command_send_results;
+    bool disarm_on_takeoff{false};
+    std::optional<float> takeoff_altitude_override;
+    bool stale_position_after_arm{false};
+    bool stale_heartbeat_after_arm{false};
+    bool invalidate_gps_after_arm{false};
     std::vector<nomad::mavlink::FencePoint> fence_points;
     std::vector<std::uint8_t> fence_indices;
     std::uint8_t fence_total{0};
@@ -223,11 +228,32 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     void update_state_for_command(const nomad::mavlink::Command &command) {
         if (command.id == 400) {
             state->armed = command.parameters[0] > 0.0F;
+            if (state->armed && stale_position_after_arm) {
+                auto_stamp_fresh_fields = false;
+                state->position_updated_at = std::chrono::steady_clock::now() - std::chrono::seconds(3);
+            }
+            if (state->armed && stale_heartbeat_after_arm) {
+                state->heartbeat_fresh = false;
+                state->connected = false;
+            }
+            if (state->armed && invalidate_gps_after_arm) {
+                state->gps_valid = false;
+                state->gps.fix_type = 0;
+            }
         } else if (command.id == 176) {
             state->custom_mode = static_cast<std::uint32_t>(command.parameters[1]);
         } else if (command.id == 22) {
             state->position_valid = true;
-            state->position.relative_altitude_m = command.parameters[6];
+            if (takeoff_altitude_override.has_value()) {
+                state->position.relative_altitude_m = *takeoff_altitude_override;
+            } else if (state->identity.aircraft_class == nomad::telemetry::AircraftClass::QuadPlane) {
+                state->position.relative_altitude_m += command.parameters[6];
+            } else {
+                state->position.relative_altitude_m = command.parameters[6];
+            }
+            if (disarm_on_takeoff) {
+                state->armed = false;
+            }
         } else if (command.id == 21) {
             if (state->identity.aircraft_class == nomad::telemetry::AircraftClass::Copter) {
                 state->custom_mode = 9;

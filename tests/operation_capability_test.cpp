@@ -20,6 +20,7 @@ constexpr std::array kAircraftOperations{
     VehicleOperation::SetMode,
     VehicleOperation::SetGuidedMode,
     VehicleOperation::Takeoff,
+    VehicleOperation::VtolTakeoff,
     VehicleOperation::GotoLocation,
     VehicleOperation::Land,
     VehicleOperation::ReturnToLaunch,
@@ -35,20 +36,36 @@ constexpr std::array kAircraftOperations{
 
 void test_copter_supports_qualified_operations() {
     for (const auto operation : kAircraftOperations) {
-        CHECK(nomad::vehicle::supports_operation(AircraftClass::Copter, operation));
+        if (operation == VehicleOperation::VtolTakeoff) {
+            CHECK(!nomad::vehicle::supports_operation(AircraftClass::Copter, operation));
+        } else {
+            CHECK(nomad::vehicle::supports_operation(AircraftClass::Copter, operation));
+        }
     }
 }
 
-void test_other_aircraft_classes_fail_closed() {
+void test_plane_and_unknown_fail_closed() {
     constexpr std::array unqualified_classes{
         AircraftClass::Plane,
-        AircraftClass::QuadPlane,
         AircraftClass::Unknown,
     };
     for (const auto aircraft_class : unqualified_classes) {
         for (const auto operation : kAircraftOperations) {
             CHECK(!nomad::vehicle::supports_operation(aircraft_class, operation));
         }
+    }
+}
+
+void test_quadplane_supports_only_qualified_startup_operations() {
+    CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::Arm));
+    CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::SetGuidedMode));
+    CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::VtolTakeoff));
+    for (const auto operation : kAircraftOperations) {
+        if (operation == VehicleOperation::Arm || operation == VehicleOperation::SetGuidedMode ||
+            operation == VehicleOperation::VtolTakeoff) {
+            continue;
+        }
+        CHECK(!nomad::vehicle::supports_operation(AircraftClass::QuadPlane, operation));
     }
 }
 
@@ -105,7 +122,8 @@ void test_active_copter_velocity_can_stop_after_identity_loss() {
 int main() {
     return nomad::test::run_tests([] {
         test_copter_supports_qualified_operations();
-        test_other_aircraft_classes_fail_closed();
+        test_plane_and_unknown_fail_closed();
+        test_quadplane_supports_only_qualified_startup_operations();
         test_unqualified_aircraft_reject_fence_transport();
         test_active_copter_velocity_can_stop_after_identity_loss();
     });

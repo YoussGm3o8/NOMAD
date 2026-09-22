@@ -39,6 +39,7 @@ EXPECTED_VERBS = (
     "disarm",
     "mode",
     "takeoff",
+    "vtol-takeoff",
     "goto",
     "land",
     "rtl",
@@ -128,6 +129,9 @@ def test_unknown_command_prints_usage_and_fails() -> None:
         ("velocity", "--vx", "nan", "--duration", "1"),  # non-finite velocity must fail before socket work
         ("velocity", "--vx", "1", "--duration", "inf"),  # non-finite duration must fail before socket work
         ("takeoff", "5", "9"),  # extra positional argument
+        ("vtol-takeoff", "banana"),  # altitude must parse as a float
+        ("vtol-takeoff", "nan"),  # non-finite altitude must fail before socket work
+        ("vtol-takeoff", "5", "9"),  # extra positional argument
         ("mode", "4", "extra"),  # extra positional argument
         ("goto", "45.0", "9.0"),  # goto requires latitude, longitude, and altitude
         ("goto", "45.0", "banana", "5"),  # longitude must parse as a float
@@ -189,6 +193,7 @@ def test_silent_endpoint_times_out_cleanly() -> None:
         ("disarm",),
         ("mode", "4"),
         ("takeoff", "5"),
+        ("vtol-takeoff", "5"),
         ("goto", "45.0", "9.0", "5"),
         ("land",),
         ("rtl",),

@@ -18,7 +18,7 @@ merged baseline, hosted qualification results, and remaining fork/adapter work.
 |---|---|---|
 | C++ foundation | CMakeLists.txt; include/nomad; src; eleven CTest targets | Library and CLI build against the mandatory MAVSDK transport; no Python or mavgen build dependency, no Python runtime dependency |
 | MAVLink | src/mavlink (MAVSDK transport); core_test, mavsdk_connection_test, mavsdk_zero_delivery_test | MAVSDK owns framing/transport; NOMAD owns ACK classification, typed telemetry, heartbeat/relay handling, the zero-setpoint stop and fence/parameter traffic; native serial/TCP absent |
-| Vehicle | src/vehicle/operation.cpp; src/vehicle/vehicle*.cpp; src/telemetry/identity.cpp; core_test.cpp; operation_capability_test.cpp | Aircraft recognition is separate from a fail-closed per-operation capability policy; only the qualified Copter baseline can transmit flight, output, payload or fence operations, while Plane, QuadPlane and Unknown are rejected before transport; local/read-only operations remain available; Plane/QuadPlane flight qualification remains open |
+| Vehicle | src/vehicle/operation.cpp; src/vehicle/vehicle*.cpp; src/telemetry/identity.cpp; core_test.cpp; operation_capability_test.cpp | Aircraft recognition is separate from a fail-closed per-operation capability policy; Copter retains its qualified baseline and the pinned QuadPlane profile now admits only semantic GUIDED arm + VTOL takeoff, while Plane, Unknown and all other QuadPlane operations are rejected before transport |
 | Missions | src/mission/executor.cpp; core_test.cpp | Synchronous small step executor; no integrated cancellation, persisted resume, survey or Task 2 workflow |
 | Safety | src/safety; safety_test, fence_config_test, velocity_config_test, vio_source_test | Finite/range gates, VIO-conditioned velocity, watchdog, configured target fence, upload/readback and payload interlock |
 | Stop delivery | tests/mavsdk_zero_delivery_test.cpp; scripts/dev/core_sitl_zero_delivery.py | Live peer-driven wire tests cover every stop path on the MAVSDK transport; whole-link outage cannot guarantee delivery; merged-main Copter SITL evidence is recorded below and must be rerun when the transport, fixture or firmware changes |
@@ -247,9 +247,10 @@ COMMAND_LONG NAV_LAND behavior has not been qualified. The focused tests pass in
 the ten-target CTest suite. ArduPlane's fixed-wing heartbeat is classified as
 QuadPlane for `Q_ENABLE=1` or `2`, Plane for zero, and Unknown when the parameter
 is unavailable or invalid.
-The pinned observation harness described below now provides local QuadPlane SITL
-identity, telemetry and baseline-mode evidence. This does not close the aircraft
-gate: Task 1 VTOL execution, hosted evidence, and the complete supported-aircraft
+The pinned observation harness described below now provides QuadPlane SITL
+identity, telemetry, baseline-mode evidence and one hosted NOMAD arm + VTOL
+takeoff qualification. This does not close the aircraft gate: Task 1 transition,
+route, return, landing, hosted fault evidence and the complete supported-aircraft
 ROS/SITL and release matrix still require independent evidence.
 
 Create focused, reviewable implementation changes with unit tests, integration
@@ -275,12 +276,12 @@ Cutover status (2026-09-20): phases A-E have landed. The default runtime is the
 MAVSDK transport, the ROS 2 adapter builds the same transport, and the legacy
 codec plus its generated dialect headers are deleted, so the transport exit items
 are met at the code and local-evidence level. G-M itself stays open: the
-supported-firmware matrix now has a local QuadPlane observation profile but no
-qualified QuadPlane flight operations or hosted pass, the current-head Copter
+supported-firmware matrix now has a pinned QuadPlane observation plus arm/VTOL
+takeoff qualification profile; transition, route and landing remain open. The current-head Copter
 SITL matrix is recorded above, and install/rollback evidence remains open. A
 completed transport cutover is not a competition release.
 
-### QuadPlane 4.7.1 observation profile - 2026-09-20
+### QuadPlane 4.7.1 observation and startup qualification profile - 2026-09-21
 
 Requirement: G-M aircraft-class qualification. The reference is ArduPlane
 `Plane-4.7.1`, exact commit `dbe792162d06cab66c3475fd5556bf7a120f119e`, built
@@ -301,38 +302,50 @@ invalid parameter cases, and proves generic-autopilot and unknown-vehicle
 identities transmit no requested mode command. The stale-position falsification
 test exceeds the 1500 ms bound and is rejected.
 
-Candidate mechanisms for later flight-primitive qualification are ArduPlane
-mission semantics such as `NAV_VTOL_TAKEOFF`, reviewed fixed-wing waypoint
-navigation and `NAV_VTOL_LAND`, with QRTL/RTL behavior measured separately. This
-record does not select or qualify those mechanisms. Arm/disarm, takeoff, forward
-transition, cruise, return, VTOL transition, landing, link loss and manual
-takeover remain unqualified; body-frame velocity and direct `NAV_LAND` remain
-unsupported for QuadPlane. The workflow job exists but no hosted current-head
-pass is claimed by this local record.
+The first selected QuadPlane flight mechanism is ArduPlane's direct GUIDED
+`MAV_CMD_NAV_TAKEOFF` dispatch (command 22), which enters GUIDED, arms through
+the qualified NOMAD arm path, and treats its altitude parameter as a climb
+delta from the final pre-command relative altitude. NOMAD captures and validates
+fresh heartbeat, position, 3D GPS, armed state and GUIDED mode after preparation,
+then verifies the derived target within a fixed 0.5 m completion margin. It is a
+QuadPlane-specific semantic operation, not reuse of generic Copter `takeoff`.
+The focused fake-transport tests reject a 4 m partial climb or disarm after the
+ACK, while the hosted pinned profile proves the live command sequence and full
+target climb. Mission semantics such as `NAV_VTOL_TAKEOFF`,
+reviewed fixed-wing waypoint navigation and `NAV_VTOL_LAND` remain candidates
+for later independent qualification. Disarm, arbitrary modes, generic
+takeoff/goto, forward transition, cruise, return, VTOL transition, landing,
+link loss and manual takeover remain unqualified; body-frame velocity and
+direct `NAV_LAND` remain unsupported for QuadPlane.
 
-### Aircraft operation capability boundary - 2026-09-20
+### Aircraft operation capability boundary - 2026-09-21
 
 `VehicleOperation` and `supports_operation` now make command admission an
 explicit policy rather than a consequence of recognizing an aircraft class.
 The full before/after audit is in [Aircraft operation capabilities](architecture.md#aircraft-operation-capabilities).
-Only Copter is admitted for aircraft-dependent operations in this slice. Plane,
-QuadPlane and Unknown are rejected before command, relative-goto, body-velocity,
-payload/output or fence transport calls. Focused tests inspect each policy cell
-and the fake transport histories/counters, including command, goto, velocity,
-parameter and fence paths. Local telemetry waits, VIO input, payload-interlock
-arming and status accessors do not transmit and therefore remain class-neutral.
+The policy now admits only the evidence-backed startup subset for QuadPlane:
+`arm`, semantic `set_guided_mode` and the dedicated `vtol_takeoff` operation.
+Generic `takeoff`, arbitrary mode setting, goto, landing, return, body velocity,
+payload/output and fence transport remain rejected before transmission. Plane
+and Unknown remain fail-closed for every aircraft-dependent command. Focused
+tests inspect each policy cell and the fake transport histories/counters,
+including the QuadPlane command sequence, rejected generic takeoff and unknown
+identity paths. Local telemetry waits, VIO input, payload-interlock arming and
+status accessors do not transmit and therefore remain class-neutral.
 
-The QuadPlane observation profile still proves only recognition, telemetry and
-baseline mode values. Its independent Python driver requests those modes without
-granting `Vehicle::set_mode` capability. It does not qualify arm/disarm,
-arbitrary modes, generic takeoff/goto/land/RTL, VTOL takeoff, transition,
+The QuadPlane profile proves recognition, telemetry and baseline mode values.
+Its independent Python driver requests those modes without granting
+`Vehicle::set_mode` capability. The same pinned job now qualifies only the
+NOMAD GUIDED arm + direct NAV_TAKEOFF climb sequence; it does not qualify
+disarm, arbitrary modes, generic takeoff/goto/land/RTL, transition,
 fixed-wing route execution, return strategy, VTOL landing, link-loss behavior
-or manual takeover. No VTOL command or transition state machine is introduced
-here.
+or manual takeover. No transition state machine or mission implementation is
+introduced here.
 
-The next slice must qualify NOMAD arming together with one VTOL takeoff
-mechanism. External test-side arming is not sufficient evidence for the startup
-sequence; transition, route, return and landing remain later independent slices.
+The next slice is QuadPlane VTOL-to-fixed-wing transition qualification. The
+startup gate now includes NOMAD arming; no external arming is used as evidence
+for the takeoff sequence. Transition, route, return and landing remain later
+independent slices.
 
 Packaging/install slice (2026-09-20): the Release CMake configuration installs
 only the NOMAD CLI, public headers, configuration template and reviewed license

@@ -15,6 +15,8 @@ std::string_view operation_name(VehicleOperation operation) {
         return "set guided mode";
     case VehicleOperation::Takeoff:
         return "takeoff";
+    case VehicleOperation::VtolTakeoff:
+        return "vtol takeoff";
     case VehicleOperation::GotoLocation:
         return "goto location";
     case VehicleOperation::Land:
@@ -65,7 +67,30 @@ bool supports_operation(telemetry::AircraftClass aircraft_class, VehicleOperatio
         }
         return false;
     case telemetry::AircraftClass::Plane:
+        return false;
     case telemetry::AircraftClass::QuadPlane:
+        switch (operation) {
+        case VehicleOperation::Arm:
+        case VehicleOperation::SetGuidedMode:
+        case VehicleOperation::VtolTakeoff:
+            return true;
+        case VehicleOperation::Disarm:
+        case VehicleOperation::SetMode:
+        case VehicleOperation::Takeoff:
+        case VehicleOperation::GotoLocation:
+        case VehicleOperation::Land:
+        case VehicleOperation::ReturnToLaunch:
+        case VehicleOperation::BodyVelocity:
+        case VehicleOperation::SetServo:
+        case VehicleOperation::SetRelay:
+        case VehicleOperation::MotorTest:
+        case VehicleOperation::ConfigureGimbal:
+        case VehicleOperation::SendUserCommand:
+        case VehicleOperation::ReleasePayload:
+        case VehicleOperation::FenceConfiguration:
+            return false;
+        }
+        return false;
     case telemetry::AircraftClass::Unknown:
         return false;
     }

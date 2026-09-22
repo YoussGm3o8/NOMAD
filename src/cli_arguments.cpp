@@ -216,7 +216,7 @@ bool consume_verb_value(Arguments &arguments, std::string_view token, int argc, 
     if (command == "velocity") {
         return consume_velocity(arguments, token, argc, argv, index);
     }
-    if (command == "takeoff") {
+    if (command == "takeoff" || command == "vtol-takeoff") {
         return consume_takeoff(arguments, token);
     }
     if (command == "goto") {
@@ -273,6 +273,9 @@ bool has_required_arguments(const Arguments &arguments) {
     }
     if (command == "mode") {
         return arguments.mode.has_value();
+    }
+    if (command == "takeoff" || command == "vtol-takeoff") {
+        return arguments.altitude.has_value();
     }
     if (command == "user-command") {
         return arguments.user_parameters.has_value() && arguments.user_parameter_count == 7;

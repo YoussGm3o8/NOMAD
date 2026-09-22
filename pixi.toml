@@ -265,6 +265,10 @@ env = { NOMAD_API_KEY = "nomad-dev-sitl-key" }
 cmd = "pixi run build-core && python scripts/dev/core_sitl_quadplane_observe.py"
 env = { NOMAD_API_KEY = "nomad-dev-sitl-key", NOMAD_QUADPLANE_SITL_PORT = "14580" }
 
+[tasks.core-sitl-quadplane-vtol-takeoff]
+cmd = "pixi run build-core && python scripts/dev/core_sitl_quadplane_vtol_takeoff.py"
+env = { NOMAD_API_KEY = "nomad-dev-sitl-key", NOMAD_QUADPLANE_SITL_PORT = "14580" }
+
 [tasks.core-sitl-command-flow]
 cmd = "pixi run build-core && python scripts/dev/core_sitl_command_flow.py"
 env = { NOMAD_API_KEY = "nomad-dev-sitl-key" }

@@ -20,6 +20,21 @@
 
 namespace {
 
+void configure_quadplane_takeoff_state(FakeConnection &connection, float relative_altitude_m = 0.0F) {
+    connection.state->identity =
+        nomad::telemetry::identify_vehicle(nomad::telemetry::kArduPilotAutopilot,
+                                            nomad::telemetry::kVtolQuadrotor);
+    connection.state->connected = true;
+    connection.state->heartbeat_fresh = true;
+    connection.state->position_valid = true;
+    connection.state->position.relative_altitude_m = relative_altitude_m;
+    connection.state->position_updated_at = std::chrono::steady_clock::now();
+    connection.state->gps_valid = true;
+    connection.state->gps.fix_type = 3;
+    connection.state->gps.satellites = 10;
+    connection.state->gps_updated_at = std::chrono::steady_clock::now();
+}
+
 void test_state_is_available_through_vehicle() {
     FakeConnection connection;
     connection.connect();
@@ -83,6 +98,59 @@ void test_mode_and_takeoff_are_verified() {
     CHECK(takeoff_result.message == "takeoff verified");
 }
 
+void test_quadplane_vtol_takeoff_runs_guided_arm_and_climb() {
+    FakeConnection connection;
+    connection.connect();
+    configure_quadplane_takeoff_state(connection, 2.0F);
+    nomad::vehicle::Vehicle vehicle(connection);
+
+    const auto result = vehicle.vtol_takeoff(5.0F);
+
+    CHECK(result.success);
+    CHECK(result.message == "vtol takeoff verified");
+    CHECK(connection.command_history.size() == 3);
+    CHECK(connection.command_history[0].id == 176);
+    CHECK(connection.command_history[0].parameters[1] == 15.0F);
+    CHECK(connection.command_history[1].id == 400);
+    CHECK(connection.command_history[1].parameters[0] == 1.0F);
+    CHECK(connection.command_history[2].id == 22);
+    CHECK(connection.command_history[2].parameters[6] == 5.0F);
+    CHECK(connection.state->armed);
+    CHECK(connection.state->custom_mode == 15);
+    CHECK(connection.state->position.relative_altitude_m == 7.0F);
+}
+
+void test_quadplane_vtol_takeoff_does_not_treat_ack_as_completion() {
+    FakeConnection connection;
+    connection.connect();
+    configure_quadplane_takeoff_state(connection);
+    connection.disarm_on_takeoff = true;
+    nomad::vehicle::Vehicle vehicle(connection);
+
+    const auto result = vehicle.vtol_takeoff(5.0F);
+
+    CHECK(!result.success);
+    CHECK(result.message == "vtol takeoff verification failed: vehicle disarmed");
+    CHECK(connection.command_history.size() == 3);
+    CHECK(connection.command_history.back().id == 22);
+}
+
+void test_quadplane_vtol_takeoff_rejects_partial_climb() {
+    FakeConnection connection;
+    connection.connect();
+    configure_quadplane_takeoff_state(connection);
+    connection.takeoff_altitude_override = 4.0F;
+    nomad::vehicle::Vehicle vehicle(connection, {}, {}, {}, std::chrono::milliseconds(2000),
+                                    std::chrono::milliseconds(20));
+
+    const auto result = vehicle.vtol_takeoff(5.0F);
+
+    CHECK(!result.success);
+    CHECK(result.message == "vtol takeoff acknowledgement received but climb verification timed out");
+    CHECK(connection.command_history.size() == 3);
+    CHECK(connection.command_history.back().id == 22);
+}
+
 void test_guided_mode_uses_its_semantic_operation() {
     FakeConnection connection;
     connection.connect();
@@ -128,11 +196,14 @@ void test_plane_commands_are_rejected_before_transmission() {
     CHECK(goto_result.message == "goto location is not qualified for Plane");
     CHECK(!vehicle.land().success);
     CHECK(!vehicle.return_to_launch().success);
+    const auto vtol_takeoff_result = vehicle.vtol_takeoff(5.0F);
+    CHECK(!vtol_takeoff_result.success);
+    CHECK(vtol_takeoff_result.message == "vtol takeoff is not qualified for Plane");
     CHECK(connection.command_history.empty());
     CHECK(!connection.last_goto.has_value());
 }
 
-void test_quadplane_flight_commands_are_rejected_before_transmission() {
+void test_quadplane_generic_takeoff_is_rejected_before_transmission() {
     FakeConnection connection;
     connection.connect();
     connection.state->identity =
@@ -140,9 +211,37 @@ void test_quadplane_flight_commands_are_rejected_before_transmission() {
                                             nomad::telemetry::kVtolQuadrotor);
     nomad::vehicle::Vehicle vehicle(connection);
 
-    CHECK(!vehicle.arm().success);
+    const auto result = vehicle.takeoff(5.0F);
+
+    CHECK(!result.success);
+    CHECK(result.message == "takeoff is not qualified for QuadPlane");
+    CHECK(connection.command_history.empty());
+}
+
+void test_quadplane_vtol_takeoff_rejects_stale_position_before_transmission() {
+    FakeConnection connection;
+    connection.connect();
+    configure_quadplane_takeoff_state(connection);
+    connection.state->position_updated_at = std::chrono::steady_clock::now() - std::chrono::seconds(3);
+    connection.auto_stamp_fresh_fields = false;
+    nomad::vehicle::Vehicle vehicle(connection);
+
+    const auto result = vehicle.vtol_takeoff(5.0F);
+
+    CHECK(!result.success);
+    CHECK(result.message == "vtol takeoff requires a fresh position");
+    CHECK(connection.command_history.empty());
+}
+
+void test_quadplane_flight_commands_are_rejected_before_transmission() {
+    FakeConnection connection;
+    connection.connect();
+    configure_quadplane_takeoff_state(connection);
+    nomad::vehicle::Vehicle vehicle(connection);
+
     CHECK(!vehicle.disarm().success);
-    CHECK(!vehicle.set_guided_mode().success);
+    CHECK(vehicle.set_guided_mode().success);
+    CHECK(vehicle.arm().success);
     CHECK(!vehicle.set_mode(15).success);
     const auto takeoff_result = vehicle.takeoff(5.0F);
     CHECK(!takeoff_result.success);
@@ -152,8 +251,56 @@ void test_quadplane_flight_commands_are_rejected_before_transmission() {
     CHECK(goto_result.message == "goto location is not qualified for QuadPlane");
     CHECK(!vehicle.land().success);
     CHECK(!vehicle.return_to_launch().success);
-    CHECK(connection.command_history.empty());
+    const auto vtol_result = vehicle.vtol_takeoff(5.0F);
+    CHECK(vtol_result.success);
+    CHECK(connection.command_history.size() == 4);
+    CHECK(connection.command_history.back().id == 22);
     CHECK(!connection.last_goto.has_value());
+}
+
+void test_quadplane_vtol_takeoff_rechecks_state_after_preparation() {
+    FakeConnection connection;
+    connection.connect();
+    configure_quadplane_takeoff_state(connection);
+    connection.stale_position_after_arm = true;
+    nomad::vehicle::Vehicle vehicle(connection);
+
+    const auto result = vehicle.vtol_takeoff(5.0F);
+
+    CHECK(!result.success);
+    CHECK(result.message == "position feed is stale");
+    CHECK(connection.command_history.size() == 2);
+    CHECK(connection.command_history.back().id == 400);
+}
+
+void test_quadplane_vtol_takeoff_rejects_stale_heartbeat_after_preparation() {
+    FakeConnection connection;
+    connection.connect();
+    configure_quadplane_takeoff_state(connection);
+    connection.stale_heartbeat_after_arm = true;
+    nomad::vehicle::Vehicle vehicle(connection);
+
+    const auto result = vehicle.vtol_takeoff(5.0F);
+
+    CHECK(!result.success);
+    CHECK(result.message == "heartbeat is stale");
+    CHECK(connection.command_history.size() == 2);
+    CHECK(connection.command_history.back().id == 400);
+}
+
+void test_quadplane_vtol_takeoff_rejects_invalid_gps_after_preparation() {
+    FakeConnection connection;
+    connection.connect();
+    configure_quadplane_takeoff_state(connection);
+    connection.invalidate_gps_after_arm = true;
+    nomad::vehicle::Vehicle vehicle(connection);
+
+    const auto result = vehicle.vtol_takeoff(5.0F);
+
+    CHECK(!result.success);
+    CHECK(result.message == "a valid 3D GPS fix is required");
+    CHECK(connection.command_history.size() == 2);
+    CHECK(connection.command_history.back().id == 400);
 }
 
 void test_unknown_aircraft_rejects_aircraft_specific_commands() {
@@ -171,6 +318,7 @@ void test_unknown_aircraft_rejects_aircraft_specific_commands() {
     CHECK(!vehicle.goto_location({45.5, -73.6, 5.0F}).success);
     CHECK(!vehicle.land().success);
     CHECK(!vehicle.return_to_launch().success);
+    CHECK(!vehicle.vtol_takeoff(5.0F).success);
     CHECK(connection.command_history.empty());
     CHECK(!connection.last_goto.has_value());
 }
@@ -299,10 +447,18 @@ int main() {
         test_arm_sends_arm_command();
         test_takeoff_rejects_invalid_altitude();
         test_mode_and_takeoff_are_verified();
+        test_quadplane_vtol_takeoff_runs_guided_arm_and_climb();
+        test_quadplane_vtol_takeoff_does_not_treat_ack_as_completion();
+        test_quadplane_vtol_takeoff_rejects_partial_climb();
         test_guided_mode_uses_its_semantic_operation();
         test_land_and_rtl_are_verified();
         test_plane_commands_are_rejected_before_transmission();
+        test_quadplane_generic_takeoff_is_rejected_before_transmission();
+        test_quadplane_vtol_takeoff_rejects_stale_position_before_transmission();
         test_quadplane_flight_commands_are_rejected_before_transmission();
+        test_quadplane_vtol_takeoff_rechecks_state_after_preparation();
+        test_quadplane_vtol_takeoff_rejects_stale_heartbeat_after_preparation();
+        test_quadplane_vtol_takeoff_rejects_invalid_gps_after_preparation();
         test_unknown_aircraft_rejects_aircraft_specific_commands();
         test_disarm_is_verified();
         test_goto_location_validates_and_verifies();

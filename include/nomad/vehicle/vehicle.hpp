@@ -37,7 +37,8 @@ class Vehicle {
   public:
     explicit Vehicle(mavlink::MavlinkConnection &connection, safety::WatchdogPolicy watchdog_policy = {},
                      safety::GlobalFencePolicy fence_policy = {}, safety::VelocityLimits velocity_limits = {},
-                     std::chrono::milliseconds position_freshness_timeout = std::chrono::milliseconds(2000));
+                     std::chrono::milliseconds position_freshness_timeout = std::chrono::milliseconds(2000),
+                     std::chrono::milliseconds takeoff_state_timeout = std::chrono::seconds(30));
     ~Vehicle();
 
     Vehicle(const Vehicle &) = delete;
@@ -58,6 +59,7 @@ class Vehicle {
     CommandResult set_mode(std::uint32_t custom_mode);
     CommandResult set_guided_mode();
     CommandResult takeoff(float altitude_m);
+    CommandResult vtol_takeoff(float altitude_m);
     CommandResult update_vio(bool healthy, float confidence);
     CommandResult set_velocity(const safety::VelocityCommand &command);
     CommandResult set_servo(int channel, int pwm_microseconds);
@@ -89,6 +91,8 @@ class Vehicle {
     CommandResult wait_for_mode(const std::function<bool(std::uint32_t)> &matches, const char *name);
     CommandResult send_mode_and_verify(std::uint32_t custom_mode, const char *name);
     CommandResult wait_for_altitude(float minimum_altitude_m, const char *name);
+    CommandResult wait_for_vtol_takeoff(float target_altitude_m);
+    std::optional<std::string> vtol_takeoff_state_error(const telemetry::VehicleState &state) const;
     CommandResult wait_for_location(const Location &location);
     CommandResult require_operation(VehicleOperation operation) const;
     // A fresh heartbeat does not imply a fresh position: callers fail closed
@@ -107,6 +111,9 @@ class Vehicle {
     safety::GlobalFencePolicy fence_policy_;
     safety::VelocityLimits velocity_limits_;
     std::chrono::milliseconds position_freshness_timeout_{std::chrono::milliseconds(2000)};
+    // Bounds the authoritative climb wait; tests use a short deadline for a
+    // deterministic partial-climb falsification while production keeps 30 s.
+    std::chrono::milliseconds takeoff_state_timeout_{std::chrono::seconds(30)};
     safety::ReleaseInterlock payload_interlock_;
     mutable std::mutex payload_mutex_;
     mutable std::mutex velocity_mutex_;
