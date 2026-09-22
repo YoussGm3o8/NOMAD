@@ -160,6 +160,9 @@ namespace NOMAD.MissionPlanner
             Stats.BytesSentOutbound += bytes.Length;
         }
 
+        internal bool CanAnnounce => Stats.IsOpen && Stats.LastPacketTime == DateTime.MinValue &&
+            (Config.Transport != "UDP" || _remote != null);
+
         internal bool Opening => _connecting != null;
         public void Dispose()
         {

@@ -52,6 +52,7 @@ internal static partial class DualLinkStressTests
     {
         Run("multi-link: configuration rejection", MultiConfigValidation);
         await RunAsync("multi-link: three links, consumers, pinning and cleanup", MultiLinkRouting);
+        await RunAsync("multi-link: initial announcement", InitialAnnouncement);
         await RunAsync("multi-link: TCP isolation and reconnect", TcpIsolation);
         Run("parser: single v2 frame", ParserSingleV2);
         Run("parser: single v1 frame", ParserSingleV1);

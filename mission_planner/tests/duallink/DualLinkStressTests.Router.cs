@@ -123,9 +123,13 @@ internal static partial class DualLinkStressTests
 
                 ltePump.Dispose(); // LTE goes silent mid-flight
                 Check(await WaitUntil(() => bed.Router.ActiveLink == LinkType.RadioMaster, 5000), "fails over to RadioMaster");
-                lock (bed.Failovers)
-                    Check(bed.Failovers.Any(e => e.FromLink == LinkType.LTE && e.ToLink == LinkType.RadioMaster),
-                        "failover event recorded LTE→Radio");
+                Check(await WaitUntil(() =>
+                {
+                    lock (bed.Failovers)
+                    {
+                        return bed.Failovers.Any(e => e.FromLink == LinkType.LTE && e.ToLink == LinkType.RadioMaster);
+                    }
+                }, 1000), "failover event recorded LTE to Radio");
 
                 // Telemetry must keep flowing on the surviving link. Markers use
                 // their own compid so their seq counter does not interleave with
@@ -140,9 +144,13 @@ internal static partial class DualLinkStressTests
                 // Preferred link recovers → router returns to it after the hold-down.
                 ltePump = new Pump(f => bed.SendLte(f), 10, 1, 1);
                 Check(await WaitUntil(() => bed.Router.ActiveLink == LinkType.LTE, 8000), "returns to preferred LTE after recovery");
-                lock (bed.Failovers)
-                    Check(bed.Failovers.Any(e => e.ToLink == LinkType.LTE && e.Reason.Contains("preferred")),
-                        "preferred-recovery event recorded");
+                Check(await WaitUntil(() =>
+                {
+                    lock (bed.Failovers)
+                    {
+                        return bed.Failovers.Any(e => e.ToLink == LinkType.LTE && e.Reason.Contains("preferred"));
+                    }
+                }, 1000), "preferred-recovery event recorded");
                 Check(bed.Router.FailoverLog.Count >= 2, "failover log retains events");
             }
             finally { ltePump.Dispose(); radioPump?.Dispose(); }

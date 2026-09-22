@@ -210,6 +210,31 @@ internal static partial class DualLinkStressTests
         CheckEq(radio.Drain().Count(f => Frames.MsgIdOf(f) == 23), 0, "parameter write not copied to standby");
     }
 
+    private static async Task InitialAnnouncement()
+    {
+        const int port = 31200;
+        using (var aircraft = new UdpSink())
+        using (var standby = new UdpSink())
+        using (var mp = UdpSink.ConnectedTo(port))
+        {
+            var config = MultiConfig(port);
+            config.Links[0].RemoteHost = "127.0.0.1";
+            config.Links[0].RemotePort = ((IPEndPoint)aircraft.Client.Client.LocalEndPoint).Port;
+            config.Links[1].RemoteHost = "127.0.0.1";
+            config.Links[1].RemotePort = ((IPEndPoint)standby.Client.Client.LocalEndPoint).Port;
+            using (var router = new GroundLinkRouter(config))
+            {
+                router.Start();
+                await Task.Delay(100);
+                mp.Send(Frames.Heartbeat(255, 190, 1));
+                var received = new List<byte[]>();
+                Check(await WaitUntil(() => { received.AddRange(aircraft.Drain()); return received.Count == 1; },
+                    2000), "configured UDP peer receives initial GCS announcement before telemetry");
+                CheckEq(standby.Drain().Count, 0, "initial announcement is not broadcast");
+            }
+        }
+    }
+
     private static async Task TcpIsolation()
     {
         const int port = 31100;
@@ -229,11 +254,15 @@ internal static partial class DualLinkStressTests
                 router.Start();
                 using (var peer = await listener.AcceptTcpClientAsync())
                 {
+                    router.SetManualOverride("cell");
                     mp.Send(Frames.Heartbeat(255, 190, 0));
+                    Check(await WaitUntil(() => peer.Available > 0, 2000),
+                        "TCP server receives GCS announcement before sending telemetry");
                     var heartbeat = Frames.Heartbeat(1, 1, 1);
                     await peer.GetStream().WriteAsync(heartbeat, 0, 4);
                     await peer.GetStream().WriteAsync(heartbeat, 4, heartbeat.Length - 4);
                     Check(await WaitUntil(() => router.Links[0].FramesReceived > 0, 2000), "TCP split frame parsed");
+                    router.SetManualOverride("");
                 }
                 Check(await WaitUntil(() => router.ActiveLink == "wifi", 3000), "TCP close leaves UDP routing live");
                 using (var reconnected = await listener.AcceptTcpClientAsync())

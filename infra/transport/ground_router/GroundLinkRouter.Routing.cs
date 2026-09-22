@@ -153,7 +153,7 @@ namespace NOMAD.MissionPlanner
             if (_forwarded.TryGetValue(Convert.ToBase64String(frame.Raw), out var echo) &&
                 (now - echo.Item2).TotalMilliseconds < 750) { return; }
             SelectLink(now);
-            string selected = ManualOverride != LinkType.None ? ManualOverride : ActiveLink;
+            string selected = SelectOutboundLink();
             if (IsParameter(frame))
             {
                 if (_paramLink == null || now - _paramActivity > ParamTimeout)
@@ -163,7 +163,7 @@ namespace NOMAD.MissionPlanner
                 selected = _paramLink;
             }
             var link = _links.FirstOrDefault(l => l.Config.Id == selected);
-            if (link == null || !Usable(link, now))
+            if (link == null || (!Usable(link, now) && !link.CanAnnounce))
             {
                 return;
             }
@@ -180,6 +180,27 @@ namespace NOMAD.MissionPlanner
                 link.Dispose();
                 EmitLog(selected + " send failed; frame not retried: " + ex.Message);
             }
+        }
+
+        private string SelectOutboundLink()
+        {
+            if (ManualOverride != LinkType.None)
+            {
+                return ManualOverride;
+            }
+            if (ActiveLink != LinkType.None)
+            {
+                return ActiveLink;
+            }
+            var initial = _links.Where(l => l.Config.Enabled && l.CanAnnounce)
+                .OrderByDescending(l => l.Config.Id == _cfg.PreferredLink)
+                .ThenByDescending(l => l.Config.Priority)
+                .ThenBy(l => l.Config.Id, StringComparer.Ordinal).FirstOrDefault();
+            if (initial != null)
+            {
+                SetActiveLink(initial.Config.Id, "initial GCS announcement");
+            }
+            return ActiveLink;
         }
 
         private bool Usable(PhysicalLink link, DateTime now) => link != null && link.Config.Enabled &&
@@ -221,6 +242,10 @@ namespace NOMAD.MissionPlanner
                 .ThenByDescending(l => l.Config.Priority).ThenBy(l => l.Config.Id, StringComparer.Ordinal).ToList();
             var best = ranked.FirstOrDefault();
             var current = _links.FirstOrDefault(l => l.Config.Id == ActiveLink);
+            if (best == null && current != null && current.CanAnnounce)
+            {
+                return;
+            }
             if (!Usable(current, now))
             {
                 SetActiveLink(best?.Config.Id ?? LinkType.None, "active link unavailable");

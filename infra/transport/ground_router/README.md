@@ -134,6 +134,9 @@ and explicit per-consumer backpressure against the same no-fan-out tests.
 **Outbound MAVLink is sent through one selected physical link and is not broadcast
 across all healthy links.** A failed send is not retried on another transport:
 partial TCP/serial delivery may already have happened. The caller decides retries.
+Before the first telemetry frame, an open TCP/COM or configured UDP destination
+can carry initial GCS announcements on one selected link. A previously receiving
+but now stale link does not use this startup exception.
 
 `PARAM_*` and `PARAM_EXT_*` requests/writes pin one physical link globally across
 consumers. Parameter traffic stays pinned across automatic/manual changes.
