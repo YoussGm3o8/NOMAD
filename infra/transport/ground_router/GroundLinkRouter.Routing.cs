@@ -228,7 +228,7 @@ namespace NOMAD.MissionPlanner
             }
             _lastTick = now;
             SelectLink(now);
-            _notifications.Enqueue(() => StatsUpdated?.Invoke(this, EventArgs.Empty));
+            EnqueueNotification(() => StatsUpdated?.Invoke(this, EventArgs.Empty));
         }
 
         private void SelectLink(DateTime now)

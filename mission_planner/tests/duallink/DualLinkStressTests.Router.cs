@@ -143,6 +143,9 @@ internal static partial class DualLinkStressTests
 
                 // Preferred link recovers → router returns to it after the hold-down.
                 ltePump = new Pump(f => bed.SendLte(f), 10, 1, 1);
+                Check(await WaitUntil(() => bed.Router.Lte.IsConnected, 1000), "preferred link receives again");
+                await Task.Delay(250);
+                Check(bed.Router.ActiveLink == LinkType.RadioMaster, "brief recovery does not immediately flap");
                 Check(await WaitUntil(() => bed.Router.ActiveLink == LinkType.LTE, 8000), "returns to preferred LTE after recovery");
                 Check(await WaitUntil(() =>
                 {

@@ -154,6 +154,15 @@ namespace NOMAD.MissionPlanner
             }
         }
 
+        private void EnqueueNotification(Action notification)
+        {
+            if (_notifications.Count >= 128)
+            {
+                _notifications.Dequeue();
+            }
+            _notifications.Enqueue(notification);
+        }
+
         private void PublishNotifications(CancellationToken stop)
         {
             Action[] notifications;
@@ -249,8 +258,8 @@ namespace NOMAD.MissionPlanner
             {
                 _failovers.Dequeue();
             }
-            _notifications.Enqueue(() => FailoverOccurred?.Invoke(this, change));
-            _notifications.Enqueue(() => ActiveLinkChanged?.Invoke(this, id));
+            EnqueueNotification(() => FailoverOccurred?.Invoke(this, change));
+            EnqueueNotification(() => ActiveLinkChanged?.Invoke(this, id));
         }
 
         public void ResetCounters()

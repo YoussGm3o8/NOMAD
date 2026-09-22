@@ -11,6 +11,67 @@ using NOMAD.MissionPlanner;
 
 internal static partial class DualLinkStressTests
 {
+    private static async Task LinkCollectionSizes()
+    {
+        foreach (int count in new[] { 1, 2, 4 })
+        {
+            int port = 31300 + count * 10;
+            var config = MultiConfig(port);
+            config.Links = Enumerable.Range(0, count).Select(i => new LinkConfig
+                { Id = "path-" + i, Port = port + i + 1, Priority = 100 - i }).ToList();
+            config.PreferredLink = "path-0";
+            config.Consumers = new List<ConsumerConfig> { new ConsumerConfig { Id = "mp", RouterPort = port } };
+            var peers = new List<UdpSink>();
+            var pumps = new List<Pump>();
+            try
+            {
+                using (var router = new GroundLinkRouter(config))
+                using (var mp = UdpSink.ConnectedTo(port))
+                {
+                    router.Start();
+                    mp.Send(Frames.Heartbeat(255, 190, 0));
+                    foreach (var link in config.Links)
+                    {
+                        var peer = UdpSink.ConnectedTo(link.Port);
+                        peers.Add(peer);
+                        pumps.Add(new Pump(peer.Send, 10));
+                    }
+                    Check(await WaitUntil(() => router.Links.All(l => l.IsConnected), 2000),
+                        count + " configured links are live");
+                    await SelectEveryLink(router, config, peers, mp);
+                }
+            }
+            finally
+            {
+                foreach (var pump in pumps) { pump.Dispose(); }
+                foreach (var peer in peers) { peer.Dispose(); }
+            }
+        }
+    }
+
+    private static async Task SelectEveryLink(GroundLinkRouter router, GroundLinkRouter.RouterConfig config,
+        List<UdpSink> peers, UdpSink mp)
+    {
+        for (int i = 0; i < peers.Count; i++)
+        {
+            Check(router.SetManualOverride(config.Links[i].Id), "any configured ID can be selected");
+            mp.Drain();
+            uint value = (uint)(90000 + i);
+            peers[i].Send(Frames.Marker(value, (byte)i, 1, 71));
+            var received = new List<uint>();
+            Check(await WaitUntil(() => { DrainMarkers(mp, received); return received.Contains(value); }, 1000),
+                "telemetry delivered from " + config.Links[i].Id);
+            foreach (var peer in peers) { peer.Drain(); }
+            mp.Send(Frames.Marker(value + 100, (byte)i, 255, 190));
+            received.Clear();
+            Check(await WaitUntil(() => { DrainMarkers(peers[i], received);
+                return received.Contains(value + 100); }, 1000), "selected outbound transport receives command");
+            await Task.Delay(30);
+            Check(peers.Where((peer, index) => index != i).All(peer => DrainMarkers(peer).Count == 0),
+                "no command fan-out with " + peers.Count + " enabled links");
+        }
+    }
+
     private static GroundLinkRouter.RouterConfig MultiConfig(int port)
     {
         return new GroundLinkRouter.RouterConfig

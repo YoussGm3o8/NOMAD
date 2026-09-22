@@ -50,6 +50,7 @@ internal static partial class DualLinkStressTests
 
     private static async Task RunAll()
     {
+        await RunAsync("multi-link: one, two and four enabled links", LinkCollectionSizes);
         Run("multi-link: configuration rejection", MultiConfigValidation);
         await RunAsync("multi-link: three links, consumers, pinning and cleanup", MultiLinkRouting);
         await RunAsync("multi-link: initial announcement", InitialAnnouncement);
