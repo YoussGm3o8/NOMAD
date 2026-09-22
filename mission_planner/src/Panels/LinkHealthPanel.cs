@@ -25,7 +25,7 @@ namespace NOMAD.MissionPlanner
         // Fields
         // ============================================================
 
-        private readonly MAVLinkConnectionManager _cm;
+        private readonly IRouterStatusProvider _provider;
         private readonly NOMADConfig _config;
         private readonly Timer _refresh;
 
@@ -56,9 +56,9 @@ namespace NOMAD.MissionPlanner
         // Ctor
         // ============================================================
 
-        public LinkHealthPanel(MAVLinkConnectionManager connectionManager, NOMADConfig config)
+        public LinkHealthPanel(IRouterStatusProvider connectionManager, NOMADConfig config)
         {
-            _cm = connectionManager ?? throw new ArgumentNullException(nameof(connectionManager));
+            _provider = connectionManager ?? throw new ArgumentNullException(nameof(connectionManager));
             _config = config ?? throw new ArgumentNullException(nameof(config));
 
             BackColor = NOMADTheme.BG_DARK;
@@ -246,7 +246,7 @@ namespace NOMAD.MissionPlanner
             var row = new FlowLayoutPanel
             { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true, BackColor = Color.Transparent };
             _linkRow = row;
-            RebuildLinkCards(_cm.LinkStatistics);
+            RebuildLinkCards(_provider.LinkStatistics);
             return row;
         }
 
@@ -259,7 +259,7 @@ namespace NOMAD.MissionPlanner
             {
                 var id = stats.Type;
                 var card = new LinkCard(stats.Name, id) { Width = 330, Height = 270 };
-                card.SetActiveRequested += (sender, args) => _cm.SwitchToLink(id);
+                card.SetActiveRequested += (sender, args) => _provider.SwitchToLink(id);
                 _cards.Add(id, card);
                 _linkRow.Controls.Add(card);
             }
@@ -293,26 +293,29 @@ namespace NOMAD.MissionPlanner
                 Padding = new Padding(0),
             };
 
-            _chkAuto = SettingCheck("Auto-failover", _cm.Config.AutoFailoverEnabled);
+            _chkAuto = SettingCheck("Auto-failover", _provider.Config.AutoFailoverEnabled);
+            _chkAuto.Enabled = _provider.SupportsLiveConfiguration;
             _chkAuto.CheckedChanged += (s, e) =>
             {
-                _cm.SetAutoFailoverEnabled(_chkAuto.Checked);
+                _provider.SetAutoFailoverEnabled(_chkAuto.Checked);
                 _config.AutoFailoverEnabled = _chkAuto.Checked;
                 PersistConfig();
             };
 
-            _chkAutoReconnect = SettingCheck("Return to preferred when healthy", _cm.Config.AutoReconnectPreferred);
+            _chkAutoReconnect = SettingCheck("Return to preferred when healthy", _provider.Config.AutoReconnectPreferred);
+            _chkAutoReconnect.Enabled = _provider.SupportsLiveConfiguration;
             _chkAutoReconnect.CheckedChanged += (s, e) =>
             {
-                _cm.SetAutoReconnectPreferred(_chkAutoReconnect.Checked);
+                _provider.SetAutoReconnectPreferred(_chkAutoReconnect.Checked);
                 _config.AutoReconnectToPreferred = _chkAutoReconnect.Checked;
                 PersistConfig();
             };
 
-            _chkDedup = SettingCheck("Deduplicate cross-link packets", _cm.Config.RouterDedupEnabled);
+            _chkDedup = SettingCheck("Deduplicate cross-link packets", _provider.Config.RouterDedupEnabled);
+            _chkDedup.Enabled = _provider.SupportsLiveConfiguration;
             _chkDedup.CheckedChanged += (s, e) =>
             {
-                _cm.SetDedupEnabled(_chkDedup.Checked);
+                _provider.SetDedupEnabled(_chkDedup.Checked);
                 _config.RouterDedupEnabled = _chkDedup.Checked;
                 PersistConfig();
             };
@@ -328,12 +331,13 @@ namespace NOMAD.MissionPlanner
                 Margin = new Padding(0, 2, NOMADTheme.PAD, 0),
             };
             _cmbPreferred.Items.Add("");
-            foreach (var stats in _cm.LinkStatistics) { _cmbPreferred.Items.Add(stats.Type); }
-            _cmbPreferred.SelectedItem = _cm.Config.PreferredLink;
+            foreach (var stats in _provider.LinkStatistics) { _cmbPreferred.Items.Add(stats.Type); }
+            _cmbPreferred.SelectedItem = _provider.Config.PreferredLink;
+            _cmbPreferred.Enabled = _provider.SupportsLiveConfiguration;
             _cmbPreferred.SelectedIndexChanged += (s, e) =>
             {
                 var pref = _cmbPreferred.SelectedItem as string ?? "";
-                _cm.SetPreferredLink(pref);
+                _provider.SetPreferredLink(pref);
                 _config.PreferredMavlinkLink = pref;
                 PersistConfig();
             };
@@ -342,11 +346,12 @@ namespace NOMAD.MissionPlanner
             prefGroup.Controls.Add(_cmbPreferred);
 
             _btnReset = SettingButton("Reset counters");
-            _btnReset.Click += (s, e) => _cm.ResetCounters();
+            _btnReset.Enabled = _provider.SupportsLiveConfiguration;
+            _btnReset.Click += (s, e) => _provider.ResetCounters();
 
             _btnReleaseOverride = SettingButton("Release override");
             _btnReleaseOverride.Visible = false;
-            _btnReleaseOverride.Click += (s, e) => _cm.SwitchToLink(LinkType.None);
+            _btnReleaseOverride.Click += (s, e) => _provider.SwitchToLink(LinkType.None);
 
             _lblManualOverride = new Label
             {
@@ -463,19 +468,19 @@ namespace NOMAD.MissionPlanner
 
         private void HookEvents()
         {
-            _cm.LinkStatusChanged += (s, e) =>
+            _provider.LinkStatusChanged += (s, e) =>
             {
                 UiAsync.RunSync(this, () => RefreshAll(), "LinkStatusChanged");
             };
-            _cm.FailoverOccurred += (s, e) =>
+            _provider.FailoverOccurred += (s, e) =>
             {
                 UiAsync.RunSync(this, () => AppendLog(e), "FailoverOccurred");
             };
-            _cm.ActiveLinkChanged += (s, t) =>
+            _provider.ActiveLinkChanged += (s, t) =>
             {
                 UiAsync.RunSync(this, () => RefreshAll(), "ActiveLinkChanged");
             };
-            _cm.LogMessage += (s, msg) =>
+            _provider.LogMessage += (s, msg) =>
             {
                 UiAsync.RunSync(this, () => _lstLog.Items.Add($"[{DateTime.Now:HH:mm:ss}] {msg}"), "LogMessage");
             };
@@ -489,18 +494,23 @@ namespace NOMAD.MissionPlanner
         {
             try
             {
-                var links = _cm.LinkStatistics;
-                var active = _cm.ActiveLink;
-                var ovr = _cm.ManualOverride;
+                var links = _provider.LinkStatistics;
+                var active = _provider.ActiveLink;
+                var ovr = _provider.ManualOverride;
 
-                _lblActive.Text = $"Active: {(active == LinkType.None ? "—" : active.ToString())}";
-                _lblActive.ForeColor = string.IsNullOrEmpty(active)
+                _lblActive.Text = !_provider.IsRouterAvailable
+                    ? "Active: unavailable"
+                    : $"Active: {(active == LinkType.None ? "—" : active.ToString())}";
+                _lblActive.ForeColor = !_provider.IsRouterAvailable || string.IsNullOrEmpty(active)
                     ? NOMADTheme.WARNING : NOMADTheme.TEXT_PRIMARY;
 
-                bool running = _cm.IsMonitoring;
-                _lblRouterStatus.Text = LinkStatusDisplay.FormatRouterStatus(running, links);
-                _lblRouterStatus.ForeColor = running ? NOMADTheme.TEXT_SECONDARY : NOMADTheme.ERROR;
-                _lblLocalEndpoint.Text = $"Local: {_cm.LocalMergedEndpoint}   (set Mission Planner to UDP Client / UDPCl to this port)";
+                bool running = _provider.IsMonitoring;
+                _lblRouterStatus.Text = LinkStatusDisplay.FormatRouterStatus(
+                    running, _provider.IsRouterAvailable, links);
+                _lblRouterStatus.ForeColor = _provider.IsRouterAvailable
+                    ? NOMADTheme.TEXT_SECONDARY : NOMADTheme.ERROR;
+                _lblLocalEndpoint.Text = $"Mode: {_provider.RouterMode}   Local: {_provider.LocalMergedEndpoint}   " +
+                    "(set Mission Planner to UDP Client / UDPCl to this port)";
 
                 if (LinkStatusDisplay.HasMembershipChanged(links, _cards.Keys))
                 {
@@ -508,7 +518,7 @@ namespace NOMAD.MissionPlanner
                     _cmbPreferred.Items.Clear();
                     _cmbPreferred.Items.Add("");
                     foreach (var stats in links) { _cmbPreferred.Items.Add(stats.Type); }
-                    _cmbPreferred.SelectedItem = _cm.Config.PreferredLink;
+                    _cmbPreferred.SelectedItem = _provider.Config.PreferredLink;
                 }
                 foreach (var stats in links)
                 {
@@ -551,7 +561,7 @@ namespace NOMAD.MissionPlanner
         {
             try
             {
-                Clipboard.SetText(_cm.LocalMergedEndpoint);
+                Clipboard.SetText(_provider.LocalMergedEndpoint);
                 _lblCopied.Text = "copied";
                 var t = new Timer { Interval = 1500 };
                 t.Tick += (s, e) => { _lblCopied.Text = ""; t.Stop(); t.Dispose(); };

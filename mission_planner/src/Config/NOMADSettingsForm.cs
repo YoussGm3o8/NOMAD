@@ -39,6 +39,7 @@ namespace NOMAD.MissionPlanner
 
         // Dual Link Tab
         private CheckBox _chkDualLinkEnabled;
+        private ComboBox _cmbRouterMode;
         private ComboBox _cmbRadioMasterConnType;
         private Label _lblRadioMasterPort;
         private NumericUpDown _numRadioMasterPort;
@@ -56,6 +57,8 @@ namespace NOMAD.MissionPlanner
         private TextBox _txtRouterBindAddress;
         private NumericUpDown _numRouterLocalPort;
         private CheckBox _chkRouterDedup;
+        private TextBox _txtManagementBindAddress;
+        private NumericUpDown _numManagementPort;
 
         // UI Tab
         private CheckBox _chkDebugMode;

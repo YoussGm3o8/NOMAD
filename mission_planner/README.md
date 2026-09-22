@@ -26,7 +26,8 @@ This task can install/overwrite the local plugin; it is a deployment operation.
 Use `lint-plugin` and focused `test-plugin-*` tasks for non-deploying checks.
 The current core client spawns a local CLI. Direct gimbal, mode/parameter and
 fence paths remain; the integrated target needs one active command owner and
-explicit handover (G2). A remote core protocol is not implemented yet.
+explicit handover (G2). The router management protocol is transport-only and
+does not replace the future authenticated C++ runtime protocol.
 For CONOPS v1.0, the dedicated GCS display must show live aircraft position and
 competition area (AE27-OPS-004). Existing EmergencyLand and boundary parameter
 writes do not establish compliant independent all-mode termination; their
@@ -47,8 +48,11 @@ field names, a complete host JSON example, port ownership and recovery policy.
 The plugin's default C++ listener is now loopback `14601`, separate from physical
 RadioMaster `14550`; the router feeds it from `14602`.
 
-For standalone ownership disable embedded Multi-Link routing and connect native
-MP via UDPCl to the host's `14600`. MP restart then leaves the host running.
-Remote host status/control from the plugin is not yet implemented. The plugin
-still launches one-shot C++ commands; do not start simultaneous CLI processes
-that bind the same consumer endpoint.
+For standalone ownership set `RouterMode` to `Standalone`, configure the
+loopback management endpoint (default `127.0.0.1:14610`), and connect native MP
+via UDPCl to the host's `14600`. MP restart then leaves the host running while
+the plugin reconnects to status/events and marks stale data explicitly. The UI
+can select an enabled link or return to automatic selection; endpoint, consumer,
+and policy changes require a host restart. Embedded mode remains the default and
+keeps plugin-owned lifetime. Do not start both modes against the same endpoints
+or simultaneous CLI processes that bind the same consumer endpoint.

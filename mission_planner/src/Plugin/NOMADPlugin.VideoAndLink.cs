@@ -208,6 +208,7 @@ namespace NOMAD.MissionPlanner
                 AutoReconnectPreferred = _config.AutoReconnectToPreferred,
                 PreferredLinkReconnectDelaySec = _config.PreferredLinkReconnectDelay,
                 MonitorIntervalMs = _config.LinkMonitorInterval,
+                RouterMode = _config.RouterMode,
                 RadioMasterConnectionType = _config.RadioMasterConnectionType,
                 RadioMasterComPort = _config.RadioMasterComPort,
                 RadioMasterBaudRate = _config.RadioMasterBaudRate,
@@ -215,6 +216,8 @@ namespace NOMAD.MissionPlanner
                 RouterBindAddress = _config.RouterBindAddress,
                 RouterLocalPort = _config.RouterLocalPort,
                 RouterDedupEnabled = _config.RouterDedupEnabled,
+                ManagementBindAddress = _config.ManagementBindAddress,
+                ManagementPort = _config.ManagementPort,
                 HeartbeatTimeoutSec = _config.MavlinkHeartbeatTimeout,
             };
         }

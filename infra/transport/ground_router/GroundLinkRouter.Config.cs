@@ -37,6 +37,11 @@ namespace NOMAD.MissionPlanner
             {
                 throw new ArgumentException("Local consumers require IPv4 loopback");
             }
+            if (config.ManagementBindAddress != "127.0.0.1" ||
+                config.ManagementPort <= 0 || config.ManagementPort > 65535)
+            {
+                throw new ArgumentException("Management endpoint must use IPv4 loopback and a valid port");
+            }
             var ids = new HashSet<string>(StringComparer.Ordinal);
             var ports = new HashSet<int>();
             foreach (var link in links)

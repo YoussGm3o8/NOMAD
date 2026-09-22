@@ -24,6 +24,7 @@ namespace NOMAD.MissionPlanner
             _chkAutoStartHudVideo.Checked = Config.AutoStartHudVideo;
 
             _chkDualLinkEnabled.Checked = Config.DualLinkEnabled && Config.RouterEnabled;
+            SetComboBoxValue(_cmbRouterMode, Config.RouterMode);
             _cmbRadioMasterConnType.SelectedIndex = Config.RadioMasterConnectionType switch
             {
                 "COM" => 1,
@@ -50,6 +51,9 @@ namespace NOMAD.MissionPlanner
             _txtRouterBindAddress.Text = Config.RouterBindAddress;
             _numRouterLocalPort.Value = ClampValue(_numRouterLocalPort, Config.RouterLocalPort);
             _chkRouterDedup.Checked = Config.RouterDedupEnabled;
+            _txtManagementBindAddress.Text = Config.ManagementBindAddress;
+            _numManagementPort.Value = ClampValue(_numManagementPort, Config.ManagementPort);
+            UpdateRouterModeState();
 
             _chkDarkMode.Checked = Config.DarkMode;
             _chkShowNotifications.Checked = Config.ShowNotifications;
@@ -150,6 +154,7 @@ namespace NOMAD.MissionPlanner
 
             Config.DualLinkEnabled = _chkDualLinkEnabled.Checked;
             Config.RouterEnabled = _chkDualLinkEnabled.Checked;
+            Config.RouterMode = _cmbRouterMode.SelectedItem?.ToString() ?? "Embedded";
             Config.RadioMasterConnectionType = _cmbRadioMasterConnType.SelectedIndex switch
             {
                 1 => "COM",
@@ -172,6 +177,9 @@ namespace NOMAD.MissionPlanner
             var mpConsumer = Config.RouterConsumers?.Find(c => c.Id == "mission_planner");
             if (mpConsumer != null) { mpConsumer.RouterPort = Config.RouterLocalPort; }
             Config.RouterDedupEnabled = _chkRouterDedup.Checked;
+            Config.ManagementBindAddress = string.IsNullOrWhiteSpace(_txtManagementBindAddress.Text)
+                ? "127.0.0.1" : _txtManagementBindAddress.Text.Trim();
+            Config.ManagementPort = (int)_numManagementPort.Value;
 
             Config.DarkMode = _chkDarkMode.Checked;
             Config.ShowNotifications = _chkShowNotifications.Checked;

@@ -51,6 +51,11 @@ namespace NOMAD.MissionPlanner
 
             AddSectionLabel(tab, "MAVLink Multi-Link (LTE + RadioMaster)", ref y);
 
+            AddLabel(tab, "Router ownership:", 20, y);
+            _cmbRouterMode = AddComboBox(tab, 170, y, 110, new[] { "Embedded", "Standalone" });
+            _cmbRouterMode.SelectedIndexChanged += (s, e) => UpdateRouterModeState();
+            y += 30;
+
             _chkDualLinkEnabled = AddCheckBox(tab, "Enable NOMAD multi-link router", 20, y, Color.LimeGreen);
             _chkDualLinkEnabled.CheckedChanged += (s, e) => UpdateDualLinkControlsState();
             y += 35;
@@ -117,10 +122,20 @@ namespace NOMAD.MissionPlanner
             _chkRouterDedup = AddCheckBox(tab, "Deduplicate cross-link packets", 40, y);
             y += 30;
 
+            AddSectionLabel(tab, "Standalone management (loopback TCP)", ref y);
+            AddLabel(tab, "Bind address:", 40, y);
+            _txtManagementBindAddress = AddTextBox(tab, 170, y, 130);
+            y += 30;
+
+            AddLabel(tab, "Management port:", 40, y);
+            _numManagementPort = AddNumericUpDown(tab, 170, y, 80, 1, 65535, 14610);
+            y += 30;
+
             var routerHint = new Label
             {
-                Text = "When enabled, connect Mission Planner to the merged loopback endpoint " +
-                       "shown above. When disabled, use the direct MAVLink link configured in Mission Planner.",
+                Text = "Embedded mode starts physical links inside Mission Planner. Standalone mode " +
+                       "connects to an independently supervised host over loopback management and does " +
+                       "not start physical-link sockets here. Structural link changes require restart.",
                 Font = new Font("Segoe UI", 8, FontStyle.Italic),
                 ForeColor = Color.FromArgb(150, 150, 150),
                 Location = new Point(40, y),
@@ -149,10 +164,25 @@ namespace NOMAD.MissionPlanner
             if (_txtRouterBindAddress != null) _txtRouterBindAddress.Enabled = enabled;
             if (_numRouterLocalPort != null) _numRouterLocalPort.Enabled = enabled;
             if (_chkRouterDedup != null) _chkRouterDedup.Enabled = enabled;
+            if (_cmbRouterMode != null) _cmbRouterMode.Enabled = enabled;
 
             if (enabled)
             {
                 UpdateRadioMasterConnTypeState();
+            }
+            UpdateRouterModeState();
+        }
+
+        private void UpdateRouterModeState()
+        {
+            bool standalone = _cmbRouterMode?.SelectedItem?.ToString() == "Standalone";
+            if (_txtManagementBindAddress != null)
+            {
+                _txtManagementBindAddress.Enabled = _chkDualLinkEnabled?.Checked == true && standalone;
+            }
+            if (_numManagementPort != null)
+            {
+                _numManagementPort.Enabled = _chkDualLinkEnabled?.Checked == true && standalone;
             }
         }
 

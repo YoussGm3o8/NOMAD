@@ -66,6 +66,32 @@ def start_host(config_path, output):
     return process
 
 
+def management_request(port, message):
+    message = dict(message)
+    message.setdefault("protocol", "nomad-link-router")
+    message.setdefault("version", 1)
+    with socket.create_connection(("127.0.0.1", port), timeout=2) as client:
+        client.settimeout(2)
+        client.sendall((json.dumps(message) + "\n").encode("utf-8"))
+        response = b""
+        while not response.endswith(b"\n"):
+            chunk = client.recv(4096)
+            if not chunk:
+                raise AssertionError("management endpoint closed before its response")
+            response += chunk
+        return json.loads(response.decode("utf-8"))
+
+
+def wait_status(port, predicate, timeout=3):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        response = management_request(port, {"id": 90, "type": "get_status"})
+        if response.get("ok") and predicate(response["status"]):
+            return response["status"]
+        time.sleep(0.05)
+    raise AssertionError("management status did not reach the expected state")
+
+
 def wait_output(output, expected):
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
@@ -77,9 +103,11 @@ def wait_output(output, expected):
     raise AssertionError(f"Standalone host did not report {expected}")
 
 
-def config_for(ports, consumer_ports):
+def config_for(ports, consumer_ports, management_port):
     return {
         "PreferredLink": "a",
+        "ManagementBindAddress": "127.0.0.1",
+        "ManagementPort": management_port,
         "HeartbeatTimeoutSec": 0.3,
         "StatsTickMs": 20,
         "Links": [
@@ -87,37 +115,85 @@ def config_for(ports, consumer_ports):
             for i, (name, port) in enumerate(zip(("a", "b", "c"), ports[:3], strict=True))
         ],
         "Consumers": [
-            {"Id": str(i), "RouterPort": port, "ClientPort": consumer_ports[i]} for i, port in enumerate(ports[3:])
+            {"Id": str(i), "RouterPort": port, "ClientPort": consumer_ports[i]} for i, port in enumerate(ports[3:5])
         ],
     }
 
 
-def exercise(process, output, ports, physical, consumers):
+def start_pumps(ports, physical, stops, workers):
+    for sock, port, stop in zip(physical, ports[:3], stops, strict=True):
+        worker = threading.Thread(target=pump, args=(sock, port, stop), daemon=True)
+        worker.start()
+        workers.append(worker)
+
+
+def exercise_selection(ports, physical, consumers, management_port, stops, workers):
+    hello = management_request(management_port, {"id": 1, "type": "hello"})
+    assert hello["ok"] and hello["protocol"] == "nomad-link-router"
+    initial = management_request(management_port, {"id": 2, "type": "get_status"})
+    assert len(initial["status"]["links"]) == 3
+    selected = management_request(
+        management_port,
+        {"id": 3, "type": "select_link", "link": "a"},
+    )
+    assert selected["ok"] and selected["status"]["manualOverrideId"] == "a"
+    frame = marker(1, 701)
+    physical[0].sendto(frame, ("127.0.0.1", ports[0]))
+    for consumer in consumers:
+        receive(consumer, frame)
+    assert_single_outbound(ports, physical, consumers[1], 0, 702)
+    stops[0].set()
+    workers[0].join()
+    automatic = management_request(management_port, {"id": 4, "type": "set_auto"})
+    assert automatic["ok"] and automatic["status"]["manualOverrideId"] == ""
+    wait_status(management_port, lambda status: status["activeLinkId"] == "b")
+    frame = marker(2, 703)
+    physical[1].sendto(frame, ("127.0.0.1", ports[1]))
+    for consumer in consumers:
+        receive(consumer, frame)
+    assert_single_outbound(ports, physical, consumers[1], 1, 704)
+
+
+def exercise_disconnect(ports, physical, consumers, management_port, stops, workers):
+    stops[1].set()
+    workers[1].join()
+    wait_status(management_port, lambda status: status["activeLinkId"] == "c")
+    frame = marker(3, 705)
+    physical[2].sendto(frame, ("127.0.0.1", ports[2]))
+    for consumer in consumers:
+        receive(consumer, frame)
+
+    # A disconnected management client must not disturb the MAVLink data plane.
+    with socket.create_connection(("127.0.0.1", management_port), timeout=2) as client:
+        client.sendall(
+            (
+                json.dumps(
+                    {
+                        "id": 5,
+                        "type": "subscribe",
+                        "protocol": "nomad-link-router",
+                        "version": 1,
+                    }
+                )
+                + "\n"
+            ).encode("utf-8")
+        )
+        client.recv(4096)
+    frame = marker(4, 706)
+    physical[2].sendto(frame, ("127.0.0.1", ports[2]))
+    for consumer in consumers:
+        receive(consumer, frame)
+    restored = management_request(management_port, {"id": 6, "type": "get_status"})
+    assert restored["ok"] and restored["status"]["activeLinkId"] == "c"
+
+
+def exercise(ports, physical, consumers, management_port):
     stops = [threading.Event() for _ in physical]
     workers = []
     try:
-        for sock, port, stop in zip(physical, ports[:3], stops, strict=True):
-            worker = threading.Thread(target=pump, args=(sock, port, stop), daemon=True)
-            worker.start()
-            workers.append(worker)
-        process.stdin.write("select a\n")
-        process.stdin.flush()
-        wait_output(output, "SELECTED")
-        frame = marker(1, 701)
-        physical[0].sendto(frame, ("127.0.0.1", ports[0]))
-        for consumer in consumers:
-            receive(consumer, frame)
-        assert_single_outbound(ports, physical, consumers[1], 0, 702)
-        stops[0].set()
-        workers[0].join()
-        process.stdin.write("auto\n")
-        process.stdin.flush()
-        wait_output(output, "Active: b")
-        frame = marker(2, 703)
-        physical[1].sendto(frame, ("127.0.0.1", ports[1]))
-        for consumer in consumers:
-            receive(consumer, frame)
-        assert_single_outbound(ports, physical, consumers[1], 1, 704)
+        start_pumps(ports, physical, stops, workers)
+        exercise_selection(ports, physical, consumers, management_port, stops, workers)
+        exercise_disconnect(ports, physical, consumers, management_port, stops, workers)
     finally:
         for stop in stops:
             stop.set()
@@ -140,9 +216,10 @@ def main():
     with contextlib.ExitStack() as stack:
         physical = [stack.enter_context(peer()) for _ in range(3)]
         consumers = [stack.enter_context(peer()) for _ in range(2)]
-        reserved = [peer() for _ in range(5)]
+        reserved = [peer() for _ in range(6)]
         ports = [sock.getsockname()[1] for sock in reserved]
-        config = config_for(ports, [sock.getsockname()[1] for sock in consumers])
+        management_port = ports[5]
+        config = config_for(ports, [sock.getsockname()[1] for sock in consumers], management_port)
         for sock in reserved:
             sock.close()
         directory = stack.enter_context(tempfile.TemporaryDirectory())
@@ -152,7 +229,7 @@ def main():
         process = start_host(config_path, output)
         try:
             wait_output(output, "READY")
-            exercise(process, output, ports, physical, consumers)
+            exercise(ports, physical, consumers, management_port)
             process.stdin.write("stop\n")
             process.stdin.flush()
             assert process.wait(timeout=5) == 0, "Router shutdown failed"

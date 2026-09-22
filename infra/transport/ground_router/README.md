@@ -23,7 +23,9 @@ by the build or tests. The smoke test uses only loopback peers.
 The host accepts `status`, `select <id>`, `auto`, and `stop` on standard input;
 Ctrl+C also stops it. An invalid selection prints `REJECTED`. Closing standard
 input does not stop an independently supervised host. SIGKILL/process termination
-relies on OS socket cleanup; `stop` exercises orderly worker shutdown.
+relies on OS socket cleanup; `stop` exercises orderly worker shutdown. While the
+host is running it also exposes the loopback-only versioned management endpoint
+described below.
 
 ## Topology and socket ownership
 
@@ -46,13 +48,50 @@ The [example](example.json) has the following ownership on the ground computer:
 | Ephemeral MP port | Mission Planner | Receives telemetry and sends native GCS MAVLink |
 | `127.0.0.1:14602` | Router, consumer `nomad_core` | Sends downlink to `14601`; accepts outbound only from `14601` |
 | `127.0.0.1:14601` | One C++ CLI/runtime process | `udpin:127.0.0.1:14601`; MAVSDK learns router peer `14602` |
+| `127.0.0.1:14610` | Standalone router management server | JSON Lines status, events, and safe link-selection controls |
 
 Never run the embedded and standalone router with the same configuration
-simultaneously. In standalone mode disable the plugin's Multi-Link/embedded-router
-toggle and connect native Mission Planner using UDPCl to `14600`. The standalone
-router survives Mission Planner exit. **The plugin does not yet remotely display
-or control the standalone host's status.** Embedded mode still has plugin-owned
-lifetime. Its Link Status cards and manual controls cover the configured collection.
+simultaneously. In standalone mode select `RouterMode = Standalone` in the plugin,
+run the host with the same link/consumer configuration, and connect native Mission
+Planner using UDPCl to `14600`. The standalone router survives Mission Planner
+exit; the plugin observes it through the management endpoint and reports an
+unavailable/stale state when that endpoint cannot be reached. Embedded mode keeps
+plugin-owned lifetime and uses the same Link Status cards and safe manual controls
+without starting a second management server.
+
+## Local management protocol
+
+The standalone host binds TCP `127.0.0.1:14610` by default. The bind address is
+validated as IPv4 loopback; non-loopback management binds are rejected. The
+protocol is UTF-8 JSON Lines with one request or response per newline and a
+maximum encoded message size of 64 KiB. Every request identifies
+`protocol = "nomad-link-router"` and `version = 1`; incompatible requests receive
+a structured error and do not reach the router worker.
+
+The version-1 operations are `hello`, `get_status`, `get_links`, `select_link`,
+`set_auto`, `subscribe`, and `ping`. Requests carry an optional `id`, plus a
+`type`; `select_link` carries a stable `link` ID. Responses carry `type`, `ok`,
+and the request `id` when supplied. Status responses contain router state,
+configured/connected counts, active and manual IDs, automatic-failover and
+preferred-link state, a UTC timestamp, and an entry for every configured link.
+Each link reports its stable ID, display name, transport/endpoint, enabled/open/
+connected state, health, packet and heartbeat ages, loss estimate, data rate,
+heartbeat count and jitter, RSSI values, and received/forwarded/duplicate frame
+counters.
+
+`subscribe` enables bounded event delivery for `link_health_changed`, `failover`,
+`active_link_changed`, and `router_stopping`. Health events are coalesced per
+client; slow or disconnected management clients cannot block the MAVLink data
+plane. The only live mutations are selecting an enabled stable link and releasing
+that selection with `set_auto`. The API has no raw MAVLink operation, command
+admission, mission control, parameter policy, or aircraft-control authority.
+
+The plugin uses this API only in standalone mode. It reconnects in the background,
+marks data stale after a bounded silence, and leaves the router process running if
+Mission Planner closes. Structural settings such as link endpoints, consumers,
+deduplication, preferred-link policy, and the management port require a host
+restart. Loopback is a trust boundary, not authentication; the process should be
+run only by the intended local user.
 
 ## Configuration
 
@@ -160,7 +199,8 @@ and verified outcomes. There is no global single-writer authority or persistent
 C++ IPC here; integrated operation still requires handover and inhibition.
 Shared hardware/power/network paths do not provide independent redundancy.
 
-Next: add a versioned local status/config control client for the standalone host,
-then integrate the persistent C++ runtime's typed requests and explicit authority
-handover as a separately reviewed change. QuadPlane transition qualification
-remains the active aircraft item and is untouched by this transport extraction.
+The versioned local status/config control client is now implemented for the
+standalone host. Next is the persistent C++ runtime's typed requests and explicit
+authority handover as a separately reviewed change. QuadPlane transition
+qualification remains the active aircraft item and is untouched by this transport
+extraction.

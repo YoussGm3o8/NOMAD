@@ -165,6 +165,18 @@ namespace NOMAD.MissionPlanner
             // Keep the old high-level dual-link toggle and the newer local
             // router toggle in lockstep unless a future UI exposes them separately.
             RouterEnabled = DualLinkEnabled;
+            if (!string.Equals(RouterMode, "Standalone", StringComparison.OrdinalIgnoreCase))
+            {
+                RouterMode = "Embedded";
+            }
+            if (ManagementBindAddress != "127.0.0.1")
+            {
+                ManagementBindAddress = "127.0.0.1";
+            }
+            if (ManagementPort < 1 || ManagementPort > 65535)
+            {
+                ManagementPort = 14610;
+            }
 
             if (DualLinkEnabled && CoreMavlinkEndpoint == "udpin:0.0.0.0:14550")
             {
@@ -276,6 +288,13 @@ namespace NOMAD.MissionPlanner
             CoreMavlinkEndpoint = defaults.CoreMavlinkEndpoint;
             RouterLinks = defaults.RouterLinks;
             RouterConsumers = defaults.RouterConsumers;
+            RouterMode = defaults.RouterMode;
+            RouterEnabled = defaults.RouterEnabled;
+            RouterLocalPort = defaults.RouterLocalPort;
+            RouterBindAddress = defaults.RouterBindAddress;
+            RouterDedupEnabled = defaults.RouterDedupEnabled;
+            ManagementBindAddress = defaults.ManagementBindAddress;
+            ManagementPort = defaults.ManagementPort;
             CoreApiKey = defaults.CoreApiKey;
             VideoUrl = defaults.VideoUrl;
             VideoNetworkCaching = defaults.VideoNetworkCaching;
