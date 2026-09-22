@@ -23,7 +23,7 @@ namespace NOMAD.MissionPlanner
 
     internal class LinkCard : UserControl
     {
-        private readonly LinkType _type;
+        private readonly string _type;
         private readonly string _title;
 
         private Label _lblTitle;
@@ -41,7 +41,7 @@ namespace NOMAD.MissionPlanner
 
         public event EventHandler SetActiveRequested;
 
-        public LinkCard(string title, LinkType type)
+        public LinkCard(string title, string type)
         {
             _title = title;
             _type = type;

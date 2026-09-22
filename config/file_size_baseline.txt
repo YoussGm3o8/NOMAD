@@ -1,7 +1,5 @@
 # Existing source files above the 500-line improvement threshold.
 # Remove each entry when the file is split or deleted during the C++ migration.
-mission_planner/src/Connectivity/GroundLinkRouter.Rx.cs
-mission_planner/src/Connectivity/GroundLinkRouter.cs
 mission_planner/src/Control/GimbalJoystickWindow.cs
 mission_planner/src/Controls/TimeSeriesPlot.cs
 mission_planner/src/Logs/LogAnalysis.cs

@@ -12,32 +12,16 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace NOMAD.MissionPlanner
 {
-    public enum LinkType
-    {
-        LTE,
-        RadioMaster,
-        None
-    }
-
-    public enum LinkHealth
-    {
-        Excellent,
-        Good,
-        Fair,
-        Poor,
-        Critical,
-        Disconnected
-    }
-
     /// <summary>
     /// Snapshot of one link's health for UI consumers.
     /// </summary>
     public class LinkStatistics
     {
-        public LinkType Type { get; set; }
+        public string Type { get; set; }
         public string Name { get; set; }
         public string Endpoint { get; set; }
         public bool IsConnected { get; set; }
@@ -68,13 +52,13 @@ namespace NOMAD.MissionPlanner
         };
 
         public string StatusText => IsConnected
-            ? $"{Health} ({LatencyMs:F0}ms, {PacketLossPercent:F1}% loss)"
+            ? $"{Health} (HB jitter {LatencyMs:F0}ms, {PacketLossPercent:F1}% loss)"
             : "Disconnected";
     }
 
     public class LinkStatusChangedEventArgs : EventArgs
     {
-        public LinkType Link { get; set; }
+        public string Link { get; set; }
         public LinkStatistics Statistics { get; set; }
         public bool IsActive { get; set; }
     }
@@ -90,14 +74,6 @@ namespace NOMAD.MissionPlanner
         public string ActiveLink { get; set; }
     }
 
-    public class FailoverEventArgs : EventArgs
-    {
-        public LinkType FromLink { get; set; }
-        public LinkType ToLink { get; set; }
-        public string Reason { get; set; }
-        public DateTime Timestamp { get; set; }
-    }
-
     public class MAVLinkConnectionManager : IDisposable
     {
         // ============================================================
@@ -110,6 +86,8 @@ namespace NOMAD.MissionPlanner
         /// </summary>
         public class ConnectionConfig
         {
+            public List<LinkConfig> Links { get; set; }
+            public List<ConsumerConfig> Consumers { get; set; }
             public int LtePort { get; set; } = 14560;
             public string LteRemoteHost { get; set; } = "";
             public int LteRemotePort { get; set; } = 0;
@@ -122,7 +100,7 @@ namespace NOMAD.MissionPlanner
             public string RadioMasterTcpHost { get; set; } = "127.0.0.1";
 
             public bool AutoFailoverEnabled { get; set; } = true;
-            public LinkType PreferredLink { get; set; } = LinkType.LTE;
+            public string PreferredLink { get; set; } = LinkType.LTE;
             public bool AutoReconnectPreferred { get; set; } = true;
             public int PreferredLinkReconnectDelaySec { get; set; } = 10;
             public int MonitorIntervalMs { get; set; } = 250;
@@ -152,16 +130,27 @@ namespace NOMAD.MissionPlanner
 
         public event EventHandler<LinkStatusChangedEventArgs> LinkStatusChanged;
         public event EventHandler<FailoverEventArgs> FailoverOccurred;
-        public event EventHandler<LinkType> ActiveLinkChanged;
+        public event EventHandler<string> ActiveLinkChanged;
         public event EventHandler<string> LogMessage;
 
         // ============================================================
         // Properties
         // ============================================================
 
-        public LinkType ActiveLink => _router?.ActiveLink ?? LinkType.None;
-        public LinkType ManualOverride => _router?.ManualOverride ?? LinkType.None;
+        public string ActiveLink => _router?.ActiveLink ?? LinkType.None;
+        public string ManualOverride => _router?.ManualOverride ?? LinkType.None;
         public ConnectionConfig Config => _config;
+        public IReadOnlyList<LinkStatistics> LinkStatistics => _router == null
+            ? (_config.Links == null ? new[] { _lteStats, _radioStats } :
+                _config.Links.Select(l => new LinkStatistics { Type = l.Id, Name = l.Name ?? l.Id,
+                    Health = LinkHealth.Disconnected }).ToArray())
+            : _router.Links.Select(ToStatistics).ToArray();
+        private static LinkStatistics ToStatistics(LinkSourceStats source)
+        {
+            var result = new LinkStatistics { Type = source.Type, Name = source.Name, Endpoint = source.Endpoint };
+            ProjectStats(source, result);
+            return result;
+        }
         public LinkStatistics LteStatistics => _lteStats;
         public LinkStatistics RadioMasterStatistics => _radioStats;
         public bool IsMonitoring => _router?.IsRunning == true;
@@ -256,6 +245,8 @@ namespace NOMAD.MissionPlanner
 
             var rc = new GroundLinkRouter.RouterConfig
             {
+                Links = _config.Links,
+                Consumers = _config.Consumers,
                 BindAddress = _config.RouterBindAddress,
                 LocalPort = _config.RouterLocalPort,
                 DedupEnabled = _config.RouterDedupEnabled,
@@ -312,11 +303,10 @@ namespace NOMAD.MissionPlanner
         /// Manual override of the active outbound link. Pass LinkType.None to
         /// release the override and resume auto-failover.
         /// </summary>
-        public bool SwitchToLink(LinkType target)
+        public bool SwitchToLink(string target)
         {
             if (_router == null) return false;
-            _router.SetManualOverride(target);
-            return true;
+            return _router.SetManualOverride(target);
         }
 
         /// <summary>
@@ -344,7 +334,7 @@ namespace NOMAD.MissionPlanner
         }
 
         /// <summary>Live setter for the preferred link.</summary>
-        public void SetPreferredLink(LinkType link)
+        public void SetPreferredLink(string link)
         {
             _config.PreferredLink = link;
             if (_router != null) _router.Config.PreferredLink = link;
@@ -365,18 +355,11 @@ namespace NOMAD.MissionPlanner
             ProjectStats(_router.Lte, _lteStats);
             ProjectStats(_router.Radio, _radioStats);
 
-            LinkStatusChanged?.Invoke(this, new LinkStatusChangedEventArgs
+            foreach (var stats in LinkStatistics)
             {
-                Link = LinkType.LTE,
-                Statistics = _lteStats,
-                IsActive = ActiveLink == LinkType.LTE,
-            });
-            LinkStatusChanged?.Invoke(this, new LinkStatusChangedEventArgs
-            {
-                Link = LinkType.RadioMaster,
-                Statistics = _radioStats,
-                IsActive = ActiveLink == LinkType.RadioMaster,
-            });
+                LinkStatusChanged?.Invoke(this, new LinkStatusChangedEventArgs
+                { Link = stats.Type, Statistics = stats, IsActive = ActiveLink == stats.Type });
+            }
         }
 
         private static void ProjectStats(LinkSourceStats src, LinkStatistics dst)

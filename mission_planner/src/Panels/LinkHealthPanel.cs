@@ -3,7 +3,7 @@
 // ============================================================
 // MAVLink Link Status panel
 // ============================================================
-// Real-time UI for the dual-link router. Shows live per-link
+// Real-time UI for the multi-link router. Shows live per-link
 // metrics (latency, loss, throughput, RSSI, heartbeat age) for
 // both LTE and RadioMaster, plus router controls, a throughput
 // sparkline per link, failover settings and event log. All data
@@ -37,8 +37,8 @@ namespace NOMAD.MissionPlanner
         private Label _lblCopied;
 
         // Link cards
-        private LinkCard _lteCard;
-        private LinkCard _radioCard;
+        private FlowLayoutPanel _linkRow;
+        private readonly Dictionary<string, LinkCard> _cards = new Dictionary<string, LinkCard>();
 
         // Settings row
         private CheckBox _chkAuto;
@@ -243,35 +243,26 @@ namespace NOMAD.MissionPlanner
 
         private Panel BuildLinkRow()
         {
-            var row = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 1,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 6, 0, 0),
-            };
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            row.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-            _lteCard = new LinkCard("LTE / Tailscale", LinkType.LTE)
-            {
-                Dock = DockStyle.Fill,
-                Margin = new Padding(0, 0, 6, 0),
-            };
-            _lteCard.SetActiveRequested += (s, e) => _cm.SwitchToLink(LinkType.LTE);
-
-            _radioCard = new LinkCard("RadioMaster", LinkType.RadioMaster)
-            {
-                Dock = DockStyle.Fill,
-                Margin = new Padding(6, 0, 0, 0),
-            };
-            _radioCard.SetActiveRequested += (s, e) => _cm.SwitchToLink(LinkType.RadioMaster);
-
-            row.Controls.Add(_lteCard, 0, 0);
-            row.Controls.Add(_radioCard, 1, 0);
+            var row = new FlowLayoutPanel
+            { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true, BackColor = Color.Transparent };
+            _linkRow = row;
+            RebuildLinkCards();
             return row;
+        }
+
+        private void RebuildLinkCards()
+        {
+            foreach (var card in _cards.Values) { card.Dispose(); }
+            _cards.Clear();
+            _linkRow.Controls.Clear();
+            foreach (var stats in _cm.LinkStatistics)
+            {
+                var id = stats.Type;
+                var card = new LinkCard(stats.Name, id) { Width = 330, Height = 270 };
+                card.SetActiveRequested += (sender, args) => _cm.SwitchToLink(id);
+                _cards.Add(id, card);
+                _linkRow.Controls.Add(card);
+            }
         }
 
         private Panel BuildSettingsRow()
@@ -336,28 +327,14 @@ namespace NOMAD.MissionPlanner
                 Font = NOMADTheme.Font(),
                 Margin = new Padding(0, 2, NOMADTheme.PAD, 0),
             };
-            _cmbPreferred.Items.AddRange(new object[] { "LTE", "RadioMaster", "None" });
-            _cmbPreferred.SelectedIndex = _cm.Config.PreferredLink switch
-            {
-                LinkType.LTE => 0,
-                LinkType.RadioMaster => 1,
-                _ => 2,
-            };
+            _cmbPreferred.Items.Add("");
+            foreach (var stats in _cm.LinkStatistics) { _cmbPreferred.Items.Add(stats.Type); }
+            _cmbPreferred.SelectedItem = _cm.Config.PreferredLink;
             _cmbPreferred.SelectedIndexChanged += (s, e) =>
             {
-                var pref = _cmbPreferred.SelectedIndex switch
-                {
-                    0 => LinkType.LTE,
-                    1 => LinkType.RadioMaster,
-                    _ => LinkType.None,
-                };
+                var pref = _cmbPreferred.SelectedItem as string ?? "";
                 _cm.SetPreferredLink(pref);
-                _config.PreferredMavlinkLink = pref switch
-                {
-                    LinkType.LTE => "LTE",
-                    LinkType.RadioMaster => "RadioMaster",
-                    _ => "None",
-                };
+                _config.PreferredMavlinkLink = pref;
                 PersistConfig();
             };
             var prefGroup = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, BackColor = Color.Transparent, Margin = new Padding(0), Padding = new Padding(0) };
@@ -512,8 +489,6 @@ namespace NOMAD.MissionPlanner
         {
             try
             {
-                var lte = _cm.LteStatistics;
-                var radio = _cm.RadioMasterStatistics;
                 var active = _cm.ActiveLink;
                 var ovr = _cm.ManualOverride;
 
@@ -530,8 +505,19 @@ namespace NOMAD.MissionPlanner
                 _lblRouterStatus.ForeColor = running ? NOMADTheme.TEXT_SECONDARY : NOMADTheme.ERROR;
                 _lblLocalEndpoint.Text = $"Local: {_cm.LocalMergedEndpoint}   (set Mission Planner to UDP Client / UDPCl to this port)";
 
-                _lteCard.Update(lte, isActive: active == LinkType.LTE, isOverride: ovr == LinkType.LTE);
-                _radioCard.Update(radio, isActive: active == LinkType.RadioMaster, isOverride: ovr == LinkType.RadioMaster);
+                if (!_cm.LinkStatistics.Select(stats => stats.Type).SequenceEqual(_cards.Keys))
+                {
+                    RebuildLinkCards();
+                    _cmbPreferred.Items.Clear();
+                    _cmbPreferred.Items.Add("");
+                    foreach (var stats in _cm.LinkStatistics) { _cmbPreferred.Items.Add(stats.Type); }
+                    _cmbPreferred.SelectedItem = _cm.Config.PreferredLink;
+                }
+                foreach (var stats in _cm.LinkStatistics)
+                {
+                    if (_cards.TryGetValue(stats.Type, out var card))
+                    { card.Update(stats, active == stats.Type, ovr == stats.Type); }
+                }
 
                 if (ovr == LinkType.None)
                 {

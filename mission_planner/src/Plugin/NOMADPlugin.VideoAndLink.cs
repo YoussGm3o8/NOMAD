@@ -202,12 +202,9 @@ namespace NOMAD.MissionPlanner
                 LteRemotePort = _config.LteRemotePort,
                 RadioMasterPort = _config.RadioMasterPort,
                 AutoFailoverEnabled = _config.AutoFailoverEnabled,
-                PreferredLink = _config.PreferredMavlinkLink switch
-                {
-                    "LTE" => LinkType.LTE,
-                    "RadioMaster" => LinkType.RadioMaster,
-                    _ => LinkType.None
-                },
+                Links = _config.RouterLinks,
+                Consumers = _config.RouterConsumers,
+                PreferredLink = _config.PreferredMavlinkLink == "None" ? "" : _config.PreferredMavlinkLink,
                 AutoReconnectPreferred = _config.AutoReconnectToPreferred,
                 PreferredLinkReconnectDelaySec = _config.PreferredLinkReconnectDelay,
                 MonitorIntervalMs = _config.LinkMonitorInterval,

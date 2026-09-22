@@ -36,12 +36,13 @@ namespace NOMAD.MissionPlanner
             SetComboBoxValue(_cmbRadioMasterBaudRate, Config.RadioMasterBaudRate.ToString());
             _numLteMavlinkPort.Value = ClampValue(_numLteMavlinkPort, Config.LteMavlinkPort);
             _chkAutoFailover.Checked = Config.AutoFailoverEnabled;
-            _cmbPreferredLink.SelectedIndex = Config.PreferredMavlinkLink switch
+            if (Config.RouterLinks != null)
             {
-                "LTE" => 0,
-                "RadioMaster" => 1,
-                _ => 2
-            };
+                _cmbPreferredLink.Items.Clear();
+                _cmbPreferredLink.Items.Add("None");
+                foreach (var link in Config.RouterLinks) { _cmbPreferredLink.Items.Add(link.Id); }
+            }
+            _cmbPreferredLink.SelectedItem = Config.PreferredMavlinkLink;
             _chkAutoReconnectPreferred.Checked = Config.AutoReconnectToPreferred;
             _numPreferredReconnectDelay.Value = ClampValue(_numPreferredReconnectDelay, Config.PreferredLinkReconnectDelay);
             _numHeartbeatTimeout.Value = ClampValue(_numHeartbeatTimeout, Config.MavlinkHeartbeatTimeout);
@@ -161,18 +162,15 @@ namespace NOMAD.MissionPlanner
             Config.RadioMasterBaudRate = int.TryParse(_cmbRadioMasterBaudRate.SelectedItem?.ToString(), out int baud) ? baud : 420000;
             Config.LteMavlinkPort = (int)_numLteMavlinkPort.Value;
             Config.AutoFailoverEnabled = _chkAutoFailover.Checked;
-            Config.PreferredMavlinkLink = _cmbPreferredLink.SelectedIndex switch
-            {
-                0 => "LTE",
-                1 => "RadioMaster",
-                _ => "None"
-            };
+            Config.PreferredMavlinkLink = _cmbPreferredLink.SelectedItem as string ?? "None";
             Config.AutoReconnectToPreferred = _chkAutoReconnectPreferred.Checked;
             Config.PreferredLinkReconnectDelay = (int)_numPreferredReconnectDelay.Value;
             Config.MavlinkHeartbeatTimeout = (double)_numHeartbeatTimeout.Value;
             Config.LinkMonitorInterval = (int)_numLinkMonitorInterval.Value;
             Config.RouterBindAddress = string.IsNullOrWhiteSpace(_txtRouterBindAddress.Text) ? "127.0.0.1" : _txtRouterBindAddress.Text.Trim();
             Config.RouterLocalPort = (int)_numRouterLocalPort.Value;
+            var mpConsumer = Config.RouterConsumers?.Find(c => c.Id == "mission_planner");
+            if (mpConsumer != null) { mpConsumer.RouterPort = Config.RouterLocalPort; }
             Config.RouterDedupEnabled = _chkRouterDedup.Checked;
 
             Config.DarkMode = _chkDarkMode.Checked;

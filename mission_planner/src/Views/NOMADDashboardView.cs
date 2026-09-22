@@ -204,11 +204,7 @@ namespace NOMAD.MissionPlanner
             }
 
             var status = _connectionManager.GetLinkStatus();
-            string lte = status.LTEConnected ? "LTE ✓" : "LTE ✗";
-            string radio = status.RadioConnected
-                ? $"Radio ✓ {status.RadioLatencyMs}ms"
-                : "Radio ✗";
-            _lblLinks.Text = $"{lte} · {radio}\nActive: {status.ActiveLink}";
+            _lblLinks.Text = _connectionManager.GetStatusSummary();
             _lblLinks.ForeColor = status.ActiveLink == LinkType.None.ToString()
                 ? NOMADTheme.ERROR
                 : NOMADTheme.SUCCESS;
