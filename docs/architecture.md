@@ -431,3 +431,46 @@ and fault evidence.
 
 debt: one-command CLI for isolated operation; concurrency already triggers the
 ceiling; then add the G2 persistent runtime without replacing the core API.
+
+## Ground multi-link data plane
+
+The shared C# implementation in `infra/transport/ground_router` runs either in
+Mission Planner or as `nomad-link-router.exe`. It selects transport and distributes
+raw MAVLink; it does not admit flight operations.
+
+```mermaid
+flowchart TD
+    LTE[LTE] --> ROUTER[Multi-Link Router]
+    RADIO[Radio] --> ROUTER
+    WIFI[Wi-Fi / additional configured links] --> ROUTER
+    ROUTER <--> MP[Mission Planner raw MAVLink]
+    ROUTER <--> CORE[NOMAD C++ MAVSDK]
+```
+
+The router owns physical connections, per-link parsing/sequence statistics,
+health, selection, deduplication, failover and local MAVLink distribution.
+Outbound requests use exactly one physical transport. C++ retains capability
+admission, safety/payload policy, mission sequencing, deadlines, state verification
+and authoritative NOMAD outcomes. MP retains maps/HUD, diagnostics, native GCS
+functions and NOMAD client UI. ArduPilot retains stabilization, motors, EKF,
+low-level navigation/control and aircraft-side failsafes.
+
+This separate control path remains **target architecture**, not implemented IPC:
+
+```mermaid
+flowchart TD
+    UI[Mission Planner NOMAD UI] -->|typed IPC| RUNTIME[Persistent NOMAD C++ runtime]
+    RUNTIME --> POLICY[Safety / mission policy]
+    POLICY --> SDK[MAVSDK]
+    SDK --> ROUTER[Multi-Link Router]
+    ROUTER --> AIRCRAFT[Aircraft]
+```
+
+`NomadCoreClient` still launches one-shot CLI processes. Two raw MAVLink consumers
+can both emit commands; transport selection is not global single-writer authority.
+MP native controls, pilot/RC and ArduPilot are external authorities. Integrated
+operation needs explicit handover/inhibition. The standalone router survives MP
+exit, but the plugin's remote status/config client remains unimplemented; embedded
+mode still has MP-owned lifetime. See the
+[router configuration and limitations](https://github.com/YoussGm3o8/NOMAD/blob/main/infra/transport/ground_router/README.md)
+for socket ownership, parameter pinning and tested process lifecycle.

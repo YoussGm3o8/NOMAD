@@ -1,0 +1,170 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 The NOMAD Authors
+"""Hardware-free standalone process smoke test; build-ground-router must run first."""
+
+import contextlib
+import json
+import queue
+import socket
+import subprocess
+import tempfile
+import threading
+import time
+from pathlib import Path
+
+
+def peer():
+    result = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    result.bind(("127.0.0.1", 0))
+    result.settimeout(0.05)
+    return result
+
+
+def marker(seq, value):
+    return bytes([0xFD, 4, 0, 0, seq, 1, 7, 200, 0, 0]) + value.to_bytes(4, "little") + b"\0\0"
+
+
+def receive(sock, expected, timeout=2):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            packet = sock.recv(4096)
+        except TimeoutError:
+            continue
+        if packet == expected:
+            return
+    raise AssertionError(f"Expected frame was not received within {timeout}s")
+
+
+def drain(sock):
+    packets = []
+    while True:
+        try:
+            packets.append(sock.recv(4096))
+        except TimeoutError:
+            return packets
+
+
+def pump(sock, port, stop):
+    seq = 0
+    while not stop.wait(0.05):
+        frame = bytes([0xFD, 9, 0, 0, seq, 1, 1, 0, 0, 0]) + bytes(11)
+        sock.sendto(frame, ("127.0.0.1", port))
+        seq = (seq + 1) % 256
+
+
+def start_host(config_path, output):
+    executable = Path("build/ground-router/nomad-link-router.exe").resolve()
+    process = subprocess.Popen(
+        [str(executable), str(config_path)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    threading.Thread(target=lambda: [output.put(line.strip()) for line in process.stdout], daemon=True).start()
+    return process
+
+
+def wait_output(output, expected):
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            if output.get(timeout=0.1) == expected:
+                return
+        except queue.Empty:
+            pass
+    raise AssertionError(f"Standalone host did not report {expected}")
+
+
+def config_for(ports, consumer_ports):
+    return {
+        "PreferredLink": "a",
+        "HeartbeatTimeoutSec": 0.3,
+        "StatsTickMs": 20,
+        "Links": [
+            {"Id": name, "Port": port, "Priority": 100 - i}
+            for i, (name, port) in enumerate(zip(("a", "b", "c"), ports[:3], strict=True))
+        ],
+        "Consumers": [
+            {"Id": str(i), "RouterPort": port, "ClientPort": consumer_ports[i]} for i, port in enumerate(ports[3:])
+        ],
+    }
+
+
+def exercise(process, output, ports, physical, consumers):
+    stops = [threading.Event() for _ in physical]
+    workers = []
+    try:
+        for sock, port, stop in zip(physical, ports[:3], stops, strict=True):
+            worker = threading.Thread(target=pump, args=(sock, port, stop), daemon=True)
+            worker.start()
+            workers.append(worker)
+        process.stdin.write("select a\n")
+        process.stdin.flush()
+        wait_output(output, "SELECTED")
+        frame = marker(1, 701)
+        physical[0].sendto(frame, ("127.0.0.1", ports[0]))
+        for consumer in consumers:
+            receive(consumer, frame)
+        assert_single_outbound(ports, physical, consumers[1], 0, 702)
+        stops[0].set()
+        workers[0].join()
+        process.stdin.write("auto\n")
+        process.stdin.flush()
+        wait_output(output, "Active: b")
+        frame = marker(2, 703)
+        physical[1].sendto(frame, ("127.0.0.1", ports[1]))
+        for consumer in consumers:
+            receive(consumer, frame)
+        assert_single_outbound(ports, physical, consumers[1], 1, 704)
+    finally:
+        for stop in stops:
+            stop.set()
+        for worker in workers:
+            worker.join()
+
+
+def assert_single_outbound(ports, physical, consumer, selected, value):
+    for sock in physical:
+        drain(sock)
+    frame = marker(3, value)
+    consumer.sendto(frame, ("127.0.0.1", ports[4]))
+    receive(physical[selected], frame)
+    time.sleep(0.15)
+    for sock in physical:
+        assert frame not in drain(sock), "Outbound command copied or sent to a standby transport"
+
+
+def main():
+    with contextlib.ExitStack() as stack:
+        physical = [stack.enter_context(peer()) for _ in range(3)]
+        consumers = [stack.enter_context(peer()) for _ in range(2)]
+        reserved = [peer() for _ in range(5)]
+        ports = [sock.getsockname()[1] for sock in reserved]
+        config = config_for(ports, [sock.getsockname()[1] for sock in consumers])
+        for sock in reserved:
+            sock.close()
+        directory = stack.enter_context(tempfile.TemporaryDirectory())
+        config_path = Path(directory) / "router.json"
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+        output = queue.Queue()
+        process = start_host(config_path, output)
+        try:
+            wait_output(output, "READY")
+            exercise(process, output, ports, physical, consumers)
+            process.stdin.write("stop\n")
+            process.stdin.flush()
+            assert process.wait(timeout=5) == 0, "Router shutdown failed"
+            for port in ports:
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as rebound:
+                    rebound.bind(("127.0.0.1", port))
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+    print("Standalone smoke passed: three links, two consumers, no fan-out, failover, port cleanup")
+
+
+if __name__ == "__main__":
+    main()

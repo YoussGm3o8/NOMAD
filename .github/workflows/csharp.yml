@@ -18,10 +18,16 @@ on:
     branches: [main]
     paths:
       - "mission_planner/**"
+      - "infra/transport/ground_router/**"
+      - "scripts/build/**"
+      - "scripts/dev/ground_router_smoke.py"
       - ".github/workflows/csharp.yml"
   pull_request:
     paths:
       - "mission_planner/**"
+      - "infra/transport/ground_router/**"
+      - "scripts/build/**"
+      - "scripts/dev/ground_router_smoke.py"
       - ".github/workflows/csharp.yml"
   workflow_dispatch:
 
@@ -53,6 +59,15 @@ jobs:
       # to it. This matches the repo's existing test-plugin-* idiom.
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v3
+
+      - name: Build standalone ground router
+        run: pwsh -File scripts/build/build_ground_router.ps1
+
+      - name: Multi-link and legacy router tests
+        run: pwsh -File scripts/build/test_plugin_duallink.ps1
+
+      - name: Standalone router smoke
+        run: python scripts/dev/ground_router_smoke.py
 
       - name: Payload-release interlock tests (SR-PAY-03)
         run: pwsh -File scripts/build/test_plugin_interlock.ps1

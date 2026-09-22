@@ -227,6 +227,10 @@ test-plugin-log-adapters = "powershell -ExecutionPolicy Bypass -File scripts/bui
 # mirrored stress with strict no-loss/no-duplication assertions.
 test-plugin-duallink = "powershell -ExecutionPolicy Bypass -File scripts/build/test_plugin_duallink.ps1"
 
+# Shared MP-independent router and standalone process qualification (Windows).
+build-ground-router = "powershell -NoProfile -File scripts/build/build_ground_router.ps1"
+test-ground-router = "pixi run build-ground-router && pixi run test-plugin-duallink && python scripts/dev/ground_router_smoke.py"
+
 # ==================== Configuration Profiles ====================
 # Manage config/nomad.env via named profiles stored in config/profiles/.
 # Each profile is a complete environment file with all settings for a
