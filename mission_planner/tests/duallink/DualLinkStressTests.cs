@@ -80,6 +80,9 @@ internal static partial class DualLinkStressTests
         await RunAsync("router: stress — mirrored high-rate, strict no dup/loss", StressMirrored);
         await RunAsync("router: stress — bidirectional concurrent traffic", StressBidirectional);
         await RunAsync("manager: facade lifecycle and projections", ManagerFacade);
+        Run("management: one-link status snapshot", RouterManagementSingleLinkStatus);
+        await RunAsync("management: versioned status/control protocol", RouterManagementProtocolChecks);
+        await RunAsync("management: standalone client reconnect and stale state", StandaloneClientReconnects);
     }
 
     // ============================================================

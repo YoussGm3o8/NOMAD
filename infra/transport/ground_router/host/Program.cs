@@ -21,6 +21,11 @@ internal static class Program
             var json = File.ReadAllText(args[0]);
             var config = new JavaScriptSerializer().Deserialize<GroundLinkRouter.RouterConfig>(json);
             using (var router = new GroundLinkRouter(config))
+            using (var management = new RouterManagementServer(
+                router,
+                config.ManagementBindAddress,
+                config.ManagementPort,
+                "nomad-link-router-1"))
             using (var stop = new ManualResetEvent(false))
             {
                 ConsoleCancelEventHandler cancel = (sender, e) => { e.Cancel = true; stop.Set(); };
@@ -28,6 +33,7 @@ internal static class Program
                 router.LogMessage += (sender, message) => Console.Error.WriteLine(message);
                 router.ActiveLinkChanged += (sender, id) => Console.WriteLine("Active: " + id);
                 router.Start();
+                management.Start();
                 Console.WriteLine("READY");
                 var input = new Thread(() =>
                 {

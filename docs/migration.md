@@ -938,8 +938,8 @@ documentation, hosted Phase A smoke, or local regressions pass.
 
 ## Ground router extraction
 
-The transport slice based on PR #20's merged `main`
-(`c4a82b74d931d1022f9c4c9742c96d51e6245380`) replaces the hard-coded two-link router
+The transport slice based on PR #21's merged `main`
+(`ca9f4ee89418e481f37d2faa846c7beec0a869cb`) replaces the hard-coded two-link router
 with owned per-link UDP/TCP/COM state and arbitrary stable IDs. Legacy settings
 translate to two configured entries. The shared MP-independent implementation,
 standalone host, collection-based plugin status and two-consumer socket topology
@@ -948,12 +948,14 @@ are described in the [router README](https://github.com/YoussGm3o8/NOMAD/blob/ma
 `pixi run test-ground-router` builds the standalone library/host and runs legacy
 router regressions, three-link handover dedup, single-recipient outbound commands,
 parameter pinning, invalid configuration/override checks, per-source parser and
-sequence isolation, TCP reconnect, consumer isolation and a standalone loopback
-process smoke with failover and immediate port reuse.
+sequence isolation, TCP reconnect, consumer isolation, the versioned loopback
+status/control protocol and standalone-client stale/reconnect tests, plus a
+standalone loopback process smoke with failover and immediate port reuse.
 
-The plugin remains an optional embedded host; remote standalone status/control is
-follow-up work. This does not implement persistent C++ IPC, remove one-shot CLI
-clients, arbitrate global command authority, qualify an aircraft operation or
-establish independent physical redundancy. Mission/fence/FTP transaction pinning
-is not implemented. QuadPlane transition qualification remains the active G-M
-item; aircraft capability and flight-operation sources are unchanged.
+The plugin remains an optional embedded host, or a non-owning standalone management
+client selected explicitly by `RouterMode`. The local protocol is limited to
+status, events, and safe link selection; it does not implement persistent C++ IPC,
+remove one-shot CLI clients, arbitrate global command authority, qualify an
+aircraft operation or establish independent physical redundancy. Mission/fence/FTP
+transaction pinning is not implemented. QuadPlane transition qualification remains
+the active G-M item; aircraft capability and flight-operation sources are unchanged.

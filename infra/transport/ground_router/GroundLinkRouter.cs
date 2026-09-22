@@ -223,12 +223,42 @@ namespace NOMAD.MissionPlanner
 
         public bool SetManualOverride(string target)
         {
+            return TrySetManualOverride(target, out _, out _);
+        }
+
+        public bool TrySetManualOverride(string target, out string errorCode, out string error)
+        {
             lock (_gate)
             {
-                if (target == null || (target != LinkType.None &&
-                    !_links.Any(l => l.Config.Id == target && l.Config.Enabled)))
+                errorCode = null;
+                error = null;
+                if (!_running)
                 {
-                    EmitLog("Override rejected: unknown or disabled link"); return false;
+                    errorCode = "router_stopped";
+                    error = "The router is not running.";
+                    return false;
+                }
+                if (target == null)
+                {
+                    errorCode = "invalid_link";
+                    error = "A link ID is required.";
+                    EmitLog("Override rejected: missing link ID");
+                    return false;
+                }
+                var link = _links.FirstOrDefault(l => l.Config.Id == target);
+                if (target != LinkType.None && link == null)
+                {
+                    errorCode = "unknown_link";
+                    error = "The requested link ID is not configured.";
+                    EmitLog("Override rejected: unknown link");
+                    return false;
+                }
+                if (target != LinkType.None && !link.Config.Enabled)
+                {
+                    errorCode = "link_disabled";
+                    error = "The requested link is disabled.";
+                    EmitLog("Override rejected: disabled link");
+                    return false;
                 }
                 ManualOverride = target;
                 if (target != LinkType.None)

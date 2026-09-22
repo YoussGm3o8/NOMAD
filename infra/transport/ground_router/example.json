@@ -1,5 +1,7 @@
 {
   "PreferredLink": "lte",
+  "ManagementBindAddress": "127.0.0.1",
+  "ManagementPort": 14610,
   "Links": [
     { "Id": "lte", "Name": "LTE / Tailscale", "Transport": "UDP", "Port": 14560, "Priority": 100 },
     { "Id": "radiomaster", "Name": "RadioMaster", "Transport": "UDP", "Port": 14550, "Priority": 80 },

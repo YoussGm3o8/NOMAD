@@ -56,6 +56,12 @@ internal static partial class DualLinkStressTests
         var wifi = new[] { new LinkStatistics { Type = "wifi", IsConnected = false } };
         Check(LinkStatusDisplay.FormatRouterStatus(true, wifi) == "Router: running — 0/1 links connected",
             "running does not imply connected");
+        Check(LinkStatusDisplay.FormatRouterStatus(false, false, wifi) == "Router process: unavailable",
+            "management failure is distinct from physical link health");
+        wifi[0].IsConnected = true;
+        wifi[0].IsStale = true;
+        Check(LinkStatusDisplay.FormatRouterStatus(true, true, wifi) == "Router: connected — Physical links: 0/1 connected",
+            "stale management data is not shown as current");
         Check(LinkStatusDisplay.HasMembershipChanged(wifi, new[] { "WiFi" }), "link IDs remain case sensitive");
         Check(LinkStatusDisplay.HasMembershipChanged(wifi, Array.Empty<string>()), "missing card changes membership");
     }

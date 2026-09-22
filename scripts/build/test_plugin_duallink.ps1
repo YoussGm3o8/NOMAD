@@ -41,6 +41,9 @@ if (-not (Test-Path $csc)) {
 # ---- Compile ----
 $sources = @(
     (Join-Path $repoRoot 'mission_planner\src\Connectivity\MAVLinkConnectionManager.cs'),
+    (Join-Path $repoRoot 'mission_planner\src\Connectivity\MAVLinkConnectionManager.Standalone.cs'),
+    (Join-Path $repoRoot 'mission_planner\src\Connectivity\StandaloneRouterClient.cs'),
+    (Join-Path $repoRoot 'mission_planner\src\Connectivity\StandaloneRouterClient.Mapping.cs'),
     (Join-Path $repoRoot 'mission_planner\src\UI\Log.cs'),
     (Join-Path $repoRoot 'mission_planner\tests\duallink\DualLinkStressTests.cs'),
     (Join-Path $repoRoot 'mission_planner\tests\duallink\DualLinkStressTests.Harness.cs'),
@@ -50,13 +53,14 @@ $sources = @(
 $sources += Get-ChildItem (Join-Path $repoRoot 'infra\transport\ground_router\*.cs') | ForEach-Object FullName
 $sources += Join-Path $repoRoot 'mission_planner/tests/duallink/MultiLinkTests.cs'
 $sources += Join-Path $repoRoot 'mission_planner/tests/duallink/RouterReviewTests.cs'
+$sources += Join-Path $repoRoot 'mission_planner/tests/duallink/RouterManagementTests.cs'
 $sources += Join-Path $repoRoot 'mission_planner/src/Panels/LinkStatusDisplay.cs'
 $outDir = Join-Path $repoRoot 'mission_planner\tests\duallink\bin'
 New-Item -ItemType Directory -Force $outDir | Out-Null
 $exe = Join-Path $outDir 'DualLinkStressTests.exe'
 
 Write-Host "Compiling dual-link tests..." -ForegroundColor Yellow
-& $csc /nologo /target:exe /langversion:latest "/out:$exe" @sources
+& $csc /nologo /target:exe /langversion:latest /r:System.Web.Extensions.dll "/out:$exe" @sources
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Compile FAILED." -ForegroundColor Red
     exit 1

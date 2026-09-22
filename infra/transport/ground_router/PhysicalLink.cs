@@ -34,6 +34,7 @@ namespace NOMAD.MissionPlanner
             Config = config;
             _localPorts = localPorts;
             Stats = new LinkSourceStats { Type = config.Id, Name = config.Name ?? config.Id,
+                Transport = config.Transport, Enabled = config.Enabled,
                 Endpoint = config.Transport == "COM" ? config.Device : config.Transport + ":" + config.Port };
         }
 

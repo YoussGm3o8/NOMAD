@@ -222,8 +222,16 @@ from the separate router-owned `14602` socket. Do not bind C++ to the RadioMaste
 physical port. Stop the embedded router before starting the standalone host with
 the same endpoints. An absent consumer does not stop other consumers.
 
-The standalone host can outlive Mission Planner; its plugin status/config client
-is still pending. Select either embedded or standalone ownership explicitly.
-Multiple raw clients can issue MAVLink, so integrated operation still needs
-command-authority handover/inhibition. Stateful mission/fence/FTP exchanges have
-no router transaction coordinator and require caller recovery on link changes.
+The standalone host can outlive Mission Planner. Its default management endpoint
+is loopback TCP `127.0.0.1:14610`, using version-1 bounded UTF-8 JSON Lines. The
+plugin's `RouterMode = Standalone` client reconnects and displays status, health,
+failover events, and stale/unavailable state. It can only select an enabled link
+or return to automatic selection; it cannot send raw MAVLink or flight commands.
+Structural router settings require restarting the host. Keep the endpoint on
+IPv4 loopback and treat local OS access as the trust boundary.
+
+Select either embedded or standalone ownership explicitly and never run both with
+the same physical/consumer endpoints. Multiple raw clients can issue MAVLink, so
+integrated operation still needs command-authority handover/inhibition. Stateful
+mission/fence/FTP exchanges have no router transaction coordinator and require
+caller recovery on link changes.

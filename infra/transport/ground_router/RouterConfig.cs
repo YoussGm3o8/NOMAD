@@ -32,6 +32,8 @@ namespace NOMAD.MissionPlanner
         public string Type;
         public string Name;
         public string Endpoint = "";
+        public string Transport = "";
+        public bool Enabled;
         public bool IsOpen;         // socket bound / serial open
         public bool IsConnected;    // received traffic in the last few seconds
         public LinkHealth Health = LinkHealth.Disconnected;
@@ -115,6 +117,11 @@ namespace NOMAD.MissionPlanner
             public int StatsTickMs = 250;
             public double HeartbeatTimeoutSec = 3.0;
             public double FailoverCooldownSec = 2.0;
+
+            // The management endpoint is deliberately separate from raw MAVLink
+            // consumer sockets and is always loopback-only.
+            public string ManagementBindAddress = "127.0.0.1";
+            public int ManagementPort = 14610;
         }
 
     }

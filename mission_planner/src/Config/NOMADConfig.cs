@@ -179,6 +179,12 @@ namespace NOMAD.MissionPlanner
         /// </summary>
         public bool RouterEnabled { get; set; } = true;
 
+        /// <summary>
+        /// Router ownership mode: Embedded starts the router in this plugin;
+        /// Standalone observes and controls an independently supervised host.
+        /// </summary>
+        public string RouterMode { get; set; } = "Embedded";
+
         /// <summary>Local UDP port the router serves the merged stream on.</summary>
         public int RouterLocalPort { get; set; } = 14600;
 
@@ -190,6 +196,10 @@ namespace NOMAD.MissionPlanner
         /// Disable only for diagnostics — costs ~1.5x bandwidth to MP.
         /// </summary>
         public bool RouterDedupEnabled { get; set; } = true;
+
+        /// <summary>Loopback TCP endpoint used by Mission Planner in standalone mode.</summary>
+        public string ManagementBindAddress { get; set; } = "127.0.0.1";
+        public int ManagementPort { get; set; } = 14610;
 
         /// <summary>
         /// Optional outbound endpoint for LTE link. When non-empty, router

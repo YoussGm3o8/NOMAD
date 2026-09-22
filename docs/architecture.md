@@ -445,6 +445,8 @@ flowchart TD
     WIFI[Wi-Fi / additional configured links] --> ROUTER
     ROUTER <--> MP[Mission Planner raw MAVLink]
     ROUTER <--> CORE[NOMAD C++ MAVSDK]
+    ROUTER --> MGMT[Loopback JSON Lines management API]
+    MGMT <--> UI[Mission Planner router UI]
 ```
 
 The router owns physical connections, per-link parsing/sequence statistics,
@@ -470,7 +472,10 @@ flowchart TD
 can both emit commands; transport selection is not global single-writer authority.
 MP native controls, pilot/RC and ArduPilot are external authorities. Integrated
 operation needs explicit handover/inhibition. The standalone router survives MP
-exit, but the plugin's remote status/config client remains unimplemented; embedded
-mode still has MP-owned lifetime. See the
+exit. Its version-1 management API is loopback-only, bounded JSON Lines and
+limited to status, events, and selecting an enabled link or returning to automatic
+selection; it carries no raw MAVLink or flight command. The plugin uses that API
+only when `RouterMode` is `Standalone`; embedded mode still has MP-owned lifetime
+and does not create a second management server. See the
 [router configuration and limitations](https://github.com/YoussGm3o8/NOMAD/blob/main/infra/transport/ground_router/README.md)
-for socket ownership, parameter pinning and tested process lifecycle.
+for the schema, socket ownership, parameter pinning and tested process lifecycle.
