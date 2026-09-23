@@ -97,8 +97,16 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     }
 
     std::optional<nomad::mavlink::CommandAck> send_fixed_wing_waypoint(
-        const nomad::mavlink::FixedWingWaypointCommand &waypoint, std::chrono::milliseconds) override {
+        const nomad::mavlink::FixedWingWaypointCommand &waypoint, std::uint64_t expected_session_id,
+        std::chrono::milliseconds) override {
         std::lock_guard lock(state_mutex);
+        if (fixed_wing_waypoint_session_change_before_send) {
+            ++state->session_id;
+        }
+        if (expected_session_id == 0 || state->session_id != expected_session_id || !state->connected ||
+            !state->heartbeat_fresh) {
+            return std::nullopt;
+        }
         fixed_wing_waypoint_requests.push_back(waypoint);
         ++fixed_wing_waypoint_send_count;
         if (!fixed_wing_waypoint_transport_enabled || !fixed_wing_waypoint_ack.has_value()) {
@@ -224,6 +232,7 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     bool fixed_wing_waypoint_transport_enabled{true};
     bool fixed_wing_waypoint_auto_complete{true};
     bool fixed_wing_waypoint_completion_before_ack{false};
+    bool fixed_wing_waypoint_session_change_before_send{false};
     bool fixed_wing_waypoint_session_change_on_send{false};
     bool fixed_wing_waypoint_link_loss_on_send{false};
     bool fixed_wing_waypoint_mode_loss_on_send{false};

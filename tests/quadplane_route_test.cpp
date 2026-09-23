@@ -168,6 +168,20 @@ void test_route_rechecks_state_after_qualified_guided_setup() {
     CHECK(connection.fixed_wing_waypoint_send_count == 0);
 }
 
+void test_transport_rejects_session_change_at_waypoint_send_boundary() {
+    FakeConnection connection;
+    configure_fixed_wing_quadplane(connection);
+    connection.fixed_wing_waypoint_session_change_before_send = true;
+    Vehicle vehicle(connection);
+
+    const auto result = vehicle.fixed_wing_route(kRoute);
+
+    CHECK(!result.success);
+    CHECK(result.message.find("no command ACK") != std::string::npos);
+    CHECK(connection.fixed_wing_waypoint_send_count == 0);
+    CHECK(connection.fixed_wing_waypoint_requests.empty());
+}
+
 void test_route_start_ack_failure_does_not_claim_completion() {
     FakeConnection connection;
     configure_fixed_wing_quadplane(connection);
@@ -288,6 +302,7 @@ int main() {
         test_stale_position_gps_vtol_state_and_wrong_vtol_state_reject_before_send();
         test_unarmed_and_non_auto_quadplane_reject_before_transmission();
         test_route_rechecks_state_after_qualified_guided_setup();
+        test_transport_rejects_session_change_at_waypoint_send_boundary();
         test_route_start_ack_failure_does_not_claim_completion();
         test_missing_ack_fails_without_route_completion();
         test_ack_without_post_command_position_progress_times_out();

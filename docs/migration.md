@@ -417,9 +417,10 @@ connected heartbeat younger than 3 s, a nonzero session, position and 3D GPS
 younger than 2 s, armed state, authoritative `EXTENDED_SYS_STATE=FW` younger
 than 3 s, and AUTO mode. After the existing semantic GUIDED-mode setup, it
 repeats the complete readiness check for the same session and requires GUIDED
-immediately before each waypoint command. MAVSDK advances the session
-generation on connection loss; stale heartbeat or state also stops the
-operation.
+immediately before each waypoint command. The MAVSDK transport checks the
+expected nonzero session and freshly computed heartbeat again at its dispatch
+boundary. MAVSDK advances the session generation on connection loss; stale
+heartbeat or state also stops the operation.
 
 An accepted `COMMAND_ACK` means only that ArduPlane accepted the request. For
 each waypoint NOMAD immediately captures the latest fresh aircraft position as

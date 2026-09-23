@@ -72,7 +72,8 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     bool goto_location_relative(double latitude_deg, double longitude_deg, float relative_altitude_m,
                                 std::chrono::milliseconds timeout) override;
     std::optional<CommandAck> send_fixed_wing_waypoint(
-        const FixedWingWaypointCommand &waypoint, std::chrono::milliseconds timeout) override;
+        const FixedWingWaypointCommand &waypoint, std::uint64_t expected_session_id,
+        std::chrono::milliseconds timeout) override;
     bool send_velocity(const VelocitySetpoint &setpoint) override;
     bool is_velocity_active() const override;
     bool send_fence_point(const FencePoint &point, std::uint8_t index, std::uint8_t total) override;

@@ -97,7 +97,8 @@ class MavlinkConnection {
     virtual bool goto_location_relative(double latitude_deg, double longitude_deg, float relative_altitude_m,
                                         std::chrono::milliseconds timeout) = 0;
     virtual std::optional<CommandAck> send_fixed_wing_waypoint(
-        const FixedWingWaypointCommand &waypoint, std::chrono::milliseconds timeout) = 0;
+        const FixedWingWaypointCommand &waypoint, std::uint64_t expected_session_id,
+        std::chrono::milliseconds timeout) = 0;
     virtual bool send_velocity(const VelocitySetpoint &setpoint) = 0;
     virtual bool is_velocity_active() const = 0;
     virtual bool send_fence_point(const FencePoint &point, std::uint8_t index, std::uint8_t total) = 0;

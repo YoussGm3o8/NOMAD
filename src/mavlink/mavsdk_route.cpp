@@ -10,7 +10,8 @@
 namespace nomad::mavlink {
 
 std::optional<CommandAck> MavsdkMavlinkConnection::send_fixed_wing_waypoint(
-    const FixedWingWaypointCommand &waypoint, std::chrono::milliseconds timeout) {
+    const FixedWingWaypointCommand &waypoint, std::uint64_t expected_session_id,
+    std::chrono::milliseconds timeout) {
     std::shared_lock lifetime_lock(plugin_lifetime_mutex_);
     if (!is_connected_unlocked() || !passthrough_ || timeout <= std::chrono::milliseconds::zero()) {
         return std::nullopt;
@@ -36,6 +37,14 @@ std::optional<CommandAck> MavsdkMavlinkConnection::send_fixed_wing_waypoint(
     command.y = static_cast<std::int32_t>(std::round(waypoint.longitude_deg * 1.0e7));
     command.z = waypoint.relative_altitude_m;
 
+    {
+        std::lock_guard observation_lock(observation_mutex_);
+        const auto state = state_locked();
+        if (expected_session_id == 0 || state.session_id != expected_session_id || !state.connected ||
+            !state.heartbeat_fresh) {
+            return std::nullopt;
+        }
+    }
     const auto result = passthrough_->send_command_int(command, mavsdk::OperationOptions{timeout});
     const auto result_code = mavsdk_command_result_code(result);
     if (!result_code.has_value()) {

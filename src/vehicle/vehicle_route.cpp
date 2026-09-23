@@ -132,6 +132,7 @@ CommandResult Vehicle::execute_fixed_wing_route(const std::vector<RouteWaypoint>
         }
         const auto acknowledgement = connection_.send_fixed_wing_waypoint(
             {waypoint.latitude_deg, waypoint.longitude_deg, waypoint.relative_altitude_m, kRouteLoiterRadiusMeters},
+            expected_session_id,
             std::min(remaining, std::chrono::duration_cast<std::chrono::milliseconds>(kRouteCommandTimeout)));
         if (!acknowledgement.has_value()) {
             return {false, "fixed-wing waypoint " + std::to_string(index + 1) + " received no command ACK"};
