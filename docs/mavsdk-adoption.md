@@ -35,7 +35,7 @@ profile, so the MAVSDK transport reads ArduPilot's `Q_ENABLE` parameter. Values
 one and two promote an ArduPilot fixed-wing identity to QuadPlane, zero keeps it
 Plane, and a failed read or invalid value leaves it Unknown. A deterministic
 wire fixture proves every branch, and the live QuadPlane observer independently
-confirms the value-one profile.
+confirms the value-two profile used by the transition qualification.
 The parent gitlink pins `3f85f6f808b617c736316d7da5f51f3d3eba1737`; read
 `.gitmodules`, the gitlinks and the
 [dependency inventory](mavsdk-dependencies.md) for provenance. The Phase A/B
@@ -274,8 +274,9 @@ accepted `--transport mavsdk` only as a historical selector. `nomad_mavsdk_conne
 `scripts/dev/mavsdk_connection_fixture.py` (driving the deterministic vehicle
 in `scripts/dev/mavsdk_peer.py`) cover accepted, denied, timeout,
 no-peer, stale-telemetry, COMMAND_INT frame and wrong-identity cases, plus
-per-command parity for mode, takeoff, QuadPlane VTOL takeoff, goto, land, RTL, servo, relay,
-gimbal-config and user-command. In those cases the peer applies the state change
+per-command parity for mode, takeoff, QuadPlane VTOL takeoff, QuadPlane
+transition-to-fixed-wing, goto, land, RTL, servo, relay, gimbal-config and
+user-command. In those cases the peer applies the state change
 each accepted command asks for and its initial state is observably different
 from the required result, so they assert the core's state verification rather
 than the acknowledgement alone. Live Copter SITL evidence (2026-09-11): with
@@ -290,9 +291,10 @@ because `Vehicle::motor_test` sends command ID 139, which is not a `MAV_CMD`
 entry in the pinned dialect (`MAV_CMD_DO_MOTOR_TEST` is 209); that is recorded
 as C23 in the migration contradictions. Explicit vehicle-class identification
 is landed for the pinned profiles, and the deterministic peer now covers the
-QuadPlane startup operation; transitions, navigation, return and landing
-coverage remain open. Everything up to and including the production cutover has
-landed.
+QuadPlane startup and transition operations. The transition uses MAVSDK's
+existing typed `subscribe_vtol_state` path; no fork edit or hand-written
+MAVLink encoder was needed. Navigation, return and landing coverage remain
+open. Everything up to and including the production cutover has landed.
 
 Cover arm/disarm, mode, takeoff, land/RTL, goto, servo, relay, motor-test,
 gimbal-config and user-command. Unsupported verbs now belong in the fork: add the

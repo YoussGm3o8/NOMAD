@@ -37,6 +37,10 @@ void test_mode_semantics_are_aircraft_specific() {
     CHECK(nomad::telemetry::is_guided_mode(AircraftClass::QuadPlane, 15));
     CHECK(!nomad::telemetry::is_guided_mode(AircraftClass::QuadPlane, 4));
     CHECK(!nomad::telemetry::is_guided_mode(AircraftClass::Unknown, 4));
+    CHECK(nomad::telemetry::is_auto_mode(AircraftClass::Copter, 3));
+    CHECK(nomad::telemetry::is_auto_mode(AircraftClass::QuadPlane, 10));
+    CHECK(!nomad::telemetry::is_auto_mode(AircraftClass::QuadPlane, 15));
+    CHECK(!nomad::telemetry::is_auto_mode(AircraftClass::Unknown, 10));
     CHECK(nomad::telemetry::is_landing_mode(AircraftClass::Copter, 9));
     CHECK(!nomad::telemetry::is_landing_mode(AircraftClass::Plane, 10));
     CHECK(!nomad::telemetry::is_landing_mode(AircraftClass::QuadPlane, 10));

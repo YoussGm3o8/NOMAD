@@ -8,7 +8,7 @@ if [ -z "${SITL_PROFILE_DEFAULTS:-}" ] || [ ! -s "${SITL_PROFILE_DEFAULTS}" ]; t
     exit 1
 fi
 
-exec /ardupilot/Tools/autotest/sim_vehicle.py \
+set -- /ardupilot/Tools/autotest/sim_vehicle.py \
     --vehicle ArduPlane \
     -I"${INSTANCE:-0}" \
     --custom-location="${LAT},${LON},${ALT},${DIR}" \
@@ -17,4 +17,10 @@ exec /ardupilot/Tools/autotest/sim_vehicle.py \
     --no-rebuild \
     --speedup "${SPEEDUP}" \
     --add-param-file="${SITL_PROFILE_DEFAULTS}" \
-    --out ${SITL_UDP_OUTPUT_ADDRESS}
+    --out "${SITL_UDP_OUTPUT_ADDRESS}"
+
+if [ -n "${SITL_UDP_OBSERVER_ADDRESS:-}" ]; then
+    set -- "$@" --out "${SITL_UDP_OBSERVER_ADDRESS}"
+fi
+
+exec "$@"

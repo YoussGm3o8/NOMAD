@@ -56,16 +56,42 @@ close its integration or release gate.
   `quadplane-tilttri` profile, then verify armed state, the requested climb
   delta from the final pre-command relative altitude, and authoritative state
   with a fixed 0.5 m completion margin plus timeout/failure cases.
-  Do not add transition, route, return or landing behavior in this slice.
+  Transition qualification is recorded separately; route, return and landing
+  remain independent slices.
   Falsification: an ACK is accepted as completion, the generic Copter takeoff
   path is reused silently, or a failed/partial climb reports success.
 
-- [~] G-M QuadPlane transition qualification: qualify one reviewed
-  QuadPlane VTOL-to-fixed-wing transition mechanism for the pinned profile and
-  verify authoritative transition state with timeout/failure cases. Do not add
-  route, return, VTOL landing or link-loss strategy in this slice.
-  Falsification: a transition ACK is treated as completion, fixed-wing mode is
-  inferred from a command alone, or a partial transition reports success.
+- [x] G-M QuadPlane transition qualification: the pinned ArduPlane 4.7.1
+  `quadplane-tilttri` profile explicitly uses `Q_ENABLE=2`, `Q_ASSIST_SPEED=6`,
+  `Q_TRANSITION_MS=5000`, and disabled ArduPilot transition-failure action.
+  NOMAD qualifies exactly one mechanism: `MAV_CMD_DO_VTOL_TRANSITION` with
+  `param1=MAV_VTOL_STATE_FW`, admitted only for QuadPlane in fresh `AUTO` /
+  authoritative multicopter state. Live pinned SITL observed
+  `MC -> TRANSITION_TO_FW -> FW`; completion required a newer fresh
+  `EXTENDED_SYS_STATE.vtol_state=FW` observation after an accepted ACK.
+  The primitive assumes `AUTO` has already been established by an
+  operator/test authority; NOMAD still rejects arbitrary QuadPlane
+  `set_mode` and cannot yet perform the complete autonomous
+  `GUIDED` VTOL-takeoff -> `AUTO` -> transition sequence.
+  Focused tests cover unsupported non-transmission, rejected ACK, ACK without
+  completion, intermediate timeout, stale/missing state and link interruption.
+  Fixed-wing route, return, VTOL-back, landing, link-loss strategy and hardware
+  qualification remain open.
+
+- [x] G-M standalone-router status/config slice: PR #22 added a versioned local
+  status/events/safe link-selection protocol and a standalone management
+  client for `nomad-link-router.exe`, with stale/reconnect and loopback tests.
+  The protocol does not carry flight command authority. Persistent C++ IPC and
+  explicit command-authority handover remain separate work.
+
+- [~] G-M QuadPlane fixed-wing route/navigation qualification: select and
+  qualify one reviewed fixed-wing waypoint/navigation mechanism for the pinned
+  ArduPlane 4.7.1 `quadplane-tilttri` profile after the qualified forward
+  transition. Verify route completion from fresh authoritative aircraft state,
+  with rejection, interruption and timeout fault cases. Do not include return,
+  transition-back, VTOL landing, link-loss strategy or complete Task 1 flight.
+  Falsification: command acceptance or an intermediate waypoint is reported as
+  route completion, or stale telemetry is accepted.
 
 - [x] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
   datagram parsing, prove nonzero-then-zero ordering independently, and rerun the

@@ -10,7 +10,6 @@
 
 #include <cassert>
 #include <chrono>
-#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <span>
@@ -199,6 +198,7 @@ void test_plane_commands_are_rejected_before_transmission() {
     const auto vtol_takeoff_result = vehicle.vtol_takeoff(5.0F);
     CHECK(!vtol_takeoff_result.success);
     CHECK(vtol_takeoff_result.message == "vtol takeoff is not qualified for Plane");
+    CHECK(!vehicle.transition_to_fixed_wing().success);
     CHECK(connection.command_history.empty());
     CHECK(!connection.last_goto.has_value());
 }
@@ -319,6 +319,7 @@ void test_unknown_aircraft_rejects_aircraft_specific_commands() {
     CHECK(!vehicle.land().success);
     CHECK(!vehicle.return_to_launch().success);
     CHECK(!vehicle.vtol_takeoff(5.0F).success);
+    CHECK(!vehicle.transition_to_fixed_wing().success);
     CHECK(connection.command_history.empty());
     CHECK(!connection.last_goto.has_value());
 }

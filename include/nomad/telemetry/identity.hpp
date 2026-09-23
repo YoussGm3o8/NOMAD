@@ -45,6 +45,8 @@ std::optional<std::uint32_t> guided_mode_for(AircraftClass aircraft_class);
 
 bool is_guided_mode(AircraftClass aircraft_class, std::uint32_t custom_mode);
 
+bool is_auto_mode(AircraftClass aircraft_class, std::uint32_t custom_mode);
+
 bool is_landing_mode(AircraftClass aircraft_class, std::uint32_t custom_mode);
 
 bool is_return_to_launch_mode(AircraftClass aircraft_class, std::uint32_t custom_mode);

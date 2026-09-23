@@ -47,6 +47,10 @@ void print_state(const nomad::telemetry::VehicleState &state) {
                   << state.attitude.yaw_deg << " attitude_age_ms=" << age_milliseconds(state.attitude_updated_at)
                   << '\n';
     }
+    if (state.vtol_state_valid) {
+        std::cout << "vtol_state=" << nomad::telemetry::vtol_state_name(state.vtol_state)
+                  << " vtol_state_age_ms=" << age_milliseconds(state.vtol_state_updated_at) << '\n';
+    }
 }
 
 } // namespace

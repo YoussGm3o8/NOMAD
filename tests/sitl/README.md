@@ -18,12 +18,21 @@ evidence; merge requests must link a successful current-head live run.
   upload/readback, payload, link recovery and heartbeat relay behavior.
 - scripts/dev/core_sitl_quadplane_observe.py checks the separately pinned
   ArduPlane 4.7.1 tilt-tricopter profile: real fixed-wing heartbeat plus the
-  pinned `Q_ENABLE=1` classification, fresh position/GPS/attitude, and reported
+  pinned `Q_ENABLE=2` classification, fresh position/GPS/attitude, and reported
   GUIDED/QLOITER/QRTL/RTL modes. It does not exercise flight primitives.
 - scripts/dev/core_sitl_quadplane_vtol_takeoff.py drives the qualified NOMAD
   GUIDED arm + direct `MAV_CMD_NAV_TAKEOFF` path and verifies armed state,
   GUIDED mode and a fresh-position climb to the requested delta from the
   observed baseline, within a fixed 0.5 m completion margin.
+- scripts/dev/core_sitl_quadplane_transition.py starts a fresh pinned profile,
+  uses the independent pymavlink operator/test driver to establish `AUTO` with
+  authoritative `EXTENDED_SYS_STATE` multicopter state,
+  issues `MAV_CMD_DO_VTOL_TRANSITION` with `MAV_VTOL_STATE_FW`, and requires a
+  newer authoritative `fixed_wing` state. Its forward waypoint supplies the
+  tilt-tri airspeed condition; it is setup for this primitive, not route
+  qualification. NOMAD deliberately rejects arbitrary QuadPlane `set_mode`, so
+  this does not qualify a complete autonomous GUIDED -> AUTO -> transition
+  sequence.
 
 The obsolete sitl-gimbal task was removed with runtime wiring repair. No successful gimbal evidence is claimed.
 
@@ -54,7 +63,7 @@ cause is not identified: treat a repeat as a real signal and capture the arm
 step's full output before retrying.
 
 Flight scenarios remain Copter-oriented except for the separately pinned
-QuadPlane observation and arm/takeoff qualification. Add separate QuadPlane
-transition, cruise, return and VTOL landing evidence for Task 1 after this
-slice. Required gate artifacts and historical/current distinctions live in
+QuadPlane observation, arm/takeoff qualification and focused VTOL-to-fixed-wing
+transition qualification. Cruise, route, return and VTOL landing evidence
+remain separate Task 1 work. Required gate artifacts and historical/current distinctions live in
 [migration](../../docs/migration.md); do not duplicate pass counts here.
