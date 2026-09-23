@@ -12,6 +12,7 @@ from scripts.dev import verify_core_package
 def make_install_tree(root: Path) -> None:
     (root / "bin").mkdir(parents=True)
     (root / "bin" / "nomad.exe").write_text("placeholder", encoding="utf-8")
+    (root / "bin" / "nomad-runtime.exe").write_text("placeholder", encoding="utf-8")
     for relative in verify_core_package.REQUIRED_FILES:
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -46,12 +46,13 @@ default = { features = ["dev"] }
 # MAVSDK transport is mandatory, so the pinned submodule must be initialized.
 build-core = "cmake -S . -B build/core -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && cmake --build build/core"
 test-core = "cmake -S . -B build/core -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && cmake --build build/core && ctest --test-dir build/core -C Debug --output-on-failure"
+test-runtime-ipc = "pixi run build-core && python scripts/dev/runtime_ipc_smoke.py"
 sitl = "pixi run dev-build && pixi run dev-up && pixi run sitl-scenario"
 # Phase A build metrics. The name is historical: this is now the one and only
 # core configuration, and the task measures its configure/build cost.
 build-core-mavsdk = "python scripts/dev/mavsdk_phase_a_metrics.py --build"
 mavsdk-phase-a-smoke = "pixi run build-core-mavsdk && python scripts/dev/mavsdk_phase_a_smoke.py"
-package-core = "cmake -S . -B build/package -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF && cmake --build build/package --config Release --target nomad && cpack --config build/package/CPackConfig.cmake -C Release"
+package-core = "cmake -S . -B build/package -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF && cmake --build build/package --config Release --target nomad nomad-runtime && cpack --config build/package/CPackConfig.cmake -C Release"
 verify-core-package = "python scripts/dev/verify_core_package.py build/package"
 verify-core-install = "cmake -E rm -rf build/package/stage && cmake --install build/package --prefix build/package/stage --config Release --component nomad_runtime && python scripts/dev/verify_core_package.py build/package/stage"
 test-mavsdk-phase-a = "pytest tests/test_mavsdk_phase_a_smoke.py tests/test_mavsdk_provenance.py -q && python scripts/dev/mavsdk_phase_a_fixture.py"

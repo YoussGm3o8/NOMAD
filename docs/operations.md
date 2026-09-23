@@ -102,11 +102,45 @@ and capabilities; keep real settings/credentials in ignored local storage.
 
 ## Connection behavior
 
-The C++ CLI accepts udp, udpin and udpout endpoint schemes, such as
-udpin:127.0.0.1:<port>, and hands them to the MAVSDK transport. Native serial/TCP
-are possible MAVSDK deployment capabilities but are not current CLI transports.
+The persistent `nomad-runtime` and one-shot C++ CLI accept udp, udpin and udpout
+endpoint schemes and hand them to the MAVSDK transport. In the ground-router
+topology, the runtime default is `udpin:127.0.0.1:14601`; the router consumer
+sends to that local MAVSDK endpoint from `127.0.0.1:14602`. Runtime IPC is a
+separate TCP endpoint at `127.0.0.1:14611`. Set `NOMAD_RUNTIME_IPC_PORT` when
+the runtime and clients need another loopback port. Native serial/TCP are
+possible MAVSDK deployment capabilities but are not current CLI transports.
 Routers bridge selected physical links to UDP. Core placement does not follow
 automatically from compute placement.
+
+## Persistent C++ runtime
+
+Start one `nomad-runtime` process for clients that use persistent mode. It owns
+one MAVSDK connection and one `Vehicle` until shutdown. It starts its local IPC
+listener even while aircraft identity is unresolved; HELLO and STATUS remain
+available during startup. Configure `NOMAD_MAVLINK_ENDPOINT`,
+`NOMAD_RUNTIME_IPC_PORT`, `NOMAD_API_KEY`, and the existing fence/velocity
+environment settings before starting it. The runtime retries the same MAVSDK
+connection object after a link loss. A client disconnect does not recreate the
+vehicle connection or cancel a command already executing.
+
+Mission Planner selects `PersistentRuntime` in its NOMAD settings and uses the
+configured loopback port. `LegacyOneShot` remains the compatibility default
+until a deployment opts into the runtime. The C++ CLI can use
+`nomad --runtime status`, `nomad --runtime servo <channel> <pwm_us>`, and other
+protocol-v1 typed operations. Bare verbs and `nomad --direct` retain a one-shot
+MAVSDK connection for exclusive debugging; use that mode only when no runtime
+or other NOMAD client owns the same MAVSDK endpoint. Runtime mode accepts no
+MAVLink endpoint override; configure the endpoint on `nomad-runtime` instead.
+
+The protocol is versioned JSON Lines, limited to 64 KiB per message, and bound
+to IPv4 loopback. Mutating requests run one at a time; a concurrent mutation
+returns `busy`. A cached request ID returns the original response during the
+runtime process lifetime. If the response is lost, the client reports unknown
+outcome and must not automatically issue a fresh request. The cache is
+in-memory, so restart clears it and does not resume work. Local machine access
+is a trust boundary; `NOMAD_API_KEY` is only a nonempty actuation gate, not
+client authentication. Native Mission Planner MAVLink, RC/pilot, ArduPilot,
+ROS and maintenance tools remain independent authorities.
 
 The heartbeat-gated SITL harness uses a `udpout:` endpoint so MAVSDK sends the
 pre-latch GCS announcement to the relay and the relay can learn the ephemeral
@@ -117,9 +151,10 @@ read by the MAVSDK transport.
 is unrelated to the competition's required 1 Hz telemetry upload.
 
 For remote core placement, a secure network and an authenticated client protocol
-are both required; the latter is unimplemented. Until G2, use one explicitly
-selected standalone writer with exclusive test ownership. Running the ROS node
-and plugin-spawned CLI simultaneously is not a qualified integration.
+are both required; current IPC is local-only and does not authenticate clients.
+Until global handover is implemented, use one selected NOMAD runtime owner.
+Running the ROS node, legacy one-shot CLI or another direct MAVLink writer
+against the same endpoint is not a qualified integration.
 
 LTE via Pi Zero is the user's proposed Task 1 backup link, possibly carrying
 video. The primary command/telemetry link is D09. A link budget must separate
@@ -194,11 +229,12 @@ repository evidence manifests are sanitized and reference private artifacts.
 
 ## Security and packaging
 
-The current CLI accepts any nonempty NOMAD_API_KEY: a local opt-in, not identity
-verification. OS account/file/IPC permissions are the immediate trust boundary.
-Production requires the G2 authenticated/authorized protocol, bounded parsing,
-session/replay controls and complete audit. Enable and test DDS security for any
-exposed ROS command surface; no such protection is implied by ROS domain naming.
+The current CLI/runtime accept any nonempty NOMAD_API_KEY: a local opt-in, not
+identity verification. OS account/file/IPC permissions are the immediate trust
+boundary. Runtime IPC has bounded parsing, request IDs and an in-memory dedupe
+cache, but no authenticated identities, durable request records, authorization
+policy or complete lifecycle audit. Enable and test DDS security for any exposed
+ROS command surface; no such protection is implied by ROS domain naming.
 
 Separate competition credentials from local command credentials. Validate TLS
 and server identity for the selected official protocol. Restrict media HTTP,

@@ -4,11 +4,13 @@
 #include "nomad/mavlink/connection.hpp"
 
 #include <chrono>
+#include <atomic>
 #include <cstdint>
 #include <map>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 class FakeConnection final : public nomad::mavlink::MavlinkConnection {
@@ -25,6 +27,7 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     };
 
     bool connect() override {
+        connect_count += 1;
         connected = true;
         if (state->session_id == 0) {
             state->session_id = 1;
@@ -65,6 +68,10 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
 
     std::optional<nomad::mavlink::CommandAck> send_command(const nomad::mavlink::Command &command,
                                                            std::chrono::milliseconds) override {
+        command_started = true;
+        if (command_delay > std::chrono::milliseconds::zero()) {
+            std::this_thread::sleep_for(command_delay);
+        }
         std::lock_guard lock(state_mutex);
         last_command = command;
         command_history.push_back(command);
@@ -211,7 +218,10 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
         return found->second;
     }
 
-    bool connected{false};
+    std::atomic_bool connected{false};
+    std::atomic_int connect_count{0};
+    std::atomic_bool command_started{false};
+    std::chrono::milliseconds command_delay{0};
     // Most tests model a live telemetry feed, so polling refreshes the sample
     // timestamps by default. Tests for stale-feed behavior clear this flag and
     // set the relevant *_updated_at by hand.
@@ -280,6 +290,16 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     void set_mode(std::uint32_t mode) {
         std::lock_guard lock(state_mutex);
         state->custom_mode = mode;
+    }
+
+    void set_identity(nomad::telemetry::VehicleIdentity identity) {
+        std::lock_guard lock(state_mutex);
+        state->identity = identity;
+    }
+
+    std::size_t command_count() const {
+        std::lock_guard lock(state_mutex);
+        return command_history.size();
     }
 
   private:

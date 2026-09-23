@@ -52,7 +52,8 @@ namespace NOMAD.MissionPlanner
             {
                 return null;
             }
-            return new NomadCoreClient(_config.CoreExePath, _config.CoreMavlinkEndpoint, _config.CoreApiKey);
+            return new NomadCoreClient(_config.CoreExePath, _config.CoreMavlinkEndpoint, _config.CoreApiKey,
+                                       _config.CoreClientMode, _config.CoreRuntimePort);
         }
 
         /// <summary>
@@ -83,8 +84,8 @@ namespace NOMAD.MissionPlanner
                 Audit("servo", true, $"channel={channel} pwm_us={pwmUs}");
                 return true;
             }
-            Log.Warn("Servo command: core refused or could not reach the vehicle.");
-            Audit("servo", false, $"channel={channel} pwm_us={pwmUs} reason=core_refused");
+            Log.Warn(DescribeFailure("Servo command", client));
+            Audit("servo", false, $"channel={channel} pwm_us={pwmUs} reason={FailureReason(client)}");
             return false;
         }
 
@@ -111,9 +112,23 @@ namespace NOMAD.MissionPlanner
                 Audit("relay", true, $"relay={relayNumber} state={(on ? 1 : 0)}");
                 return true;
             }
-            Log.Warn("Relay command: core refused or could not reach the vehicle.");
-            Audit("relay", false, $"relay={relayNumber} state={(on ? 1 : 0)} reason=core_refused");
+            Log.Warn(DescribeFailure("Relay command", client));
+            Audit("relay", false, $"relay={relayNumber} state={(on ? 1 : 0)} reason={FailureReason(client)}");
             return false;
+        }
+
+        private static string DescribeFailure(string action, NomadCoreClient client)
+        {
+            if (client.LastOutcome == NomadCoreRequestOutcome.UnknownOutcome)
+            {
+                return $"{action}: runtime connection ended after send; vehicle outcome unknown. Do not retry blindly.";
+            }
+            return $"{action}: core refused or could not reach the vehicle.";
+        }
+
+        private static string FailureReason(NomadCoreClient client)
+        {
+            return client.LastOutcome == NomadCoreRequestOutcome.UnknownOutcome ? "unknown_outcome" : "core_refused";
         }
 
         /// <summary>

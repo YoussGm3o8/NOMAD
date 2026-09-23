@@ -16,6 +16,7 @@
 using System;
 using System.Threading.Tasks;
 using MissionPlanner;
+using NOMAD.MissionPlanner.Connectivity;
 
 namespace NOMAD.MissionPlanner
 {
@@ -122,9 +123,21 @@ namespace NOMAD.MissionPlanner
             // debt: stick stream; revisit when the core boundary gains a
             // streaming verb; then route DO_MOUNT_CONTROL through it.
             var client = OutputController.CreateCoreClient();
-            if (client == null || !client.GimbalConfigure((int)mode))
+            if (client == null)
             {
                 SendMountConfigure(mode);
+                return;
+            }
+            if (!client.GimbalConfigure((int)mode))
+            {
+                if (client.Mode == NomadCoreClient.LegacyOneShot)
+                {
+                    SendMountConfigure(mode);
+                }
+                else
+                {
+                    Log.Warn("Gimbal configure was not confirmed by the persistent runtime; it was not replayed.");
+                }
             }
         }
 

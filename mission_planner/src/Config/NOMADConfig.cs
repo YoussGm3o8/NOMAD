@@ -30,14 +30,20 @@ namespace NOMAD.MissionPlanner
         public string ActiveProfile { get; set; } = "dev";
 
         /// <summary>
-        /// Path to the C++ core CLI binary invoked by <c>NomadCoreClient</c>.
+        /// Path to the C++ core CLI binary used by LegacyOneShot mode.
         /// Empty means "nomad" on PATH.
         /// </summary>
         public string CoreExePath { get; set; } = "";
 
+        /// <summary>Client route for C++ vehicle operations: PersistentRuntime or LegacyOneShot.</summary>
+        public string CoreClientMode { get; set; } = Connectivity.NomadCoreClient.LegacyOneShot;
+
+        /// <summary>Loopback TCP port used by the persistent C++ runtime.</summary>
+        public int CoreRuntimePort { get; set; } = Connectivity.NomadCoreClient.DefaultRuntimePort;
+
         /// <summary>
-        /// Endpoint the core binds (listen mode) for the MAVLink stream.
-        /// Must match the core's NOMAD_MAVLINK_ENDPOINT on the same host.
+        /// LegacyOneShot endpoint. PersistentRuntime uses the endpoint configured
+        /// for the runtime process and does not send this setting over IPC.
         /// </summary>
         public string CoreMavlinkEndpoint { get; set; } = "udpin:127.0.0.1:14601";
         public List<LinkConfig> RouterLinks { get; set; }
@@ -48,9 +54,8 @@ namespace NOMAD.MissionPlanner
         };
 
         /// <summary>
-        /// API key passed to the core as NOMAD_API_KEY. Must match the key the
-        /// core was started with; the documented development key is
-        /// "nomad-dev-sitl-key" (config/nomad.env.example).
+        /// Legacy actuation gate value. PersistentRuntime sends no credential;
+        /// the runtime checks that NOMAD_API_KEY is non-empty in its own environment.
         /// </summary>
         public string CoreApiKey { get; set; } = "nomad-dev-sitl-key";
 

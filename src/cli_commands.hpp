@@ -20,6 +20,8 @@ struct Arguments {
     std::string command;
     std::string endpoint{kDefaultEndpoint};
     std::uint8_t system_id{1};
+    bool endpoint_explicit{false};
+    bool system_id_explicit{false};
     std::optional<float> altitude;
     std::optional<float> latitude;
     std::optional<float> longitude;

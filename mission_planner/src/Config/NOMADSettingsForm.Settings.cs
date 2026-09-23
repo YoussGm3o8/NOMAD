@@ -14,6 +14,8 @@ namespace NOMAD.MissionPlanner
         private void LoadSettings()
         {
             _txtCoreExePath.Text = Config.CoreExePath ?? "";
+            SetComboBoxValue(_cmbCoreClientMode, Config.CoreClientMode);
+            _numCoreRuntimePort.Value = ClampValue(_numCoreRuntimePort, Config.CoreRuntimePort);
             _txtCoreEndpoint.Text = Config.CoreMavlinkEndpoint ?? "";
             _txtCoreApiKey.Text = Config.CoreApiKey ?? "";
 
@@ -143,6 +145,8 @@ namespace NOMAD.MissionPlanner
         private void SaveSettings()
         {
             Config.CoreExePath = _txtCoreExePath.Text.Trim();
+            Config.CoreClientMode = _cmbCoreClientMode.SelectedItem?.ToString() ?? "LegacyOneShot";
+            Config.CoreRuntimePort = (int)_numCoreRuntimePort.Value;
             Config.CoreMavlinkEndpoint = _txtCoreEndpoint.Text.Trim();
             Config.CoreApiKey = _txtCoreApiKey.Text.Trim();
 

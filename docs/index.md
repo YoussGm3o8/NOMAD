@@ -9,6 +9,7 @@ qualification.
 | Requirements, provenance and user decisions | [PRD](prd.md) |
 | PRD source appendix: official rules, scoring and interpretations | [CONOPS inventory](conops-requirements.md) |
 | Target ownership and data flow | [Architecture](architecture.md) |
+| Persistent C++ runtime and local IPC | [Runtime IPC](runtime-ipc.md) |
 | AEAC 2027 external server contract and competition module | [AEAC 2027 integration](aeac-2027.md) |
 | Source inventory, contradictions and objective gates | [Migration](migration.md) |
 | Build, tests and contribution workflow | [Development](development.md) |

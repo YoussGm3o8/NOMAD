@@ -91,7 +91,7 @@ other optional compute services disabled until G3 qualification.
 
 | Layer | Current checks | Required expansion |
 |---|---|---|
-| C++ | Nine CTest targets (core, safety, output, VIO, velocity config, fence config, MAVSDK validation, MAVSDK connection contract, MAVSDK zero delivery) | Authority, per-field freshness, cancellation, MAVSDK and vehicle-class coverage |
+| C++ | Ten CTest targets including runtime IPC fake-connection coverage | Authority, per-field freshness, cancellation, MAVSDK and vehicle-class coverage |
 | Python | pytest includes client contracts, traceability, harnesses, profiles and video tools | Mock competition server/traffic, perception replay and tracker fixtures |
 | ROS | ros2/nomad_ros translation plus tests/ros integration | Bounded callbacks, acquisition-time/frame validation, command-owner integration |
 | Mission Planner | lint-plugin and test-plugin-* helper scripts | Ownership, capabilities, stale displays, action lifecycle and replay |
@@ -106,6 +106,10 @@ IDs, canonical references, unresolved-question links and the single active ledge
 item. Run `pixi run python -m pytest tests/test_conops_traceability.py -q` after
 requirements edits. A passing structural check does not prove extraction
 completeness, interpretation accuracy or implemented flight compliance.
+
+`pixi run test-runtime-ipc` builds the core and exercises `nomad-runtime` with a
+local fake MAVLink peer, including typed requests, client reconnect and runtime
+restart. It does not require aircraft hardware or Docker.
 
 ## SITL discipline
 

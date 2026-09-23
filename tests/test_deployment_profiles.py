@@ -78,7 +78,7 @@ def test_groundstation_gpu_profile_separation() -> None:
     assert env.get("NOMAD_VIO_SOURCE_REQUIRED") == "true"
     assert "127.0.0.1" in env.get("NOMAD_VIDEO_RTSP_URL", "")
     assert env.get("NOMAD_CORE_SITL_PORT")
-    assert env.get("NOMAD_MAVLINK_ENDPOINT") == "udpin:0.0.0.0:14550"
+    assert env.get("NOMAD_MAVLINK_ENDPOINT") == "udpin:127.0.0.1:14601"
     assert env.get("NOMAD_API_KEY", "") == ""
     assert env.get("NOMAD_ROS_VIO_SOURCE", "") == ""
     assert env.get("NOMAD_AUTOSTART_ISAAC_ROS_CONTAINER") == "false"
@@ -96,7 +96,7 @@ def test_groundstation_minimal_profile_separation() -> None:
     assert env.get("NOMAD_VIDEO_RTSP_URL", "") == ""
     # Direct MAVLink / C++ core transport remains active
     assert env.get("NOMAD_CORE_SITL_PORT")
-    assert env.get("NOMAD_MAVLINK_ENDPOINT") == "udpin:0.0.0.0:14550"
+    assert env.get("NOMAD_MAVLINK_ENDPOINT") == "udpin:127.0.0.1:14601"
     assert env.get("NOMAD_API_KEY", "") == ""
     assert env.get("NOMAD_ROS_VIO_SOURCE", "") == ""
     assert env.get("NOMAD_AUTOSTART_ISAAC_ROS_CONTAINER") == "false"
@@ -273,7 +273,7 @@ def test_sync_mission_planner_removes_stale_profile_fields(tmp_path: Path, monke
     assert synced_min["ActiveProfile"] == "groundstation_minimal"
     assert "VideoUrl" not in synced_min
     assert "CoreApiKey" not in synced_min
-    assert synced_min["CoreMavlinkEndpoint"] == "udpin:0.0.0.0:14550"
+    assert synced_min["CoreMavlinkEndpoint"] == "udpin:127.0.0.1:14601"
     assert synced_min["CustomUserSetting"] == "preserved_value"
 
 

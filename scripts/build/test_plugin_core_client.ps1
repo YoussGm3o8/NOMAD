@@ -43,14 +43,22 @@ if (-not (Test-Path $csc)) {
 # ---- Compile ----
 $sources = @(
     (Join-Path $repoRoot 'mission_planner\src\Connectivity\NomadCoreClient.cs'),
-    (Join-Path $repoRoot 'mission_planner\tests\coreclient\NomadCoreClientTests.cs')
+    (Join-Path $repoRoot 'mission_planner\src\Connectivity\NomadRuntimeClient.cs'),
+    (Join-Path $repoRoot 'mission_planner\tests\coreclient\NomadCoreClientTests.cs'),
+    (Join-Path $repoRoot 'mission_planner\tests\coreclient\NomadCoreClientRuntimeTests.cs')
 )
 $outDir = Join-Path $repoRoot 'mission_planner\tests\coreclient\bin'
 New-Item -ItemType Directory -Force $outDir | Out-Null
 $exe = Join-Path $outDir 'NomadCoreClientTests.exe'
 
 Write-Host "Compiling core-client tests..." -ForegroundColor Yellow
-& $csc /nologo /target:exe /langversion:latest "/out:$exe" @sources
+$frameworkReferenceDirectory = Join-Path "${env:ProgramFiles(x86)}" 'Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8'
+$systemWebExtensions = Join-Path $frameworkReferenceDirectory 'System.Web.Extensions.dll'
+if (-not (Test-Path $systemWebExtensions)) {
+    Write-Host "ERROR: .NET Framework 4.8 reference assembly not found at $systemWebExtensions" -ForegroundColor Red
+    exit 1
+}
+& $csc /nologo /target:exe /langversion:latest "/reference:$systemWebExtensions" "/out:$exe" @sources
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Compile FAILED." -ForegroundColor Red
     exit 1

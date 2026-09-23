@@ -65,6 +65,7 @@ nav:
   - Product Requirements: prd.md
   - CONOPS requirement inventory: conops-requirements.md
   - Architecture: architecture.md
+  - Runtime IPC: runtime-ipc.md
   - Development: development.md
   - Agent and engineering guidance: agent-guidance.md
   - Operations: operations.md

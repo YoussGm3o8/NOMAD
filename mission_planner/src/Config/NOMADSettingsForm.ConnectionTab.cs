@@ -16,8 +16,16 @@ namespace NOMAD.MissionPlanner
 
             AddSectionLabel(tab, "C++ Core Command Boundary", ref y);
 
+            AddLabel(tab, "Client mode:", 20, y);
+            _cmbCoreClientMode = AddComboBox(tab, 170, y, 180, new[] { "LegacyOneShot", "PersistentRuntime" });
+            y += 30;
+
             AddLabel(tab, "Core executable:", 20, y);
             _txtCoreExePath = AddTextBox(tab, 170, y, 360);
+            y += 30;
+
+            AddLabel(tab, "Runtime IPC port:", 20, y);
+            _numCoreRuntimePort = AddNumericUpDown(tab, 170, y, 90, 1, 65535, 14611);
             y += 30;
 
             AddLabel(tab, "MAVLink endpoint:", 20, y);
@@ -31,8 +39,8 @@ namespace NOMAD.MissionPlanner
 
             var hint = new Label
             {
-                Text = "Vehicle commands are validated and acknowledged by the C++ core. " +
-                       "The core endpoint is a local MAVLink transport, not a REST service.",
+                Text = "PersistentRuntime uses versioned loopback TCP IPC and requires a separately " +
+                       "supervised nomad-runtime process. LegacyOneShot starts nomad for each operation.",
                 Font = new Font("Segoe UI", 8, FontStyle.Italic),
                 ForeColor = Color.FromArgb(170, 170, 170),
                 Location = new Point(20, y),

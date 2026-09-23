@@ -24,7 +24,7 @@ flowchart LR
     AEAC["AEAC competition server"]
 
     subgraph Runtime["NOMAD C++ runtime"]
-        OWNER["Composition root / single command owner"]
+        OWNER["Persistent runtime / one NOMAD command owner in runtime mode"]
         TEL["Telemetry model"]
         MISSION["Mission state"]
         SAFETY["Safety / traffic deconfliction"]
@@ -55,8 +55,9 @@ flowchart LR
 ```
 
 The diagram is a target ownership view, not a claim that every boundary is
-implemented today. In particular, the persistent runtime and AEAC module remain
-future gates. ArduPilot owns stabilization, motor control, EKF, low-level
+implemented today. The persistent runtime and versioned local IPC foundation
+exist; mission supervision, AEAC integration, ROS migration and full client
+migration remain open. ArduPilot owns stabilization, motor control, EKF, low-level
 navigation and failsafes. The competition termination mechanism belongs on the
 aircraft, with independently qualified safety hardware/ArduPilot behavior even
 when the C++ core or ground link is unavailable. C++ verifies
@@ -126,12 +127,14 @@ fixed-wing navigation primitive for the pinned QuadPlane profile. Return/recover
 transition back to VTOL, landing, QuadPlane link-loss response, complete Task 1
 execution and hardware qualification remain separate gates.
 
-The proposed persistent runtime is a thin C++ executable around the existing
-library, with one connection owner, bounded work, and an explicit shutdown order.
-It is justified by mission cancellation, continuous traffic/telemetry, multiple
-clients and payload state. It is not implemented yet. Keep ordinary value types,
-named functions and owned workers; do not add a broker, registry or general task
-framework. The current one-shot CLI remains useful for exclusive local use.
+The `nomad-runtime` executable owns one long-lived MAVSDK connection and one
+`Vehicle`. Version-1 IPC provides HELLO, PING, STATUS and a small typed command
+set over bounded JSON Lines on loopback TCP. Each command calls an existing
+public `Vehicle` method. It does not own persistent mission state, global
+aircraft authority, or every client. See [runtime IPC](runtime-ipc.md) for the
+source-baseline ownership inventory, wire contract and current limits. Keep the
+runtime composition root small; the one-shot CLI remains available for
+exclusive local/debug use.
 
 ### Modularity and dependency direction
 
@@ -166,9 +169,11 @@ between modules.
 | Mission Planner | Operator review, maps, video, configuration, progress and diagnostics | Independent emergency/fence/payload policy |
 | Routing/deployment | Link routing, process supervision, network access and packaging | Deciding whether a flight action is safe |
 
-Target per-field freshness and command authority are missing from the current
-library. The existing ROS node embeds its own Vehicle and the plugin spawns CLI
-processes; those are alternative standalone modes until G2 unifies ownership.
+The transport records timestamps for several telemetry groups, but a complete
+per-field freshness and global authority model remains open. The ROS node still
+embeds its own `Vehicle`; Mission Planner can select persistent runtime or
+legacy CLI mode. These client paths have not been unified with native GCS
+controls, RC/pilot, ArduPilot or maintenance writers.
 
 ## Boundary geometry
 
@@ -183,28 +188,28 @@ these semantics and test concave geometry, narrow regions and infeasible insets.
 
 ## Command authority and client protocol
 
-R recommendation (D02): begin with one ground-hosted C++ runtime. In all profiles,
-Mission Planner and the CLI submit typed requests to that runtime. For an onboard
-core, use the same semantics through a selected authenticated remote transport;
-do not spawn a local second owner when the remote core is unreachable.
+The implemented first step is one ground-hosted C++ runtime. Mission Planner can
+select `PersistentRuntime` or compatibility `LegacyOneShot`; the CLI has an
+explicit runtime-client mode. Local IPC is bounded JSON Lines over IPv4 loopback
+TCP. V1 has request IDs, protocol negotiation, structured errors, a 256-response
+in-memory dedupe cache and a one-mutating-command-at-a-time policy. Its limited
+typed request set and unknown-outcome behavior are documented in
+[runtime IPC](runtime-ipc.md).
 
-Before implementation, specify a versioned request/result contract: aircraft and
-session identity, request ID, deadline, verb, units, authorization scope and
-outcome. Separate admitted, transmitted, acknowledged, state-verified, timed-out,
-cancelled and unknown outcomes. A completed LAND command means LAND mode today;
-a completed landing requires landed/disarmed evidence.
+V1 does not include authenticated user identities, remote transport, durable
+request records, cancellation, persisted mission state or all outcome phases.
+The API-key environment check remains a non-empty actuation gate, not client
+authentication. Remote transport still needs mutual endpoint authentication,
+authorization, replay protection, bounded messages and revocation. VPN
+reachability alone is not application authorization. Python REST is not a
+fallback.
 
-Use OS-restricted local IPC for local clients; select the exact Windows/Linux
-mechanism at D02. Remote transport needs mutual endpoint authentication,
-authorization, replay protection, bounded messages and revocation. VPN reachability
-alone is not application authorization. No existing remote C++ command protocol
-is claimed, and Python REST is not a fallback.
-
-Maintain one active writer per aircraft. Concurrent clients may observe; requests
-are serialized or rejected while incompatible work runs. Priority is explicit:
-ArduPilot failsafes/manual takeover, abort, safety response, then mission requests.
-Stale session requests cannot rearm, resume or repeat a payload action. Reconnect
-reestablishes observation first; explicit reauthorization precedes motion.
+The policy is one NOMAD command owner for clients using the runtime. It is not
+one aircraft writer. Mission Planner native controls, RC/pilot input, the ROS
+adapter, maintenance tools and ArduPilot remain independent authorities.
+Concurrent typed mutations are rejected while a command is running. Global
+handover, inhibition, abort priority and stale-session behavior remain later
+work.
 
 Mission Planner native controls and RC remain possible external authorities.
 Integrated operations must define handover and inhibit NOMAD until reconciled;
@@ -433,8 +438,9 @@ debt: advisory traffic baseline; revisit when CONOPS or approved autonomy
 requires maneuvers; then qualify bounded response logic with independent traffic
 and fault evidence.
 
-debt: one-command CLI for isolated operation; concurrency already triggers the
-ceiling; then add the G2 persistent runtime without replacing the core API.
+debt: v1 in-memory outcomes; revisit when process restart recovery is required;
+then persist request identity and authoritative operation state before adding
+automatic resume.
 
 ## Ground multi-link data plane
 
@@ -461,7 +467,9 @@ and authoritative NOMAD outcomes. MP retains maps/HUD, diagnostics, native GCS
 functions and NOMAD client UI. ArduPilot retains stabilization, motors, EKF,
 low-level navigation/control and aircraft-side failsafes.
 
-This separate control path remains **target architecture**, not implemented IPC:
+Typed clients can use this implemented control path when configured for runtime
+mode. The broader diagram remains **target architecture** because not every
+Mission Planner, CLI, ROS or Python surface has migrated:
 
 ```mermaid
 flowchart TD
@@ -472,10 +480,12 @@ flowchart TD
     ROUTER --> AIRCRAFT[Aircraft]
 ```
 
-`NomadCoreClient` still launches one-shot CLI processes. Two raw MAVLink consumers
-can both emit commands; transport selection is not global single-writer authority.
-MP native controls, pilot/RC and ArduPilot are external authorities. Integrated
-operation needs explicit handover/inhibition. The standalone router survives MP
+`NomadCoreClient` retains `LegacyOneShot` and can select `PersistentRuntime`;
+the latter never falls back to a new process after a command failure. The ROS
+node still owns a separate `Vehicle`. Two raw MAVLink consumers can both emit
+commands; transport selection is not global single-writer authority. MP native
+controls, pilot/RC and ArduPilot are external authorities. Integrated operation
+needs explicit handover/inhibition. The standalone router survives MP
 exit. Its version-1 management API is loopback-only, bounded JSON Lines and
 limited to status, events, and selecting an enabled link or returning to automatic
 selection; it carries no raw MAVLink or flight command. The plugin uses that API

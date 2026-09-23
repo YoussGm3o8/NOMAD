@@ -20,6 +20,13 @@ REQUIRED_FILES = (
     Path("share/nomad/config/README.md"),
     Path("share/nomad/config/nomad.env.example"),
 )
+CLI_NAMES = ("nomad", "nomad.exe")
+RUNTIME_NAMES = ("nomad-runtime", "nomad-runtime.exe")
+
+
+def find_binary(root: Path, names: tuple[str, ...]) -> Path | None:
+    """Return the first packaged executable matching this host-neutral name set."""
+    return next((root / "bin" / name for name in names if (root / "bin" / name).is_file()), None)
 
 
 def find_install_root(base: Path) -> Path:
@@ -35,9 +42,10 @@ def find_install_root(base: Path) -> Path:
 def validate_install_root(root: Path) -> list[str]:
     """Return content errors without executing anything."""
     errors = [f"missing {path}" for path in REQUIRED_FILES if not (root / path).is_file()]
-    binary = next((root / "bin" / name for name in ("nomad", "nomad.exe") if (root / "bin" / name).is_file()), None)
-    if binary is None:
+    if find_binary(root, CLI_NAMES) is None:
         errors.append("missing bin/nomad or bin/nomad.exe")
+    if find_binary(root, RUNTIME_NAMES) is None:
+        errors.append("missing bin/nomad-runtime or bin/nomad-runtime.exe")
     license_dir = root / "share/nomad/licenses/mavsdk-phase-a"
     if not license_dir.is_dir() or not any(license_dir.glob("*.txt")):
         errors.append("missing MAVSDK dependency license bundle")
@@ -52,13 +60,21 @@ def validate_install_root(root: Path) -> list[str]:
 
 def verify_cli(root: Path) -> list[str]:
     """Run only the no-network usage path of the installed executable."""
-    binary = next(root / "bin" / name for name in ("nomad", "nomad.exe") if (root / "bin" / name).is_file())
+    binary = find_binary(root, CLI_NAMES)
+    runtime = find_binary(root, RUNTIME_NAMES)
+    if binary is None or runtime is None:
+        return ["package executable validation skipped because a required executable is missing"]
     result = subprocess.run([str(binary.resolve())], cwd=root, capture_output=True, text=True, timeout=10, check=False)
     errors = []
     if result.returncode != 1:
         errors.append(f"usage invocation returned {result.returncode}, expected 1")
-    if "Usage: nomad <" not in result.stdout:
+    if "Usage: nomad [--runtime|--direct] <" not in result.stdout:
         errors.append("usage invocation did not print the NOMAD command list")
+    runtime_result = subprocess.run(
+        [str(runtime.resolve()), "--help"], cwd=root, capture_output=True, text=True, timeout=10, check=False
+    )
+    if runtime_result.returncode != 0 or "Usage: nomad-runtime" not in runtime_result.stdout:
+        errors.append("runtime help invocation failed or omitted usage")
     return errors
 
 

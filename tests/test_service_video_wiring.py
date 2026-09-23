@@ -35,7 +35,7 @@ def test_example_config_excludes_deleted_service_owners():
     assert "NOMAD_AUTOSTART_EDGE_CORE" not in config
     assert "NOMAD_AUTOSTART_HEALTH_MONITOR" not in config
     assert "NOMAD_AUTOSTART_TIME_SYNC" not in config
-    assert "NOMAD_MAVLINK_ENDPOINT=udpin:0.0.0.0:14550" in config
+    assert "NOMAD_MAVLINK_ENDPOINT=udpin:127.0.0.1:14601" in config
 
 
 def test_shell_profile_command_delegates_to_validated_profile_manager():
