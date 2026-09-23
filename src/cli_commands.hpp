@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 // Default MAVLink endpoint when the operator does not pass --endpoint.
 inline constexpr std::string_view kDefaultEndpoint = "udpin:0.0.0.0:14550";
@@ -37,6 +38,7 @@ struct Arguments {
     std::optional<int> mount_mode;
     std::optional<std::array<float, 7>> user_parameters;
     int user_parameter_count{0};
+    std::vector<double> fixed_wing_route_values;
 };
 
 // Defined in cli_arguments.cpp.

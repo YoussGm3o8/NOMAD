@@ -84,14 +84,17 @@ close its integration or release gate.
   The protocol does not carry flight command authority. Persistent C++ IPC and
   explicit command-authority handover remain separate work.
 
-- [~] G-M QuadPlane fixed-wing route/navigation qualification: select and
-  qualify one reviewed fixed-wing waypoint/navigation mechanism for the pinned
-  ArduPlane 4.7.1 `quadplane-tilttri` profile after the qualified forward
-  transition. Verify route completion from fresh authoritative aircraft state,
-  with rejection, interruption and timeout fault cases. Do not include return,
-  transition-back, VTOL landing, link-loss strategy or complete Task 1 flight.
-  Falsification: command acceptance or an intermediate waypoint is reported as
-  route completion, or stale telemetry is accepted.
+- [~] G-M QuadPlane fixed-wing route/navigation qualification: qualify two
+  sequential `MAV_CMD_DO_REPOSITION` `COMMAND_INT` targets in already-confirmed
+  GUIDED mode for the pinned ArduPlane 4.7.1 `quadplane-tilttri` profile, after
+  the qualified AUTO forward transition. Each target needs fresh position
+  newer than the ACK-boundary baseline and at least 10 m of additional progress
+  before it can pass the horizontal and altitude bounds;
+  only the final target completes the route. Complete the deterministic MAVSDK
+  wire check and exact-head hosted route observer. Do not include
+  return/recovery, transition-back, VTOL landing, link-loss strategy or complete
+  Task 1 flight. Falsification: command acceptance, stale position or an
+  intermediate waypoint is reported as route completion.
 
 - [x] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
   datagram parsing, prove nonzero-then-zero ordering independently, and rerun the

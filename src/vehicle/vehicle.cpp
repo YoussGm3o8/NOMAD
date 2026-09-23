@@ -37,14 +37,16 @@ Vehicle::Vehicle(mavlink::MavlinkConnection &connection, safety::WatchdogPolicy 
                  safety::GlobalFencePolicy fence_policy, safety::VelocityLimits velocity_limits,
                  std::chrono::milliseconds position_freshness_timeout,
                  std::chrono::milliseconds takeoff_state_timeout,
-                 std::chrono::milliseconds transition_state_timeout)
+                 std::chrono::milliseconds transition_state_timeout,
+                 std::chrono::milliseconds fixed_wing_route_timeout)
     : connection_(connection),
       watchdog_policy_(watchdog_policy),
       fence_policy_(std::move(fence_policy)),
       velocity_limits_(velocity_limits),
       position_freshness_timeout_(position_freshness_timeout),
       takeoff_state_timeout_(takeoff_state_timeout),
-      transition_state_timeout_(transition_state_timeout) {}
+      transition_state_timeout_(transition_state_timeout),
+      fixed_wing_route_timeout_(fixed_wing_route_timeout) {}
 
 Vehicle::~Vehicle() {
     {

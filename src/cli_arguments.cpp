@@ -15,6 +15,7 @@
 namespace {
 
 using nomad::util::parse_float;
+using nomad::util::parse_double;
 
 std::optional<std::uint32_t> parse_mode(std::string_view value) {
     std::uint32_t mode{};
@@ -52,6 +53,18 @@ bool consume_goto(Arguments &arguments, std::string_view value) {
                                  : !arguments.longitude ? &arguments.longitude
                                                         : &arguments.altitude;
     return assign_first(*slot, value);
+}
+
+bool consume_fixed_wing_route(Arguments &arguments, std::string_view value) {
+    if (arguments.fixed_wing_route_values.size() >= 6) {
+        return false;
+    }
+    const auto parsed = parse_double(value);
+    if (!parsed.has_value()) {
+        return false;
+    }
+    arguments.fixed_wing_route_values.push_back(*parsed);
+    return true;
 }
 
 bool consume_mode(Arguments &arguments, std::string_view value) {
@@ -222,6 +235,9 @@ bool consume_verb_value(Arguments &arguments, std::string_view token, int argc, 
     if (command == "goto") {
         return consume_goto(arguments, token);
     }
+    if (command == "fixed-wing-route") {
+        return consume_fixed_wing_route(arguments, token);
+    }
     if (command == "mode") {
         return consume_mode(arguments, token);
     }
@@ -285,6 +301,9 @@ bool has_required_arguments(const Arguments &arguments) {
     }
     if (command == "goto") {
         return arguments.latitude.has_value() && arguments.longitude.has_value() && arguments.altitude.has_value();
+    }
+    if (command == "fixed-wing-route") {
+        return arguments.fixed_wing_route_values.size() == 6;
     }
     return true;
 }

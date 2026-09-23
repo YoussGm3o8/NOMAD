@@ -29,6 +29,8 @@
 
 namespace nomad::mavlink {
 
+std::optional<std::uint8_t> mavsdk_command_result_code(mavsdk::MavlinkPassthrough::Result result);
+
 using ObservationClock = std::chrono::steady_clock;
 
 constexpr auto kHeartbeatTimeout = std::chrono::seconds(3);
@@ -69,6 +71,8 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     std::optional<CommandAck> send_command(const Command &command, std::chrono::milliseconds timeout) override;
     bool goto_location_relative(double latitude_deg, double longitude_deg, float relative_altitude_m,
                                 std::chrono::milliseconds timeout) override;
+    std::optional<CommandAck> send_fixed_wing_waypoint(
+        const FixedWingWaypointCommand &waypoint, std::chrono::milliseconds timeout) override;
     bool send_velocity(const VelocitySetpoint &setpoint) override;
     bool is_velocity_active() const override;
     bool send_fence_point(const FencePoint &point, std::uint8_t index, std::uint8_t total) override;
@@ -117,6 +121,7 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     mutable std::mutex observation_mutex_;
     std::condition_variable observation_changed_;
     telemetry::VehicleState state_;
+    std::uint64_t session_id_counter_{0};
     // ArduPlane QuadPlanes report MAV_TYPE_FIXED_WING. Q_ENABLE is the
     // authoritative discriminator; no value means identity is unresolved.
     std::optional<bool> quadplane_enabled_;
@@ -138,6 +143,7 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     std::optional<mavsdk::Telemetry::AttitudeEulerHandle> attitude_handle_;
     std::optional<mavsdk::Telemetry::VtolStateHandle> vtol_state_handle_;
     std::optional<mavsdk::MavlinkPassthrough::MessageHandle> heartbeat_handle_;
+    std::optional<mavsdk::System::IsConnectedHandle> connection_handle_;
 };
 
 } // namespace nomad::mavlink

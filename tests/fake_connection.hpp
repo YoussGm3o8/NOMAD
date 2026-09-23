@@ -26,6 +26,9 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
 
     bool connect() override {
         connected = true;
+        if (state->session_id == 0) {
+            state->session_id = 1;
+        }
         return true;
     }
 
@@ -48,6 +51,7 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
 
     std::optional<nomad::telemetry::VehicleState> wait_for_state(std::chrono::milliseconds) override {
         complete_transition_after_ack_on_state_poll();
+        complete_fixed_wing_waypoint_after_ack_on_state_poll();
         if (auto_stamp_fresh_fields) {
             stamp_fresh_fields();
         }
@@ -90,6 +94,54 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
         state->position.longitude_deg = longitude_deg;
         state->position.relative_altitude_m = relative_altitude_m;
         return true;
+    }
+
+    std::optional<nomad::mavlink::CommandAck> send_fixed_wing_waypoint(
+        const nomad::mavlink::FixedWingWaypointCommand &waypoint, std::chrono::milliseconds) override {
+        std::lock_guard lock(state_mutex);
+        fixed_wing_waypoint_requests.push_back(waypoint);
+        ++fixed_wing_waypoint_send_count;
+        if (!fixed_wing_waypoint_transport_enabled || !fixed_wing_waypoint_ack.has_value()) {
+            return std::nullopt;
+        }
+        if (fixed_wing_waypoint_ack->result != 0) {
+            return fixed_wing_waypoint_ack;
+        }
+
+        bool complete_waypoint = fixed_wing_waypoint_auto_complete;
+        if (!fixed_wing_waypoint_completions.empty()) {
+            complete_waypoint = fixed_wing_waypoint_completions.front();
+            fixed_wing_waypoint_completions.erase(fixed_wing_waypoint_completions.begin());
+        }
+        if (fixed_wing_waypoint_session_change_on_send) {
+            ++state->session_id;
+        }
+        if (fixed_wing_waypoint_link_loss_on_send) {
+            state->connected = false;
+            state->heartbeat_fresh = false;
+        }
+        if (fixed_wing_waypoint_mode_loss_on_send) {
+            state->custom_mode = 10;
+        }
+        if (fixed_wing_waypoint_vtol_loss_on_send) {
+            state->vtol_state_valid = false;
+        }
+        if (fixed_wing_waypoint_stale_position_on_send) {
+            auto_stamp_fresh_fields = false;
+            state->position_updated_at = std::chrono::steady_clock::now() - std::chrono::seconds(3);
+        }
+        if (complete_waypoint) {
+            if (fixed_wing_waypoint_completion_before_ack) {
+                state->position.latitude_deg = waypoint.latitude_deg;
+                state->position.longitude_deg = waypoint.longitude_deg;
+                state->position.relative_altitude_m = waypoint.relative_altitude_m;
+                state->position_valid = true;
+                state->position_updated_at = std::chrono::steady_clock::now();
+            } else {
+                fixed_wing_waypoint_after_ack_pending = waypoint;
+            }
+        }
+        return fixed_wing_waypoint_ack;
     }
 
     bool send_velocity(const nomad::mavlink::VelocitySetpoint &setpoint) override {
@@ -163,6 +215,22 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     int velocity_send_count{0};
     nomad::mavlink::Command last_command{};
     std::optional<GotoRequest> last_goto;
+    std::vector<nomad::mavlink::FixedWingWaypointCommand> fixed_wing_waypoint_requests;
+    std::optional<nomad::mavlink::CommandAck> fixed_wing_waypoint_ack{
+        nomad::mavlink::CommandAck{192, 0},
+    };
+    std::vector<bool> fixed_wing_waypoint_completions;
+    int fixed_wing_waypoint_send_count{0};
+    bool fixed_wing_waypoint_transport_enabled{true};
+    bool fixed_wing_waypoint_auto_complete{true};
+    bool fixed_wing_waypoint_completion_before_ack{false};
+    bool fixed_wing_waypoint_session_change_on_send{false};
+    bool fixed_wing_waypoint_link_loss_on_send{false};
+    bool fixed_wing_waypoint_mode_loss_on_send{false};
+    bool fixed_wing_waypoint_vtol_loss_on_send{false};
+    bool fixed_wing_waypoint_stale_position_on_send{false};
+    bool invalidate_vtol_after_guided_mode{false};
+    bool stale_position_after_guided_mode{false};
     std::optional<nomad::mavlink::CommandAck> acknowledgement{
         nomad::mavlink::CommandAck{0, 0},
     };
@@ -209,6 +277,20 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     mutable std::mutex state_mutex;
 
     bool transition_after_ack_pending{false};
+    std::optional<nomad::mavlink::FixedWingWaypointCommand> fixed_wing_waypoint_after_ack_pending;
+
+    void complete_fixed_wing_waypoint_after_ack_on_state_poll() {
+        std::lock_guard lock(state_mutex);
+        if (!fixed_wing_waypoint_after_ack_pending.has_value()) {
+            return;
+        }
+        state->position.latitude_deg = fixed_wing_waypoint_after_ack_pending->latitude_deg;
+        state->position.longitude_deg = fixed_wing_waypoint_after_ack_pending->longitude_deg;
+        state->position.relative_altitude_m = fixed_wing_waypoint_after_ack_pending->relative_altitude_m;
+        state->position_valid = true;
+        state->position_updated_at = std::chrono::steady_clock::now();
+        fixed_wing_waypoint_after_ack_pending.reset();
+    }
 
     void complete_transition_after_ack_on_state_poll() {
         std::lock_guard lock(state_mutex);
@@ -264,6 +346,13 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
             }
         } else if (command.id == 176) {
             state->custom_mode = static_cast<std::uint32_t>(command.parameters[1]);
+            if (state->custom_mode == 15 && invalidate_vtol_after_guided_mode) {
+                state->vtol_state_valid = false;
+            }
+            if (state->custom_mode == 15 && stale_position_after_guided_mode) {
+                auto_stamp_fresh_fields = false;
+                state->position_updated_at = std::chrono::steady_clock::now() - std::chrono::seconds(3);
+            }
         } else if (command.id == 22) {
             state->position_valid = true;
             if (takeoff_altitude_override.has_value()) {

@@ -126,6 +126,7 @@ mappings when implemented; do not invent entries in the existing checked block.
 | H-18 Untrusted messages/replay | SR-SEC-04: authenticate, authorize and reject replay | Wrong/expired credentials, old session and malformed server/DDS/IPC input are refused and audited | G2/G8 |
 | H-19 Unavailable or wrong actuation from a bad command identifier | SR-CMD-01: every actuation command carries an identifier the pinned dialect defines | An id no handler matches makes a capability unavailable in flight (C23: motor test sent 139, an undefined `MAV_CMD`, so ArduPilot answered `MAV_RESULT_UNSUPPORTED`; nothing exercised the verb, so it survived review), and a wrong-but-defined id could command something else entirely. Every hand-typed id now resolves against the pinned dialect definition (`tests/test_command_ids.py`); live acceptance evidence exists for motor test only | G2 |
 | H-20 Fork-owned ArduPilot semantic is wrong or unverified | SR-CMD-02: every ArduPilot semantic comes from the pinned, tested fork | A wrong mode, altitude or frame interpretation inside the fork is treated as NOMAD code: each patch carries a test and an independent wire or SITL observation, and NOMAD still refuses to trust its acknowledgement | G-M |
+| H-21 Route ACK or stale position is mistaken for QuadPlane route completion | SR-MIS-01: fixed-wing route success requires fresh post-ACK aircraft progress and state for every waypoint | Unsupported class and malformed route send nothing; stale position, a pre-ACK arrival without later progress, prior target location, intermediate point, ACK-only, interruption and timeout remain incomplete; final waypoint proximity is independently observed in pinned SITL | G-M |
 
 Traffic advisories and explicit payload authorization remain project scope.
 CONOPS permits manual flight but requires actual traffic cylinder avoidance.
@@ -139,6 +140,11 @@ do not silently choose hold/RTL/descent as an assessment rule.
   boundaries, timeout, cancellation and failure paths.
 - Transport: negative ACK, missing/wrong/duplicate ACK, wrong aircraft, stale
   fields, loss/reorder, actual stop wire delivery and independent FC outcome.
+- QuadPlane fixed-wing route: each target needs a fresh post-ACK position
+  observation at least 10 m closer than its captured ACK-boundary position, then
+  within the reviewed horizontal/altitude tolerances; only the final target
+  completes the route. The hosted observer checks
+  ordered aircraft position samples independently from NOMAD's result.
 - Library/fork: ArduPilot command, mode and telemetry semantics live in the
   pinned MAVSDK fork, so each patch needs a unit test, an independent wire or
   SITL observation against the selected firmware and a provenance pin; a fork
@@ -183,6 +189,10 @@ SR-LNK-02 | src/safety/watchdog.cpp:evaluate_watchdog | tests/safety_test.cpp::t
 SR-LNK-03 | src/mavlink/mavsdk_mavlink_connection.cpp:send_velocity | tests/safety_test.cpp::test_vehicle_stop_velocity_sends_zero
 SR-LNK-03 | src/mavlink/mavsdk_mavlink_connection.cpp:send_velocity | tests/test_mavsdk_connection.py::test_zero_delivery_reaches_the_wire_on_every_stop_path
 SR-LNK-04 | src/mavlink/mavsdk_mavlink_connection.cpp:MavsdkMavlinkConnection | tests/test_mavsdk_connection.py::test_unlatched_link_announces_a_gcs_heartbeat
+SR-MIS-01 | src/vehicle/vehicle_route.cpp:fixed_wing_route | tests/operation_capability_test.cpp::test_quadplane_supports_only_qualified_operations
+SR-MIS-01 | src/vehicle/vehicle_route.cpp:wait_for_fixed_wing_waypoint | tests/quadplane_route_test.cpp::test_fixed_wing_route_sends_two_waypoints_and_verifies_position
+SR-MIS-01 | src/vehicle/vehicle_route.cpp:wait_for_fixed_wing_waypoint | tests/quadplane_route_test.cpp::test_position_reached_before_ack_without_post_ack_progress_does_not_complete_route
+SR-MIS-01 | src/mavlink/mavsdk_route.cpp:send_fixed_wing_waypoint | tests/test_mavsdk_connection.py::test_quadplane_fixed_wing_route_wire_protocol_and_completion
 SR-FEN-01 | src/vehicle/vehicle_fence.cpp:upload_fence | tests/safety_test.cpp::test_vehicle_upload_fence_validates_boundary
 SR-FEN-01 | src/vehicle/vehicle_fence.cpp:verify_fence_uploaded | tests/safety_test.cpp::test_vehicle_verifies_fence_status_and_fails_closed
 SR-FEN-01 | src/vehicle/vehicle_fence.cpp:upload_fence | tests/safety_test.cpp::test_vehicle_upload_fence_rejects_transport_failure

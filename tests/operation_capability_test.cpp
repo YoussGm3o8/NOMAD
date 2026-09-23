@@ -22,6 +22,7 @@ constexpr std::array kAircraftOperations{
     VehicleOperation::Takeoff,
     VehicleOperation::VtolTakeoff,
     VehicleOperation::TransitionToFixedWing,
+    VehicleOperation::FixedWingRoute,
     VehicleOperation::GotoLocation,
     VehicleOperation::Land,
     VehicleOperation::ReturnToLaunch,
@@ -37,7 +38,8 @@ constexpr std::array kAircraftOperations{
 
 void test_copter_supports_qualified_operations() {
     for (const auto operation : kAircraftOperations) {
-        if (operation == VehicleOperation::VtolTakeoff || operation == VehicleOperation::TransitionToFixedWing) {
+        if (operation == VehicleOperation::VtolTakeoff || operation == VehicleOperation::TransitionToFixedWing ||
+            operation == VehicleOperation::FixedWingRoute) {
             CHECK(!nomad::vehicle::supports_operation(AircraftClass::Copter, operation));
         } else {
             CHECK(nomad::vehicle::supports_operation(AircraftClass::Copter, operation));
@@ -57,14 +59,16 @@ void test_plane_and_unknown_fail_closed() {
     }
 }
 
-void test_quadplane_supports_only_qualified_startup_operations() {
+void test_quadplane_supports_only_qualified_operations() {
     CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::Arm));
     CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::SetGuidedMode));
     CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::VtolTakeoff));
     CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::TransitionToFixedWing));
+    CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::FixedWingRoute));
     for (const auto operation : kAircraftOperations) {
         if (operation == VehicleOperation::Arm || operation == VehicleOperation::SetGuidedMode ||
-            operation == VehicleOperation::VtolTakeoff || operation == VehicleOperation::TransitionToFixedWing) {
+            operation == VehicleOperation::VtolTakeoff || operation == VehicleOperation::TransitionToFixedWing ||
+            operation == VehicleOperation::FixedWingRoute) {
             continue;
         }
         CHECK(!nomad::vehicle::supports_operation(AircraftClass::QuadPlane, operation));
@@ -125,7 +129,7 @@ int main() {
     return nomad::test::run_tests([] {
         test_copter_supports_qualified_operations();
         test_plane_and_unknown_fail_closed();
-        test_quadplane_supports_only_qualified_startup_operations();
+        test_quadplane_supports_only_qualified_operations();
         test_unqualified_aircraft_reject_fence_transport();
         test_active_copter_velocity_can_stop_after_identity_loss();
     });

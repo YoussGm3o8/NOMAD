@@ -17,6 +17,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace nomad::vehicle {
 
@@ -26,6 +27,13 @@ struct Location {
     double latitude_deg{};
     double longitude_deg{};
     float altitude_m{};
+};
+
+struct RouteWaypoint {
+    double latitude_deg{};
+    double longitude_deg{};
+    // Relative to home, matching the GUIDED reposition frame.
+    float relative_altitude_m{};
 };
 
 struct CommandResult {
@@ -39,7 +47,8 @@ class Vehicle {
                      safety::GlobalFencePolicy fence_policy = {}, safety::VelocityLimits velocity_limits = {},
                      std::chrono::milliseconds position_freshness_timeout = std::chrono::milliseconds(2000),
                      std::chrono::milliseconds takeoff_state_timeout = std::chrono::seconds(30),
-                     std::chrono::milliseconds transition_state_timeout = std::chrono::seconds(90));
+                     std::chrono::milliseconds transition_state_timeout = std::chrono::seconds(90),
+                     std::chrono::milliseconds fixed_wing_route_timeout = std::chrono::seconds(180));
     ~Vehicle();
 
     Vehicle(const Vehicle &) = delete;
@@ -62,6 +71,7 @@ class Vehicle {
     CommandResult takeoff(float altitude_m);
     CommandResult vtol_takeoff(float altitude_m);
     CommandResult transition_to_fixed_wing();
+    CommandResult fixed_wing_route(const std::vector<RouteWaypoint> &route);
     CommandResult update_vio(bool healthy, float confidence);
     CommandResult set_velocity(const safety::VelocityCommand &command);
     CommandResult set_servo(int channel, int pwm_microseconds);
@@ -97,6 +107,16 @@ class Vehicle {
     std::optional<std::string> vtol_takeoff_state_error(const telemetry::VehicleState &state) const;
     CommandResult wait_for_fixed_wing_transition(std::uint8_t expected_system_id,
                                                  std::chrono::steady_clock::time_point ack_boundary);
+    CommandResult wait_for_fixed_wing_waypoint(const RouteWaypoint &waypoint, std::uint64_t expected_session_id,
+                                               std::chrono::steady_clock::time_point acknowledgement_boundary,
+                                               double acknowledgement_distance_m,
+                                               std::chrono::steady_clock::time_point deadline);
+    CommandResult execute_fixed_wing_route(const std::vector<RouteWaypoint> &route,
+                                           std::uint64_t expected_session_id,
+                                           std::chrono::steady_clock::time_point deadline);
+    std::optional<std::string> fixed_wing_route_state_error(const telemetry::VehicleState &state,
+                                                            std::uint64_t expected_session_id,
+                                                            bool require_auto_mode) const;
     std::optional<std::string> vtol_transition_state_error(const telemetry::VehicleState &state,
                                                             std::uint8_t expected_system_id,
                                                             bool require_precondition) const;
@@ -123,6 +143,9 @@ class Vehicle {
     std::chrono::milliseconds takeoff_state_timeout_{std::chrono::seconds(30)};
     // Bounds the authoritative fixed-wing transition wait.
     std::chrono::milliseconds transition_state_timeout_{std::chrono::seconds(90)};
+    // Bounds the full two-point fixed-wing route, including each authoritative
+    // position wait after a target request is acknowledged.
+    std::chrono::milliseconds fixed_wing_route_timeout_{std::chrono::seconds(180)};
     safety::ReleaseInterlock payload_interlock_;
     mutable std::mutex payload_mutex_;
     mutable std::mutex velocity_mutex_;

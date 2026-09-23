@@ -59,6 +59,13 @@ struct FencePlanItem {
     float param1{};
 };
 
+struct FixedWingWaypointCommand {
+    double latitude_deg{};
+    double longitude_deg{};
+    float relative_altitude_m{};
+    float loiter_radius_m{};
+};
+
 struct ParamValue {
     std::string param_id;
     float value{};
@@ -89,6 +96,8 @@ class MavlinkConnection {
     virtual std::optional<CommandAck> send_command(const Command &command, std::chrono::milliseconds timeout) = 0;
     virtual bool goto_location_relative(double latitude_deg, double longitude_deg, float relative_altitude_m,
                                         std::chrono::milliseconds timeout) = 0;
+    virtual std::optional<CommandAck> send_fixed_wing_waypoint(
+        const FixedWingWaypointCommand &waypoint, std::chrono::milliseconds timeout) = 0;
     virtual bool send_velocity(const VelocitySetpoint &setpoint) = 0;
     virtual bool is_velocity_active() const = 0;
     virtual bool send_fence_point(const FencePoint &point, std::uint8_t index, std::uint8_t total) = 0;

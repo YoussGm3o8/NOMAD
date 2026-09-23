@@ -3,9 +3,9 @@
 """Deterministic ArduPilot-like peer for the MAVSDK parity fixtures.
 
 The peer is a UDP vehicle: it streams heartbeat/position/GPS/battery telemetry,
-answers COMMAND_LONG/COMMAND_INT with a configurable COMMAND_ACK, and applies
-the state change each accepted command asks for (mode, arming, altitude,
-position) so NOMAD's state verification can succeed.
+answers COMMAND_LONG/COMMAND_INT with a configurable COMMAND_ACK, and models
+accepted state changes. Reposition targets advance gradually after their ACK so
+the route verifier sees actual post-ACK progress.
 
 It uses a raw socket rather than pymavlink's udpout because MAVSDK's udpin
 endpoint learns its peer from the packets it receives: the peer must send first
@@ -20,6 +20,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from mavsdk_peer_route import RouteProgress
 from mavsdk_peer_transition import TransitionModel
 from pymavlink.dialects.v20 import ardupilotmega as mavlink
 
@@ -177,12 +178,12 @@ class VehiclePeer:
         self._vehicle_type, self._autopilot_type = vehicle_type, autopilot_type
         self._fence_polygon: list[tuple[float, float]] = []
         self._fence_arriving: list[tuple[int, float, float, float]] = []
-        self._fence_expected, self._relative_altitude_m = 0, 0.0
         self._armed, self._custom_mode = initial_armed, initial_mode
         self._transition = TransitionModel.create(
             vtol_state, vehicle_type, self._params, transition_reaches_fixed_wing, transition_reports_intermediate
         )
-        self._latitude_deg, self._longitude_deg = HOME_LATITUDE_DEG, HOME_LONGITUDE_DEG
+        self._latitude_deg, self._longitude_deg, self._relative_altitude_m = HOME_LATITUDE_DEG, HOME_LONGITUDE_DEG, 0.0
+        self._route_progress = RouteProgress()
         self._commands: list[CommandRecord] = []
         self._stop = threading.Event()
         self._socket = self._create_socket(bind)
@@ -405,9 +406,8 @@ class VehiclePeer:
         elif command == COMMAND_NAV_TAKEOFF:
             self._relative_altitude_m = float(message.param7)
         elif command == COMMAND_DO_REPOSITION and kind == "COMMAND_INT":
-            self._latitude_deg = float(message.x) / 1e7
-            self._longitude_deg = float(message.y) / 1e7
-            self._relative_altitude_m = float(message.z)
+            if self._ack_result == ACCEPTED:
+                self._route_progress.start((float(message.x) / 1e7, float(message.y) / 1e7, float(message.z)))
         elif command == COMMAND_NAV_RETURN_TO_LAUNCH:
             self._custom_mode = MODE_RTL
         elif command == COMMAND_NAV_LAND:
@@ -416,6 +416,7 @@ class VehiclePeer:
     def _send_telemetry(self) -> None:
         if not self._streaming or self._telemetry_ended():
             return
+        self._advance_route_position()
         if self._transition.finish_at is not None and time.monotonic() >= self._transition.finish_at:
             self._transition.vtol_state = mavlink.MAV_VTOL_STATE_FW
             self._transition.finish_at = None
@@ -434,6 +435,12 @@ class VehiclePeer:
             return
         for frame in frames:
             self._send(frame)
+
+    def _advance_route_position(self) -> None:
+        position = self._route_progress.advance(self._latitude_deg, self._longitude_deg)
+        if position is None:
+            return
+        self._latitude_deg, self._longitude_deg, self._relative_altitude_m = position
 
     def _telemetry_ended(self) -> bool:
         return self._telemetry_deadline is not None and time.monotonic() >= self._telemetry_deadline

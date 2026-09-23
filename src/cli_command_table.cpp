@@ -17,6 +17,8 @@ constexpr CliCommand kCommands[] = {
     {"takeoff", true, "<altitude_m>"},
     {"vtol-takeoff", true, "<altitude_m>"},
     {"transition-to-fixed-wing", true, ""},
+    {"fixed-wing-route", true,
+     "<lat1> <lon1> <relative_altitude1_m> <lat2> <lon2> <relative_altitude2_m>"},
     {"goto", true, "<latitude> <longitude> <altitude_m>"},
     {"land", true, ""},
     {"rtl", true, ""},

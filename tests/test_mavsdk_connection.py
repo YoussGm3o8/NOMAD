@@ -146,6 +146,11 @@ def test_quadplane_transition_is_verified_from_vtol_state() -> None:
 
 
 @requires_mavsdk_build
+def test_quadplane_fixed_wing_route_wire_protocol_and_completion() -> None:
+    fixture.case_quadplane_fixed_wing_route_uses_reposition_command_int(CLI)
+
+
+@requires_mavsdk_build
 def test_goto_is_verified_from_position() -> None:
     fixture.case_goto_is_verified(CLI)
 

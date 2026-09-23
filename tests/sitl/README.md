@@ -33,6 +33,16 @@ evidence; merge requests must link a successful current-head live run.
   qualification. NOMAD deliberately rejects arbitrary QuadPlane `set_mode`, so
   this does not qualify a complete autonomous GUIDED -> AUTO -> transition
   sequence.
+- scripts/dev/core_sitl_quadplane_route.py repeats the NOMAD VTOL takeoff and
+  qualified forward transition on a fresh pinned profile, then sends a small
+  two-point fixed-wing route through `MAV_CMD_DO_REPOSITION` in GUIDED. AUTO is
+  set by the independent pymavlink test operator as transition setup. NOMAD
+  waits for a new fresh position within 45 m and 5 m altitude of each target,
+  at least 10 m closer than the captured ACK-boundary position; the independent UDP observer
+  excludes samples before the route's armed GUIDED heartbeat, then records
+  ordered waypoint proximity before reporting a pass. This does not
+  qualify arbitrary modes, general missions, return/recovery, VTOL-back,
+  landing, QuadPlane link-loss response or complete Task 1 execution.
 
 The obsolete sitl-gimbal task was removed with runtime wiring repair. No successful gimbal evidence is claimed.
 
@@ -63,7 +73,7 @@ cause is not identified: treat a repeat as a real signal and capture the arm
 step's full output before retrying.
 
 Flight scenarios remain Copter-oriented except for the separately pinned
-QuadPlane observation, arm/takeoff qualification and focused VTOL-to-fixed-wing
-transition qualification. Cruise, route, return and VTOL landing evidence
-remain separate Task 1 work. Required gate artifacts and historical/current distinctions live in
+QuadPlane observation, arm/takeoff, VTOL-to-fixed-wing transition and
+fixed-wing route qualification slices. Return/recovery, VTOL-back and landing
+evidence remain separate Task 1 work. Required gate artifacts and historical/current distinctions live in
 [migration](../../docs/migration.md); do not duplicate pass counts here.

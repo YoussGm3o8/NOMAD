@@ -100,6 +100,7 @@ and `L` means local/read-only with no aircraft command. Entries are ordered
 | `takeoff` | Y/Y/Y/N | Copter only | Y/N/N/N | Copter SITL verifies climb; no Plane or QuadPlane takeoff mechanism was selected |
 | `vtol_takeoff` | N/N/N/N | None | N/N/Y/N | Pinned QuadPlane GUIDED `MAV_CMD_NAV_TAKEOFF` path captures final post-arm telemetry, treats the command altitude as a climb delta, and verifies the derived target within a fixed 0.5 m margin; it is not generic Copter takeoff |
 | `transition_to_fixed_wing` | N/N/N/N | None | N/N/Y/N | Pinned ArduPlane `AUTO` `MAV_CMD_DO_VTOL_TRANSITION` with `param1=MAV_VTOL_STATE_FW`; a fresh newer `EXTENDED_SYS_STATE.vtol_state=FW` observation is required after the ACK. NOMAD does not establish `AUTO`; an operator/test authority must establish this precondition |
+| `fixed_wing_route` | N/N/N/N | None | N/N/Y/N | Exactly two QuadPlane waypoints, checked against the configured NOMAD fence when present, use `MAV_CMD_DO_REPOSITION` in confirmed GUIDED mode with `CHANGE_MODE` clear; each point requires a fresh post-ACK position at least 10 m closer than the captured ACK-boundary position, within 45 m and 5 m altitude. ACKs and intermediate route setup do not prove completion |
 | `update_vio` | L/L/L/L | Local validation | L/L/L/L | Updates local safety input and transmits nothing |
 | `set_velocity` | Y/N/N/N | Copter only | Y/N/N/N | Copter loop-closure and zero-delivery evidence; fixed-wing zero-stop semantics are unsafe |
 | `set_servo` | Y/Y/Y/Y | Copter baseline only | Y/N/N/N | Output/channel meaning is not qualified for Plane, QuadPlane or Unknown |
@@ -112,7 +113,7 @@ and `L` means local/read-only with no aircraft command. Entries are ordered
 | `stop_velocity` | Y/Y/Y/Y | Copter only | Y/N/N/N | An inactive fixed-wing call is rejected; safety zero remains available to an already admitted Copter session |
 | `velocity_control_active` | L/L/L/L | Local status | L/L/L/L | Read-only status |
 | `last_velocity_stop_reason` | L/L/L/L | Local status | L/L/L/L | Read-only status |
-| `goto_location` | Y/Y/Y/N | Copter only | Y/N/N/N | Copter SITL verifies arrival; Plane/QuadPlane navigation remains unqualified |
+| `goto_location` | Y/Y/Y/N | Copter only | Y/N/N/N | Copter SITL verifies arrival; generic Plane/QuadPlane goto remains unqualified. The two-point QuadPlane `fixed_wing_route` is separate |
 | `land` | Y/N/N/N | Copter only | Y/N/N/N | Existing direct fixed-wing `NAV_LAND` rejection is retained in the central policy |
 | `wait_until_disarmed` | L/L/L/L | State observation | L/L/L/L | Read-only authoritative-state wait |
 | `return_to_launch` | Y/Y/Y/N | Copter only | Y/N/N/N | Plane/QuadPlane RTL/QRTL modes were observed, but return behavior was not qualified |
@@ -120,8 +121,10 @@ and `L` means local/read-only with no aircraft command. Entries are ordered
 | `verify_fence_uploaded` | Y/Y/Y/Y | Copter only | Y/N/N/N | Aircraft configuration semantics remain unqualified outside the Copter baseline |
 
 These entries are admission policy, not proof that every downstream physical
-effect has been independently observed. In particular, motor/output hardware
-qualification and all QuadPlane flight primitives remain separate gates.
+effect has been independently observed. The route row qualifies only a two-point
+fixed-wing navigation primitive for the pinned QuadPlane profile. Return/recovery,
+transition back to VTOL, landing, QuadPlane link-loss response, complete Task 1
+execution and hardware qualification remain separate gates.
 
 The proposed persistent runtime is a thin C++ executable around the existing
 library, with one connection owner, bounded work, and an explicit shutdown order.

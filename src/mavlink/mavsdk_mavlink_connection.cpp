@@ -58,28 +58,6 @@ std::optional<std::chrono::milliseconds> remaining_timeout(ObservationClock::tim
     return remaining;
 }
 
-// MAV_RESULT codes NOMAD reports for a completed command. MAVSDK exposes the
-// classified result rather than the raw code; timeout and link errors are not
-// acknowledgements at all and must surface as "no ack" so NOMAD fails closed.
-std::optional<std::uint8_t> command_result_code(mavsdk::MavlinkPassthrough::Result result) {
-    using Result = mavsdk::MavlinkPassthrough::Result;
-    switch (result) {
-    case Result::Success:
-        return 0; // MAV_RESULT_ACCEPTED
-    case Result::CommandTemporarilyRejected:
-    case Result::CommandBusy:
-        return 1; // MAV_RESULT_TEMPORARILY_REJECTED
-    case Result::CommandDenied:
-        return 2; // MAV_RESULT_DENIED
-    case Result::CommandUnsupported:
-        return 3; // MAV_RESULT_UNSUPPORTED
-    case Result::CommandFailed:
-        return 4; // MAV_RESULT_FAILED
-    default:
-        return std::nullopt;
-    }
-}
-
 } // namespace
 
 MavsdkMavlinkConnection::MavsdkMavlinkConnection(std::string endpoint, std::uint8_t expected_system_id,
@@ -138,15 +116,6 @@ void MavsdkMavlinkConnection::disconnect() {
     close();
 }
 
-bool MavsdkMavlinkConnection::is_connected() const {
-    std::shared_lock lifetime_lock(plugin_lifetime_mutex_);
-    return is_connected_unlocked();
-}
-
-bool MavsdkMavlinkConnection::is_connected_unlocked() const {
-    return system_ != nullptr && system_->is_connected();
-}
-
 bool MavsdkMavlinkConnection::select_system() {
     mavsdk_phase_a::SystemSelection selection{};
     const auto candidate = mavsdk_system::select_expected_autopilot(sdk_, expected_system_id_, selection);
@@ -156,6 +125,14 @@ bool MavsdkMavlinkConnection::select_system() {
     system_ = candidate;
     target_system_ = expected_system_id_;
     target_component_ = kAutopilotComponent;
+    {
+        ObservationUpdate update(observation_mutex_, observation_changed_);
+        ++session_id_counter_;
+        if (session_id_counter_ == 0) {
+            ++session_id_counter_;
+        }
+        state_.session_id = session_id_counter_;
+    }
     subscribe();
     return true;
 }
@@ -206,6 +183,19 @@ void MavsdkMavlinkConnection::subscribe() {
     vtol_state_handle_ = telemetry_->subscribe_vtol_state([this](const auto value) { observe_vtol_state(value); });
     heartbeat_handle_ = passthrough_->subscribe_message(MAVLINK_MSG_ID_HEARTBEAT,
                                                         [this](const auto &message) { observe_heartbeat(message); });
+    connection_handle_ = system_->subscribe_is_connected([this](bool connected) {
+        if (connected) {
+            return;
+        }
+        ObservationUpdate update(observation_mutex_, observation_changed_);
+        ++session_id_counter_;
+        if (session_id_counter_ == 0) {
+            ++session_id_counter_;
+        }
+        state_.session_id = session_id_counter_;
+        state_.connected = false;
+        state_.heartbeat_fresh = false;
+    });
 }
 
 void MavsdkMavlinkConnection::unsubscribe() {
@@ -232,6 +222,9 @@ void MavsdkMavlinkConnection::unsubscribe() {
     if (passthrough_ && heartbeat_handle_) {
         passthrough_->unsubscribe_message(MAVLINK_MSG_ID_HEARTBEAT, *heartbeat_handle_);
     }
+    if (system_ && connection_handle_) {
+        system_->unsubscribe_is_connected(*connection_handle_);
+    }
     position_handle_.reset();
     velocity_handle_.reset();
     battery_handle_.reset();
@@ -239,6 +232,7 @@ void MavsdkMavlinkConnection::unsubscribe() {
     attitude_handle_.reset();
     vtol_state_handle_.reset();
     heartbeat_handle_.reset();
+    connection_handle_.reset();
 }
 
 void MavsdkMavlinkConnection::close() {
@@ -473,7 +467,7 @@ std::optional<CommandAck> MavsdkMavlinkConnection::send_command(const Command &c
         return std::nullopt;
     }
     const auto result = send_long(command, timeout);
-    const auto code = command_result_code(result);
+    const auto code = mavsdk_command_result_code(result);
     if (!code.has_value()) {
         return std::nullopt;
     }
