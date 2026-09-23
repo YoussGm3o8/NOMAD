@@ -447,8 +447,18 @@ interruption. The pinned hosted positive
 flight and its independent position observer run through
 `scripts/dev/core_sitl_quadplane_route.py`. The observer excludes pre-route
 position samples and requires the post-command armed GUIDED heartbeat before
-counting ordered waypoint proximity; the route TODO remains active until that
-exact-head workflow records the full trace.
+counting ordered waypoint proximity.
+
+Hosted evidence: [workflow run 35818612311](https://github.com/YoussGm3o8/NOMAD/actions/runs/35818612311)
+passed on implementation head `7f6206cbad51aade79ae86b20983d4e1fb818901`.
+It observed `AUTO` and fixed-wing before the route, `GUIDED` during route,
+progress `[1, 2]`, both 8 m relative-altitude targets at 42.3932800,-71.1475927
+and 42.3932761,-71.1456430, arrival distances 43.1 m and 44.7 m, and
+NOMAD completion after 14.7 s. The same run passed all 13 steps of the full
+Copter SITL regression. The workflow is repeated on the documentation-inclusive
+PR head before review. This evidence qualifies only the two-point fixed-wing
+route; it does not qualify route planning, return/recovery, fixed-wing link-loss
+response, transition-back, landing or the complete Task 1 flight.
 
 ### Aircraft operation capability boundary - 2026-09-23
 
@@ -1087,7 +1097,7 @@ client selected explicitly by `RouterMode`. The local protocol is limited to
 status, events, and safe link selection; it does not implement persistent C++ IPC,
 remove one-shot CLI clients, arbitrate global command authority, qualify an
 aircraft operation or establish independent physical redundancy. Mission/fence/FTP
-transaction pinning is not implemented. QuadPlane transition is qualified for
-its stated pinned profile; the narrowly scoped route still awaits exact-head
-hosted evidence. Full Task 1 course/lap execution, return/recovery, landing and
-hardware qualification remain open.
+transaction pinning is not implemented. QuadPlane forward transition and the
+narrow two-point fixed-wing route are qualified for their stated pinned profile.
+Full Task 1 course/lap execution, return/recovery, fixed-wing link-loss response,
+transition-back, landing and hardware qualification remain open.

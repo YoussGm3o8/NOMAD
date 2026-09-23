@@ -42,7 +42,10 @@ evidence; merge requests must link a successful current-head live run.
   excludes samples before the route's armed GUIDED heartbeat, then records
   ordered waypoint proximity before reporting a pass. This does not
   qualify arbitrary modes, general missions, return/recovery, VTOL-back,
-  landing, QuadPlane link-loss response or complete Task 1 execution.
+  landing, QuadPlane link-loss response or complete Task 1 execution. The first
+  complete hosted run passed at implementation head `7f6206cbad51aade79ae86b20983d4e1fb818901`
+  in [workflow run 35818612311](https://github.com/YoussGm3o8/NOMAD/actions/runs/35818612311);
+  the PR description records the documentation-inclusive final-head rerun.
 
 The obsolete sitl-gimbal task was removed with runtime wiring repair. No successful gimbal evidence is claimed.
 

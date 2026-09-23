@@ -84,17 +84,28 @@ close its integration or release gate.
   The protocol does not carry flight command authority. Persistent C++ IPC and
   explicit command-authority handover remain separate work.
 
-- [~] G-M QuadPlane fixed-wing route/navigation qualification: qualify two
+- [x] G-M QuadPlane fixed-wing route/navigation qualification: qualify two
   sequential `MAV_CMD_DO_REPOSITION` `COMMAND_INT` targets in already-confirmed
   GUIDED mode for the pinned ArduPlane 4.7.1 `quadplane-tilttri` profile, after
   the qualified AUTO forward transition. Each target needs fresh position
   newer than the ACK-boundary baseline and at least 10 m of additional progress
   before it can pass the horizontal and altitude bounds;
-  only the final target completes the route. Complete the deterministic MAVSDK
-  wire check and exact-head hosted route observer. Do not include
-  return/recovery, transition-back, VTOL landing, link-loss strategy or complete
-  Task 1 flight. Falsification: command acceptance, stale position or an
-  intermediate waypoint is reported as route completion.
+  only the final target completes the route. Deterministic MAVSDK wire checks
+  and the exact-head hosted observer passed in [workflow run 35818612311](https://github.com/YoussGm3o8/NOMAD/actions/runs/35818612311)
+  at implementation head `7f6206cbad51aade79ae86b20983d4e1fb818901`:
+  two points, `AUTO`/fixed-wing at setup, `GUIDED` during route, independently
+  observed progress `[1, 2]`, arrival distances 43.1 m and 44.7 m, and NOMAD
+  completion at 14.7 s. Return/recovery, transition-back, VTOL landing,
+  link-loss strategy and complete Task 1 flight remain out of scope.
+  Falsification: command acceptance, stale position or an intermediate
+  waypoint is reported as route completion.
+
+- [~] G-M QuadPlane return/recovery strategy qualification: use the pinned
+  ArduPlane 4.7.1 `quadplane-tilttri` source and Task 1 recovery needs to select
+  one bounded fixed-wing return/recovery operation, then define authoritative
+  arrival, interruption and timeout evidence. Keep arbitrary mode changes,
+  transition-back and VTOL landing blocked until separately qualified.
+  Falsification: a mode/command ACK or stale position is reported as recovery.
 
 - [x] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
   datagram parsing, prove nonzero-then-zero ordering independently, and rerun the

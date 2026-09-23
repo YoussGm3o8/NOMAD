@@ -8,7 +8,7 @@ authorize hardware use or prove readiness. [Migration](migration.md) owns gates;
 
 | Task/profile | Aircraft-side functions | Ground-side functions | Qualification status |
 |---|---|---|---|
-| Task 1 / groundstation_gpu | Proposed lightweight VTOL; Walksnail FPV camera; Pi Zero for backup LTE and possibly video; Here4 GNSS | GPU CV, video capture/display, C++ core, Mission Planner and server adapter | User direction; video capture, RF bandwidth, QuadPlane support and endurance unqualified |
+| Task 1 / groundstation_gpu | Proposed lightweight VTOL; Walksnail FPV camera; Pi Zero for backup LTE and possibly video; Here4 GNSS | GPU CV, video capture/display, C++ core, Mission Planner and server adapter | User direction; video capture, RF bandwidth, complete QuadPlane mission and endurance unqualified |
 | Task 2 / onboard_companion candidate | Under-15-kg quad; optional Jetson if useful autonomy emerges; tracker/tagging/sampling payload | Mission Planner, operator approvals and tracker CSV export; server applicability Q04 | Jetson placement and payload mechanism TBD |
 | groundstation_minimal | ArduPilot, navigation and selected command/telemetry link | C++ core and clients; lightweight server exchange when implemented | Product requirement; no ROS/perception dependency |
 | Development | Isolated Copter and future QuadPlane SITL | Core, fake/mock services and passive observers | Local build/config checks pass; live startup and profile qualification remain open |
@@ -173,8 +173,9 @@ disarmed/known state between scenarios. Fault injection must never target a
 real aircraft by accidental endpoint reuse. A passive Mission Planner observer
 may use the configured simulator TCP observer link; it must not issue commands.
 
-Use a separate QuadPlane SITL vehicle for Task 1 transitions and return/landing.
-Existing Copter runs do not qualify it. Add mock competition telemetry/traffic and
+Use a separate pinned QuadPlane SITL vehicle for transition, route,
+return/recovery and landing qualification. Existing Copter runs do not qualify
+those operations. Add mock competition telemetry/traffic and
 recorded image/tracker feeds before demanding GPU simulation. Gazebo/Isaac are
 optional when sensor/physics evidence requires them, not core build dependencies.
 
