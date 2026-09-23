@@ -150,10 +150,12 @@ def test_quadplane_fixed_wing_route_wire_protocol_and_completion() -> None:
     fixture.case_quadplane_fixed_wing_route_uses_reposition_command_int(CLI)
 
 
+@requires_mavsdk_build
 def test_quadplane_fixed_wing_recovery_wire_protocol_and_completion() -> None:
     fixture.case_quadplane_fixed_wing_recovery_uses_reposition_command_int(CLI)
 
 
+@requires_mavsdk_build
 def test_quadplane_fixed_wing_recovery_denied_ack() -> None:
     fixture.case_quadplane_fixed_wing_recovery_rejects_denied_ack(CLI)
 

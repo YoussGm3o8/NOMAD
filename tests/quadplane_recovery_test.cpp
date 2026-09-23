@@ -179,7 +179,7 @@ void test_ack_without_real_progress_cannot_complete() {
 }
 
 void test_post_command_interruption_fails_closed() {
-    for (int failure = 0; failure < 8; ++failure) {
+    for (int failure = 0; failure < 9; ++failure) {
         FakeConnection connection;
         configure(connection);
         if (failure == 0) connection.fixed_wing_waypoint_session_change_on_send = true;
@@ -190,6 +190,7 @@ void test_post_command_interruption_fails_closed() {
         if (failure == 5) connection.fixed_wing_waypoint_stale_gps_on_send = true;
         if (failure == 6) connection.fixed_wing_waypoint_stale_vtol_on_send = true;
         if (failure == 7) connection.fixed_wing_waypoint_disarm_on_send = true;
+        if (failure == 8) connection.fixed_wing_waypoint_vtol_mc_on_send = true;
         auto vehicle = short_vehicle(connection);
         CHECK(!vehicle.fixed_wing_recovery(kRecovery).success);
         CHECK(connection.fixed_wing_waypoint_send_count == 1);

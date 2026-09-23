@@ -142,6 +142,9 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
         if (fixed_wing_waypoint_vtol_loss_on_send) {
             state->vtol_state_valid = false;
         }
+        if (fixed_wing_waypoint_vtol_mc_on_send) {
+            state->vtol_state = nomad::telemetry::VtolState::Multicopter;
+        }
         if (fixed_wing_waypoint_disarm_on_send) {
             state->armed = false;
         }
@@ -267,6 +270,7 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     bool fixed_wing_waypoint_link_loss_on_send{false};
     bool fixed_wing_waypoint_mode_loss_on_send{false};
     bool fixed_wing_waypoint_vtol_loss_on_send{false};
+    bool fixed_wing_waypoint_vtol_mc_on_send{false};
     bool fixed_wing_waypoint_stale_position_on_send{false};
     bool fixed_wing_waypoint_stale_gps_on_send{false};
     bool fixed_wing_waypoint_stale_vtol_on_send{false};
