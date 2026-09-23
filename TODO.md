@@ -78,12 +78,20 @@ close its integration or release gate.
   Fixed-wing route, return, VTOL-back, landing, link-loss strategy and hardware
   qualification remain open.
 
-- [~] G-M standalone-router status/config slice: define a versioned local
-  status/config protocol for `nomad-link-router.exe` and a Mission Planner
-  client for that standalone host. This slice must not carry flight command
-  authority; persistent C++ IPC and explicit command-authority handover remain
-  later work. Falsification: an unversioned client silently changes behavior,
-  or the status/config path can issue flight commands.
+- [x] G-M standalone-router status/config slice: PR #22 added a versioned local
+  status/events/safe link-selection protocol and a standalone management
+  client for `nomad-link-router.exe`, with stale/reconnect and loopback tests.
+  The protocol does not carry flight command authority. Persistent C++ IPC and
+  explicit command-authority handover remain separate work.
+
+- [~] G-M QuadPlane fixed-wing route/navigation qualification: select and
+  qualify one reviewed fixed-wing waypoint/navigation mechanism for the pinned
+  ArduPlane 4.7.1 `quadplane-tilttri` profile after the qualified forward
+  transition. Verify route completion from fresh authoritative aircraft state,
+  with rejection, interruption and timeout fault cases. Do not include return,
+  transition-back, VTOL landing, link-loss strategy or complete Task 1 flight.
+  Falsification: command acceptance or an intermediate waypoint is reported as
+  route completion, or stale telemetry is accepted.
 
 - [x] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
   datagram parsing, prove nonzero-then-zero ordering independently, and rerun the
