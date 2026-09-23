@@ -119,9 +119,11 @@ else()
     target_compile_options(nomad_runtime_core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_executable(nomad-runtime tools/runtime/main.cpp)
-target_link_libraries(nomad-runtime PRIVATE nomad_runtime_core nomad_mavsdk_connection)
-target_compile_definitions(nomad-runtime PRIVATE NOMAD_VERSION="${PROJECT_VERSION}")
+if(PROJECT_IS_TOP_LEVEL)
+    add_executable(nomad-runtime tools/runtime/main.cpp)
+    target_link_libraries(nomad-runtime PRIVATE nomad_runtime_core nomad_mavsdk_connection)
+    target_compile_definitions(nomad-runtime PRIVATE NOMAD_VERSION="${PROJECT_VERSION}")
+endif()
 
 if(PROJECT_IS_TOP_LEVEL)
     include(GNUInstallDirs)
@@ -205,11 +207,13 @@ target_link_libraries(nomad_mavsdk_phase_a_smoke PRIVATE nomad_mavsdk_connection
 # The adapter packages embed this file as a subproject; only build the CTest
 # targets when the tests/ source tree is actually present.
 if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
-    add_executable(nomad_runtime_tests tests/runtime_ipc_test.cpp)
-    target_include_directories(nomad_runtime_tests PRIVATE "${NOMAD_MAVSDK_INSTALL_DIR}/include")
-    target_link_libraries(nomad_runtime_tests PRIVATE nomad_runtime_core)
-    target_compile_definitions(nomad_runtime_tests PRIVATE NOMAD_TESTS)
-    add_test(NAME nomad_runtime_tests COMMAND nomad_runtime_tests)
+    if(PROJECT_IS_TOP_LEVEL)
+        add_executable(nomad_runtime_tests tests/runtime_ipc_test.cpp)
+        target_include_directories(nomad_runtime_tests PRIVATE "${NOMAD_MAVSDK_INSTALL_DIR}/include")
+        target_link_libraries(nomad_runtime_tests PRIVATE nomad_runtime_core)
+        target_compile_definitions(nomad_runtime_tests PRIVATE NOMAD_TESTS)
+        add_test(NAME nomad_runtime_tests COMMAND nomad_runtime_tests)
+    endif()
 
     add_executable(nomad_mavsdk_phase_a_tests tests/mavsdk_phase_a_test.cpp)
     target_link_libraries(nomad_mavsdk_phase_a_tests PRIVATE nomad_mavsdk_validation)

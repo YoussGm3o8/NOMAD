@@ -194,6 +194,9 @@ NativeSocket open_listener(std::uint16_t port) {
 #ifdef _WIN32
     const BOOL exclusive = TRUE;
     setsockopt(socket, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char *>(&exclusive), sizeof(exclusive));
+#else
+    const int reuse_address = 1;
+    setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &reuse_address, sizeof(reuse_address));
 #endif
     sockaddr_in address{};
     address.sin_family = AF_INET;

@@ -52,7 +52,12 @@ New-Item -ItemType Directory -Force $outDir | Out-Null
 $exe = Join-Path $outDir 'NomadCoreClientTests.exe'
 
 Write-Host "Compiling core-client tests..." -ForegroundColor Yellow
-$systemWebExtensions = Join-Path ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) 'System.Web.Extensions.dll'
+$frameworkReferenceDirectory = Join-Path "${env:ProgramFiles(x86)}" 'Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8'
+$systemWebExtensions = Join-Path $frameworkReferenceDirectory 'System.Web.Extensions.dll'
+if (-not (Test-Path $systemWebExtensions)) {
+    Write-Host "ERROR: .NET Framework 4.8 reference assembly not found at $systemWebExtensions" -ForegroundColor Red
+    exit 1
+}
 & $csc /nologo /target:exe /langversion:latest "/reference:$systemWebExtensions" "/out:$exe" @sources
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Compile FAILED." -ForegroundColor Red
