@@ -18,7 +18,7 @@ merged baseline, hosted qualification results, and remaining fork/adapter work.
 |---|---|---|
 | C++ foundation | CMakeLists.txt; include/nomad; src; eleven CTest targets | Library and CLI build against the mandatory MAVSDK transport; no Python or mavgen build dependency, no Python runtime dependency |
 | MAVLink | src/mavlink (MAVSDK transport); core_test, mavsdk_connection_test, mavsdk_zero_delivery_test | MAVSDK owns framing/transport; NOMAD owns ACK classification, typed telemetry, heartbeat/relay handling, the zero-setpoint stop and fence/parameter traffic; native serial/TCP absent |
-| Vehicle | src/vehicle/operation.cpp; src/vehicle/vehicle*.cpp; src/telemetry/identity.cpp; core_test.cpp; operation_capability_test.cpp | Aircraft recognition is separate from a fail-closed per-operation capability policy; Copter retains its qualified baseline and the pinned QuadPlane profile now admits only semantic GUIDED arm, VTOL takeoff and the qualified AUTO forward transition, while Plane, Unknown and all other QuadPlane operations are rejected before transport |
+| Vehicle | src/vehicle/operation.cpp; src/vehicle/vehicle*.cpp; src/telemetry/identity.cpp; core_test.cpp; operation_capability_test.cpp; quadplane_route_test.cpp | Aircraft recognition is separate from a fail-closed per-operation capability policy; the pinned QuadPlane profile admits semantic GUIDED arm, VTOL takeoff, forward transition and an exactly two-point fixed-wing route, while Plane, Unknown and adjacent QuadPlane operations remain rejected before transport |
 | Missions | src/mission/executor.cpp; core_test.cpp | Synchronous small step executor; no integrated cancellation, persisted resume, survey or Task 2 workflow |
 | Safety | src/safety; safety_test, fence_config_test, velocity_config_test, vio_source_test | Finite/range gates, VIO-conditioned velocity, watchdog, configured target fence, upload/readback and payload interlock |
 | Stop delivery | tests/mavsdk_zero_delivery_test.cpp; scripts/dev/core_sitl_zero_delivery.py | Live peer-driven wire tests cover every stop path on the MAVSDK transport; whole-link outage cannot guarantee delivery; merged-main Copter SITL evidence is recorded below and must be rerun when the transport, fixture or firmware changes |
@@ -250,9 +250,10 @@ is unavailable or invalid.
 The pinned observation harness described below now provides QuadPlane SITL
 identity, telemetry, baseline-mode evidence, NOMAD arm + VTOL takeoff
 qualification and one live NOMAD VTOL-to-fixed-wing transition qualification.
-This does not close the aircraft gate: Task 1 route, return, landing, hosted
-fault evidence and the complete supported-aircraft ROS/SITL and release matrix
-still require independent evidence.
+This does not close the aircraft gate: the full Task 1 course/lap route,
+return/recovery, landing, hosted fault evidence and the complete
+supported-aircraft ROS/SITL and release matrix still require independent
+evidence.
 
 Create focused, reviewable implementation changes with unit tests, integration
 evidence, requirement mapping and limitations. Under the clarified ownership
@@ -278,10 +279,11 @@ MAVSDK transport, the ROS 2 adapter builds the same transport, and the legacy
 codec plus its generated dialect headers are deleted, so the transport exit items
 are met at the code and local-evidence level. G-M itself stays open: the
 supported-firmware matrix now has pinned QuadPlane observation, arm/VTOL takeoff
-and forward-transition qualification; route, return, landing and release gates
-remain open. The current-head Copter SITL matrix is recorded above, and
-install/rollback evidence remains open. A completed transport cutover is not a
-competition release.
+and forward-transition qualification. This PR adds fixed-wing route admission
+and deterministic checks; its exact-head hosted qualification is pending.
+Return, landing and release gates remain open. The current-head Copter SITL
+matrix is recorded above, and install/rollback evidence remains open. A
+completed transport cutover is not a competition release.
 
 ### QuadPlane 4.7.1 observation and startup qualification profile - 2026-09-21
 
@@ -385,36 +387,106 @@ MAVSDK peer also reports an intermediate state before `FW`, so the success path
 does not depend on the ACK alone. No VTOL-back operation is implemented or
 claimed.
 
-### Aircraft operation capability boundary - 2026-09-21
+### QuadPlane fixed-wing route/navigation qualification - 2026-09-23
+
+Requirement: G-M fixed-wing route slice. The selected mechanism is ArduPlane's
+standard `MAV_CMD_DO_REPOSITION` (192) through MAVSDK's typed `COMMAND_INT`
+transport. Pinned ArduPlane source review selected this over uploading an AUTO
+mission: `ArduPlane/GCS_MAVLink_Plane.cpp::handle_command_int_do_reposition`
+accepts the location in GUIDED without its `CHANGE_MODE` flag, converts the
+relative altitude, sets the guided waypoint and applies a positive loiter
+radius; `ArduPlane/commands.cpp::Plane::set_guided_WP` installs the target, and
+`ArduPlane/mode_guided.cpp::ModeGuided::navigate` flies the target using loiter
+navigation. AUTO mission exhaustion can enter RTL in
+`ArduPlane/commands_logic.cpp::exit_mission_callback`, so mission upload would
+add mission-state and return semantics outside this slice.
+
+NOMAD sends two sequential `COMMAND_INT` packets in
+`MAV_FRAME_GLOBAL_RELATIVE_ALT_INT`: `param1=0` retains default speed,
+`param2=0` keeps `CHANGE_MODE` clear, `param3=30 m` selects clockwise loiter,
+`param4=NaN` leaves heading unset, scaled integer `x/y` carry latitude and
+longitude, and `z` carries relative-home altitude. Each packet is sent only
+after NOMAD's existing semantic GUIDED mode operation succeeds. This does not
+admit generic `goto_location`, unrestricted mode setting or Plane navigation.
+
+The public input contains exactly two typed waypoints. NOMAD rejects empty or
+other-sized routes, non-finite/out-of-range coordinates, relative altitudes
+outside 2–100 m, targets outside the configured global fence, and waypoint
+spacing below 100 m. Before setup it requires current QuadPlane identity, a
+connected heartbeat younger than 3 s, a nonzero session, position and 3D GPS
+younger than 2 s, armed state, authoritative `EXTENDED_SYS_STATE=FW` younger
+than 3 s, and AUTO mode. After the existing semantic GUIDED-mode setup, it
+repeats the complete readiness check for the same session and requires GUIDED
+immediately before each waypoint command. The MAVSDK transport checks the
+expected nonzero session and freshly computed heartbeat again at its dispatch
+boundary. MAVSDK advances the session generation on connection loss; stale
+heartbeat or state also stops the operation.
+
+An accepted `COMMAND_ACK` means only that ArduPlane accepted the request. For
+each waypoint NOMAD immediately captures the latest fresh aircraft position as
+the ACK-boundary progress baseline, then records a monotonic boundary. It
+requires a newer `GLOBAL_POSITION_INT`-derived position sample at least 10 m
+closer than that baseline, at most 2 s old, still within the same
+QuadPlane/armed/GUIDED/fixed-wing session and backed by fresh GPS. That sample
+must be within 45 m horizontally and within 5 m altitude. The pre-command
+position must initially be more than 55 m away. A target reached while the ACK
+is still pending cannot pass on repeated telemetry at the same position; it
+needs additional post-boundary progress. NOMAD sends waypoint 2 only after
+waypoint 1 passes that test and reports route success only after waypoint 2
+passes. A prior location, intermediate ACK or first-point progress cannot
+complete the final point. The overall route deadline is 180 s and each command
+ACK wait is capped at 3 s.
+
+`scripts/dev/mavsdk_connection_fixture.py` exercises the production MAVSDK
+transport against a deterministic peer, advances each target gradually after
+its ACK, and asserts both typed packet frames, mode request, command ID, flags,
+radius, unset heading, coordinates and altitudes. `tests/quadplane_route_test.cpp` falsifies unsupported-class
+transmission, malformed route input, stale telemetry, wrong mode/state,
+post-setup changes, ACK/upload-only completion, pre-ACK arrival without later
+progress, intermediate progress, prior location, timeout and link/session
+interruption. The pinned hosted positive
+flight and its independent position observer run through
+`scripts/dev/core_sitl_quadplane_route.py`. The observer excludes pre-route
+position samples and requires the post-command armed GUIDED heartbeat before
+counting ordered waypoint proximity.
+
+Hosted evidence: [workflow run 35818612311](https://github.com/YoussGm3o8/NOMAD/actions/runs/35818612311)
+passed on implementation head `7f6206cbad51aade79ae86b20983d4e1fb818901`.
+It observed `AUTO` and fixed-wing before the route, `GUIDED` during route,
+progress `[1, 2]`, both 8 m relative-altitude targets at 42.3932800,-71.1475927
+and 42.3932761,-71.1456430, arrival distances 43.1 m and 44.7 m, and
+NOMAD completion after 14.7 s. The same run passed all 13 steps of the full
+Copter SITL regression. The workflow is repeated on the documentation-inclusive
+PR head before review. This evidence qualifies only the two-point fixed-wing
+route; it does not qualify route planning, return/recovery, fixed-wing link-loss
+response, transition-back, landing or the complete Task 1 flight.
+
+### Aircraft operation capability boundary - 2026-09-23
 
 `VehicleOperation` and `supports_operation` now make command admission an
 explicit policy rather than a consequence of recognizing an aircraft class.
 The full before/after audit is in [Aircraft operation capabilities](architecture.md#aircraft-operation-capabilities).
 The policy now admits only the evidence-backed QuadPlane subset: `arm`, semantic
-`set_guided_mode`, dedicated `vtol_takeoff`, and the dedicated
-`transition_to_fixed_wing` operation.
-Generic `takeoff`, arbitrary mode setting, goto, landing, return, body velocity,
-payload/output and fence transport remain rejected before transmission. Plane
-and Unknown remain fail-closed for every aircraft-dependent command. Focused
-tests inspect each policy cell and the fake transport histories/counters,
-including the QuadPlane command sequence, rejected generic takeoff and unknown
-identity paths. Local telemetry waits, VIO input, payload-interlock arming and
-status accessors do not transmit and therefore remain class-neutral.
+`set_guided_mode`, dedicated `vtol_takeoff`, dedicated
+`transition_to_fixed_wing`, and `fixed_wing_route`. The route operation is exactly
+two validated waypoints through the ArduPlane GUIDED reposition path. Generic
+`takeoff`, arbitrary mode setting, generic `goto_location`, landing, return,
+body velocity, payload/output and fence transport remain rejected before
+transmission. Plane and Unknown remain fail-closed for every aircraft-dependent
+command. Focused tests inspect policy cells, fake transport histories/counters,
+route parameters and route failure states. Local telemetry waits, VIO input,
+payload-interlock arming and status accessors do not transmit and remain
+class-neutral.
 
-The QuadPlane profile proves recognition, telemetry and baseline mode values.
-Its independent Python driver requests those modes without granting
-`Vehicle::set_mode` capability. Separate fresh pinned runs qualify the NOMAD
-GUIDED arm + direct NAV_TAKEOFF climb sequence and the dedicated forward
-transition; they do not qualify disarm, arbitrary modes, generic
-takeoff/goto/land/RTL, fixed-wing route execution, return strategy, VTOL
-landing, link-loss behavior or manual takeover. No route or mission
-implementation is introduced here.
-
-The transition slice above is complete for the pinned profile. The next separate
-ground-router slice is the versioned local status/config protocol and Mission
-Planner client; it must not carry flight command authority. Fixed-wing route,
-return, VTOL-back, landing, link-loss strategy and hardware qualification remain
-later independent slices.
+The independent Python driver establishes baseline modes without granting
+`Vehicle::set_mode` capability. Pinned evidence separately covers the NOMAD
+GUIDED arm + direct NAV_TAKEOFF climb, forward transition and fixed-wing route.
+The route harness still uses the independent driver to establish AUTO before the
+transition; that setup does not qualify NOMAD's arbitrary mode operation.
+Disarm, arbitrary modes, generic takeoff/goto/land/RTL, return/recovery, VTOL
+back-transition, landing, fixed-wing QuadPlane link-loss response and complete
+Task 1 remain separate gates. The ground-router slice is independent and does
+not carry flight command authority.
 
 Packaging/install slice (2026-09-20): the Release CMake configuration installs
 only the NOMAD CLI, public headers, configuration template and reviewed license
@@ -1026,6 +1098,7 @@ client selected explicitly by `RouterMode`. The local protocol is limited to
 status, events, and safe link selection; it does not implement persistent C++ IPC,
 remove one-shot CLI clients, arbitrate global command authority, qualify an
 aircraft operation or establish independent physical redundancy. Mission/fence/FTP
-transaction pinning is not implemented. QuadPlane transition qualification is
-complete for its stated pinned profile; aircraft route, return, landing and
-hardware qualification remain open.
+transaction pinning is not implemented. QuadPlane forward transition and the
+narrow two-point fixed-wing route are qualified for their stated pinned profile.
+Full Task 1 course/lap execution, return/recovery, fixed-wing link-loss response,
+transition-back, landing and hardware qualification remain open.

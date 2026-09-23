@@ -16,6 +16,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace {
 
@@ -120,6 +121,14 @@ int run_command(nomad::mavlink::MavlinkConnection &connection, const Arguments &
     }
     if (arguments.command == "transition-to-fixed-wing") {
         return print_result(vehicle.transition_to_fixed_wing());
+    }
+    if (arguments.command == "fixed-wing-route" && arguments.fixed_wing_route_values.size() == 6) {
+        const auto &values = arguments.fixed_wing_route_values;
+        const std::vector<nomad::vehicle::RouteWaypoint> route{
+            {values[0], values[1], static_cast<float>(values[2])},
+            {values[3], values[4], static_cast<float>(values[5])},
+        };
+        return print_result(vehicle.fixed_wing_route(route));
     }
     if (arguments.command == "goto" && arguments.latitude.has_value() && arguments.longitude.has_value() &&
         arguments.altitude.has_value()) {

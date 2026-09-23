@@ -15,6 +15,7 @@ enum class VehicleOperation {
     Takeoff,
     VtolTakeoff,
     TransitionToFixedWing,
+    FixedWingRoute,
     GotoLocation,
     Land,
     ReturnToLaunch,

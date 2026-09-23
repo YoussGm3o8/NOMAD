@@ -116,7 +116,7 @@ fork owns the semantics above:
 | Gap | Evidence at the pin |
 |---|---|
 | No way to set a mode | `Action` exposes no mode-setting call; only NOMAD's `DO_SET_MODE` path exists today |
-| Guided goto is absolute-only | `Action::goto_location(latitude_deg, longitude_deg, float absolute_altitude_m, yaw_deg)` has no relative-altitude variant, so NOMAD builds COMMAND_INT frame 6 itself |
+| Guided goto is absolute-only | Generic Copter goto uses the fork's relative-altitude `Action::goto_location_relative`. The narrowly qualified fixed-wing QuadPlane route uses MAVSDK's typed `MavlinkPassthrough::CommandInt`/`send_command_int` for `MAV_CMD_DO_REPOSITION`; NOMAD creates no raw MAVLink bytes |
 | Missing output verbs | No `DO_MOTOR_TEST`; `Action::set_actuator` is command 187, not `DO_SET_SERVO`; no user-command passthrough; no `COMMAND_ACK` result-code exposure |
 | Mode handling is read-only | `core/ardupilot_custom_mode.hpp` and `core/flight_mode.cpp` translate Copter/Plane/Rover modes for reading; nothing sets one |
 | Documentation is PX4-centric | Public comments link to `docs.px4.io` even where ArduPilot behaves differently |
@@ -139,7 +139,7 @@ checklist: a row moves only after the fork has its own executable regression.
 | Translate MAVSDK telemetry types into `VehicleState` | Thin translation | Keep, with no ArduPilot protocol decisions |
 | Translate MAVSDK result enums into NOMAD acknowledgements | Thin translation | Keep while the NOMAD interface exposes MAVLink result codes |
 | Build `COMMAND_LONG` for general commands through `MavlinkPassthrough` | Thin translation | Keep for commands with no suitable high-level API; qualify transport and ACK mapping in the fork |
-| Adapt relative-altitude goto | Thin translation | Use the fork's `Action::goto_location_relative`, qualified by an independent wire-form regression and pinned-SITL movement test. NOMAD keeps target validation, fence policy and authoritative arrival verification; no `COMMAND_INT` packing remains in its adapter |
+| Adapt relative-altitude navigation | Thin translation | Generic Copter goto uses the fork's `Action::goto_location_relative`. The fixed-wing QuadPlane route builds MAVSDK's typed `CommandInt` only because it must keep `CHANGE_MODE` clear in already-confirmed GUIDED; a deterministic peer checks the exact wire fields and pinned SITL checks ordered position arrival. NOMAD keeps capability, target validation, fence policy and authoritative completion; MAVSDK serializes the packet |
 | Translate one-shot body-velocity setpoints | Thin translation | Use `Offboard::set_velocity_body_once`; MAVSDK owns frame, mask and encoding without storing or resending the command. NOMAD converts yaw radians to degrees and retains authorization, freshness, watchdogs and zero-on-stop policy. Fork wire tests cover stalled producers, zero, destruction, removed links, invalid input and refusal to mix automatic resends; pinned Copter SITL verifies expiry under its unchanged `GUID_TIMEOUT` |
 | Upload/download fence plans through `Geofence` | Thin translation | Keep; protocol transfer already belongs to MAVSDK |
 | Validate fence shape, enabled state, and exact readback | NOMAD policy | Keep; these are operating-area and authoritative-verification rules |

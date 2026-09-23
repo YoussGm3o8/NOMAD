@@ -118,7 +118,9 @@ mode is not a completed landing.
 Existing tasks: core-sitl-status, core-sitl-command-flow, core-sitl-mission,
 core-sitl-velocity-watchdog, core-sitl-geofence, core-sitl-payload,
 core-sitl-link-loss, core-sitl-link-recovery, core-sitl-zero-delivery,
-core-sitl-gcs-heartbeat, core-sitl-quadplane-observe and sitl-fence. Use them
+core-sitl-gcs-heartbeat, core-sitl-quadplane-observe,
+core-sitl-quadplane-vtol-takeoff, core-sitl-quadplane-transition,
+core-sitl-quadplane-route and sitl-fence. Use them
 against a configured isolated endpoint with no hardware path attached; a live
 passing run is still required before G1 closes.
 
@@ -143,9 +145,17 @@ the command, then requires the derived target within a fixed 0.5 m margin. The
 Python mode driver requests the observed modes independently; it does not use
 or qualify the production `Vehicle::set_mode` path for QuadPlane.
 The separate transition harness qualifies only the dedicated
-`Vehicle::transition_to_fixed_wing` operation after this startup sequence; it
-does not qualify disarm, arbitrary modes, generic takeoff/goto, navigation,
-return, landing or link-loss behavior. Copter mode numbers and
+`Vehicle::transition_to_fixed_wing` operation after this startup sequence. The
+route harness then uses the independent test operator to establish AUTO for the
+qualified transition, and asks NOMAD to fly two fixed-wing GUIDED reposition
+targets. The operator's AUTO request remains qualification setup; arbitrary
+QuadPlane `Vehicle::set_mode` is rejected. NOMAD verifies each target from a
+fresh post-ACK position sample at least 10 m closer than the captured
+ACK-boundary position and within 45 m horizontally and 5 m vertically; route
+success requires the second target. The harness independently observes the
+ordered aircraft position trace. These slices do not qualify disarm, generic
+takeoff/goto, route planning, return/recovery, transition back to VTOL, VTOL
+landing, QuadPlane link-loss response or the complete Task 1 flight. Copter mode numbers and
 velocity-stop behavior cannot stand in for those tests. Gazebo/Isaac are
 optional sensor-evidence tools; they are not prerequisites for basic unit or
 server-contract tests. The independent pymavlink mode driver establishes

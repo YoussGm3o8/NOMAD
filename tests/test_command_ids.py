@@ -36,6 +36,7 @@ PINNED_COMMAND_IDS = {
         "kTakeoffCommand": "MAV_CMD_NAV_TAKEOFF",
         "kQuadplaneGuidedTakeoffCommand": "MAV_CMD_NAV_TAKEOFF",
         "kQuadplaneTransitionCommand": "MAV_CMD_DO_VTOL_TRANSITION",
+        "kDoRepositionCommand": "MAV_CMD_DO_REPOSITION",
         "kLandCommand": "MAV_CMD_NAV_LAND",
         "kReturnToLaunchCommand": "MAV_CMD_NAV_RETURN_TO_LAUNCH",
         "kSetServoCommand": "MAV_CMD_DO_SET_SERVO",

@@ -91,6 +91,9 @@ struct VehicleState {
     std::chrono::steady_clock::time_point attitude_updated_at{};
     std::chrono::steady_clock::time_point vtol_state_updated_at{};
     VehicleIdentity identity{};
+    // Changes whenever this connection selects a new autopilot session, even
+    // when the autopilot reuses the same MAVLink system and component IDs.
+    std::uint64_t session_id{};
 };
 
 }  // namespace nomad::telemetry
