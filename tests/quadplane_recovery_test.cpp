@@ -85,7 +85,7 @@ void test_capability_and_readiness_rejections() {
 void test_invalid_point_and_near_target_reject_before_send() {
     const double nan = std::numeric_limits<double>::quiet_NaN();
     const double infinity = std::numeric_limits<double>::infinity();
-    constexpr std::array invalid{
+    const std::array invalid{
         RecoveryPoint{}, RecoveryPoint{91.0, -73.0, 20.0F}, RecoveryPoint{45.0, -181.0, 20.0F},
         RecoveryPoint{nan, -73.0, 20.0F}, RecoveryPoint{45.0, infinity, 20.0F},
         RecoveryPoint{45.0, -73.0, -1.0F}, RecoveryPoint{45.0, -73.0, 101.0F},

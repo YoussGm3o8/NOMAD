@@ -97,13 +97,14 @@ CommandResult Vehicle::fixed_wing_recovery(const RecoveryPoint &point) {
         return {false, "fixed-wing recovery rejected: target became too close before transmission"};
     }
 
-    const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now());
-    if (remaining <= std::chrono::milliseconds::zero()) {
+    const auto command_budget = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now());
+    if (command_budget <= std::chrono::milliseconds::zero()) {
         return {false, "fixed-wing recovery timed out before transmission"};
     }
     const auto ack = connection_.send_fixed_wing_waypoint(
         {point.latitude_deg, point.longitude_deg, point.relative_altitude_m, kLoiterRadiusMeters},
-        ready.session_id, std::min(remaining, std::chrono::duration_cast<std::chrono::milliseconds>(kCommandTimeout)));
+        ready.session_id,
+        std::min(command_budget, std::chrono::duration_cast<std::chrono::milliseconds>(kCommandTimeout)));
     if (!ack.has_value()) {
         return {false, "fixed-wing recovery received no command ACK"};
     }
@@ -126,9 +127,10 @@ CommandResult Vehicle::fixed_wing_recovery(const RecoveryPoint &point) {
         if (sample.position_updated_at <= boundary) {
             continue;
         }
-        const double remaining = distance_to_point(sample, point);
+        const double remaining_distance = distance_to_point(sample, point);
         const float altitude_error = std::abs(sample.position.relative_altitude_m - point.relative_altitude_m);
-        if (ack_distance - remaining >= kRequiredProgressMeters && remaining <= kArrivalRadiusMeters &&
+        if (ack_distance - remaining_distance >= kRequiredProgressMeters &&
+            remaining_distance <= kArrivalRadiusMeters &&
             altitude_error <= kAltitudeToleranceMeters) {
             return {true, "fixed-wing recovery verified: recovery region reached"};
         }
