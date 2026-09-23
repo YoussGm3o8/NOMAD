@@ -111,9 +111,10 @@ fields are ignored. Clients negotiate with `hello` before sending a command.
 | `motor_test` | Calls `Vehicle::motor_test` with instance, PWM microseconds and timeout seconds |
 | `configure_gimbal` | Calls `Vehicle::configure_gimbal` with mount mode |
 
-Vehicle navigation requests are intentionally absent from protocol v1 while
-QuadPlane route qualification is being developed separately. Mission Planner's
-legacy mode retains its existing goto CLI path.
+Vehicle navigation requests are intentionally absent from protocol v1. The
+two-point QuadPlane fixed-wing route is qualified in the core, but it is not
+exposed through runtime IPC v1. Mission Planner's legacy mode retains its
+existing goto CLI path.
 
 `STATUS` reports runtime IPC readiness, MAVSDK connection open, vehicle
 transport connected, vehicle heartbeat/session, identity resolution and
@@ -157,4 +158,5 @@ MAVLink controls, RC/pilot input, ArduPilot behavior, the ROS adapter and
 maintenance/test tools remain independent authorities. Global handover and
 inhibition require a later reviewed slice. The runtime also does not own a
 persistent mission executor or migrate all Mission Planner, ROS or Python
-surfaces. QuadPlane fixed-wing route qualification is handled separately.
+surfaces. The QuadPlane fixed-wing route is qualified in the core and remains
+outside runtime IPC v1.
