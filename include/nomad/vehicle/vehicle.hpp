@@ -36,6 +36,12 @@ struct RouteWaypoint {
     float relative_altitude_m{};
 };
 
+struct RecoveryPoint {
+    double latitude_deg{};
+    double longitude_deg{};
+    float relative_altitude_m{};
+};
+
 struct CommandResult {
     bool success{false};
     std::string message;
@@ -48,7 +54,8 @@ class Vehicle {
                      std::chrono::milliseconds position_freshness_timeout = std::chrono::milliseconds(2000),
                      std::chrono::milliseconds takeoff_state_timeout = std::chrono::seconds(30),
                      std::chrono::milliseconds transition_state_timeout = std::chrono::seconds(90),
-                     std::chrono::milliseconds fixed_wing_route_timeout = std::chrono::seconds(180));
+                     std::chrono::milliseconds fixed_wing_route_timeout = std::chrono::seconds(180),
+                     std::chrono::milliseconds fixed_wing_recovery_timeout = std::chrono::seconds(180));
     ~Vehicle();
 
     Vehicle(const Vehicle &) = delete;
@@ -72,6 +79,7 @@ class Vehicle {
     CommandResult vtol_takeoff(float altitude_m);
     CommandResult transition_to_fixed_wing();
     CommandResult fixed_wing_route(const std::vector<RouteWaypoint> &route);
+    CommandResult fixed_wing_recovery(const RecoveryPoint &point);
     CommandResult update_vio(bool healthy, float confidence);
     CommandResult set_velocity(const safety::VelocityCommand &command);
     CommandResult set_servo(int channel, int pwm_microseconds);
@@ -146,6 +154,7 @@ class Vehicle {
     // Bounds the full two-point fixed-wing route, including each authoritative
     // position wait after a target request is acknowledged.
     std::chrono::milliseconds fixed_wing_route_timeout_{std::chrono::seconds(180)};
+    std::chrono::milliseconds fixed_wing_recovery_timeout_{std::chrono::seconds(180)};
     safety::ReleaseInterlock payload_interlock_;
     mutable std::mutex payload_mutex_;
     mutable std::mutex velocity_mutex_;

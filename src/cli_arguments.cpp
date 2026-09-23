@@ -67,6 +67,18 @@ bool consume_fixed_wing_route(Arguments &arguments, std::string_view value) {
     return true;
 }
 
+bool consume_fixed_wing_recovery(Arguments &arguments, std::string_view value) {
+    if (arguments.fixed_wing_recovery_values.size() >= 3) {
+        return false;
+    }
+    const auto parsed = parse_double(value);
+    if (!parsed.has_value()) {
+        return false;
+    }
+    arguments.fixed_wing_recovery_values.push_back(*parsed);
+    return true;
+}
+
 bool consume_mode(Arguments &arguments, std::string_view value) {
     if (arguments.mode.has_value()) {
         return false;
@@ -240,6 +252,9 @@ bool consume_verb_value(Arguments &arguments, std::string_view token, int argc, 
     if (command == "fixed-wing-route") {
         return consume_fixed_wing_route(arguments, token);
     }
+    if (command == "fixed-wing-recovery") {
+        return consume_fixed_wing_recovery(arguments, token);
+    }
     if (command == "mode") {
         return consume_mode(arguments, token);
     }
@@ -306,6 +321,9 @@ bool has_required_arguments(const Arguments &arguments) {
     }
     if (command == "fixed-wing-route") {
         return arguments.fixed_wing_route_values.size() == 6;
+    }
+    if (command == "fixed-wing-recovery") {
+        return arguments.fixed_wing_recovery_values.size() == 3;
     }
     return true;
 }

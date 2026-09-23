@@ -193,6 +193,9 @@ SR-MIS-01 | src/vehicle/vehicle_route.cpp:fixed_wing_route | tests/operation_cap
 SR-MIS-01 | src/vehicle/vehicle_route.cpp:wait_for_fixed_wing_waypoint | tests/quadplane_route_test.cpp::test_fixed_wing_route_sends_two_waypoints_and_verifies_position
 SR-MIS-01 | src/vehicle/vehicle_route.cpp:wait_for_fixed_wing_waypoint | tests/quadplane_route_test.cpp::test_position_reached_before_ack_without_post_ack_progress_does_not_complete_route
 SR-MIS-01 | src/mavlink/mavsdk_route.cpp:send_fixed_wing_waypoint | tests/test_mavsdk_connection.py::test_quadplane_fixed_wing_route_wire_protocol_and_completion
+SR-MIS-01 | src/vehicle/vehicle_recovery.cpp:fixed_wing_recovery | tests/quadplane_recovery_test.cpp::test_capability_and_readiness_rejections
+SR-MIS-01 | src/vehicle/vehicle_recovery.cpp:fixed_wing_recovery | tests/quadplane_recovery_test.cpp::test_ack_without_real_progress_cannot_complete
+SR-MIS-01 | src/mavlink/mavsdk_route.cpp:send_fixed_wing_waypoint | tests/test_mavsdk_connection.py::test_quadplane_fixed_wing_recovery_wire_protocol_and_completion
 SR-FEN-01 | src/vehicle/vehicle_fence.cpp:upload_fence | tests/safety_test.cpp::test_vehicle_upload_fence_validates_boundary
 SR-FEN-01 | src/vehicle/vehicle_fence.cpp:verify_fence_uploaded | tests/safety_test.cpp::test_vehicle_verifies_fence_status_and_fails_closed
 SR-FEN-01 | src/vehicle/vehicle_fence.cpp:upload_fence | tests/safety_test.cpp::test_vehicle_upload_fence_rejects_transport_failure

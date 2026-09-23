@@ -39,7 +39,7 @@ FENCE_ITEM_FRAME = mavlink.MAV_FRAME_GLOBAL_INT
 # ArduPilot reports that switch as an integer parameter, so keep the fixture's
 # wire type faithful to the real SITL contract.
 DEFAULT_PARAMS = {"FENCE_ENABLE": 1.0}
-INTEGER_PARAMS = {"FENCE_ENABLE", "Q_ENABLE"}
+INTEGER_PARAMS = {"FENCE_ENABLE", "Q_ENABLE", "Q_GUIDED_MODE"}
 
 # Command IDs the parity cases expect on the wire. They come from the dialect so
 # a drift in the core shows up as a mismatch rather than a silently updated
@@ -184,7 +184,7 @@ class VehiclePeer:
         )
         self._latitude_deg, self._longitude_deg, self._relative_altitude_m = HOME_LATITUDE_DEG, HOME_LONGITUDE_DEG, 0.0
         self._route_progress = RouteProgress()
-        self._commands: list[CommandRecord] = []
+        self._commands, self.command_targets = [], []
         self._stop = threading.Event()
         self._socket = self._create_socket(bind)
         self._mavlink = mavlink.MAVLink(None, srcSystem=system_id, srcComponent=1)
@@ -272,6 +272,7 @@ class VehiclePeer:
         command = int(message.command)
         frame = getattr(message, "frame", None)
         self._commands.append((kind, command, frame, read_parameters(kind, message)))
+        self.command_targets.append((command, int(message.target_system), int(message.target_component)))
         self._apply(kind, command, message)
         self._acknowledge(command)
 

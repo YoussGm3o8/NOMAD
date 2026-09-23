@@ -55,6 +55,7 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     std::optional<nomad::telemetry::VehicleState> wait_for_state(std::chrono::milliseconds) override {
         complete_transition_after_ack_on_state_poll();
         complete_fixed_wing_waypoint_after_ack_on_state_poll();
+        apply_fixed_wing_waypoint_sample();
         if (auto_stamp_fresh_fields) {
             stamp_fresh_fields();
         }
@@ -141,9 +142,24 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
         if (fixed_wing_waypoint_vtol_loss_on_send) {
             state->vtol_state_valid = false;
         }
+        if (fixed_wing_waypoint_disarm_on_send) {
+            state->armed = false;
+        }
+        if (fixed_wing_waypoint_stale_gps_on_send) {
+            auto_stamp_fresh_fields = false;
+            state->gps_updated_at = std::chrono::steady_clock::now() - std::chrono::seconds(3);
+        }
+        if (fixed_wing_waypoint_stale_vtol_on_send) {
+            auto_stamp_fresh_fields = false;
+            state->vtol_state_updated_at = std::chrono::steady_clock::now() - std::chrono::seconds(4);
+        }
         if (fixed_wing_waypoint_stale_position_on_send) {
             auto_stamp_fresh_fields = false;
             state->position_updated_at = std::chrono::steady_clock::now() - std::chrono::seconds(3);
+        }
+        if (fixed_wing_waypoint_position_before_ack.has_value()) {
+            state->position = *fixed_wing_waypoint_position_before_ack;
+            state->position_updated_at = std::chrono::steady_clock::now();
         }
         if (complete_waypoint) {
             if (fixed_wing_waypoint_completion_before_ack) {
@@ -211,6 +227,10 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
 
     std::optional<float> read_param(const std::string &param_id, std::chrono::milliseconds) override {
         parameter_read_count += 1;
+        if (change_session_after_param_read) {
+            std::lock_guard lock(state_mutex);
+            ++state->session_id;
+        }
         const auto found = parameters.find(param_id);
         if (found == parameters.end()) {
             return std::nullopt;
@@ -248,6 +268,11 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     bool fixed_wing_waypoint_mode_loss_on_send{false};
     bool fixed_wing_waypoint_vtol_loss_on_send{false};
     bool fixed_wing_waypoint_stale_position_on_send{false};
+    bool fixed_wing_waypoint_stale_gps_on_send{false};
+    bool fixed_wing_waypoint_stale_vtol_on_send{false};
+    bool fixed_wing_waypoint_disarm_on_send{false};
+    std::vector<nomad::telemetry::Position> fixed_wing_waypoint_samples;
+    std::optional<nomad::telemetry::Position> fixed_wing_waypoint_position_before_ack;
     bool invalidate_vtol_after_guided_mode{false};
     bool stale_position_after_guided_mode{false};
     std::optional<nomad::mavlink::CommandAck> acknowledgement{
@@ -278,6 +303,7 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     int fence_plan_upload_count{0};
     int fence_plan_download_count{0};
     int parameter_read_count{0};
+    bool change_session_after_param_read{false};
     std::map<std::string, float> parameters;
     std::vector<std::string> event_log;
 
@@ -307,6 +333,17 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
 
     bool transition_after_ack_pending{false};
     std::optional<nomad::mavlink::FixedWingWaypointCommand> fixed_wing_waypoint_after_ack_pending;
+    std::size_t fixed_wing_waypoint_sample_index{0};
+
+    void apply_fixed_wing_waypoint_sample() {
+        std::lock_guard lock(state_mutex);
+        if (fixed_wing_waypoint_sample_index >= fixed_wing_waypoint_samples.size()) {
+            return;
+        }
+        state->position = fixed_wing_waypoint_samples[fixed_wing_waypoint_sample_index++];
+        state->position_valid = true;
+        state->position_updated_at = std::chrono::steady_clock::now();
+    }
 
     void complete_fixed_wing_waypoint_after_ack_on_state_poll() {
         std::lock_guard lock(state_mutex);

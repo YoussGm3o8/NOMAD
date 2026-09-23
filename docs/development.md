@@ -157,8 +157,12 @@ QuadPlane `Vehicle::set_mode` is rejected. NOMAD verifies each target from a
 fresh post-ACK position sample at least 10 m closer than the captured
 ACK-boundary position and within 45 m horizontally and 5 m vertically; route
 success requires the second target. The harness independently observes the
-ordered aircraft position trace. These slices do not qualify disarm, generic
-takeoff/goto, route planning, return/recovery, transition back to VTOL, VTOL
+ordered aircraft position trace. The recovery harness then repeats that
+sequence and asks NOMAD to reposition to an explicit point near its starting
+route location. Independent post-command position, altitude, mode and VTOL
+telemetry must show the bounded recovery region reached while fixed wing.
+These slices do not qualify disarm, generic
+takeoff/goto, route planning, arbitrary RTL/QRTL, transition back to VTOL, VTOL
 landing, QuadPlane link-loss response or the complete Task 1 flight. Copter mode numbers and
 velocity-stop behavior cannot stand in for those tests. Gazebo/Isaac are
 optional sensor-evidence tools; they are not prerequisites for basic unit or

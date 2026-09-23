@@ -23,6 +23,7 @@ constexpr std::array kAircraftOperations{
     VehicleOperation::VtolTakeoff,
     VehicleOperation::TransitionToFixedWing,
     VehicleOperation::FixedWingRoute,
+    VehicleOperation::FixedWingRecovery,
     VehicleOperation::GotoLocation,
     VehicleOperation::Land,
     VehicleOperation::ReturnToLaunch,
@@ -39,7 +40,7 @@ constexpr std::array kAircraftOperations{
 void test_copter_supports_qualified_operations() {
     for (const auto operation : kAircraftOperations) {
         if (operation == VehicleOperation::VtolTakeoff || operation == VehicleOperation::TransitionToFixedWing ||
-            operation == VehicleOperation::FixedWingRoute) {
+            operation == VehicleOperation::FixedWingRoute || operation == VehicleOperation::FixedWingRecovery) {
             CHECK(!nomad::vehicle::supports_operation(AircraftClass::Copter, operation));
         } else {
             CHECK(nomad::vehicle::supports_operation(AircraftClass::Copter, operation));
@@ -65,10 +66,11 @@ void test_quadplane_supports_only_qualified_operations() {
     CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::VtolTakeoff));
     CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::TransitionToFixedWing));
     CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::FixedWingRoute));
+    CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::FixedWingRecovery));
     for (const auto operation : kAircraftOperations) {
         if (operation == VehicleOperation::Arm || operation == VehicleOperation::SetGuidedMode ||
             operation == VehicleOperation::VtolTakeoff || operation == VehicleOperation::TransitionToFixedWing ||
-            operation == VehicleOperation::FixedWingRoute) {
+            operation == VehicleOperation::FixedWingRoute || operation == VehicleOperation::FixedWingRecovery) {
             continue;
         }
         CHECK(!nomad::vehicle::supports_operation(AircraftClass::QuadPlane, operation));

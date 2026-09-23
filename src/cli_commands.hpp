@@ -41,6 +41,7 @@ struct Arguments {
     std::optional<std::array<float, 7>> user_parameters;
     int user_parameter_count{0};
     std::vector<double> fixed_wing_route_values;
+    std::vector<double> fixed_wing_recovery_values;
 };
 
 // Defined in cli_arguments.cpp.
