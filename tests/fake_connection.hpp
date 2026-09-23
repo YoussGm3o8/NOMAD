@@ -136,6 +136,9 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
             state->connected = false;
             state->heartbeat_fresh = false;
         }
+        if (fixed_wing_waypoint_heartbeat_loss_on_send) {
+            state->heartbeat_fresh = false;
+        }
         if (fixed_wing_waypoint_mode_loss_on_send) {
             state->custom_mode = 10;
         }
@@ -268,6 +271,7 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
     bool fixed_wing_waypoint_session_change_before_send{false};
     bool fixed_wing_waypoint_session_change_on_send{false};
     bool fixed_wing_waypoint_link_loss_on_send{false};
+    bool fixed_wing_waypoint_heartbeat_loss_on_send{false};
     bool fixed_wing_waypoint_mode_loss_on_send{false};
     bool fixed_wing_waypoint_vtol_loss_on_send{false};
     bool fixed_wing_waypoint_vtol_mc_on_send{false};

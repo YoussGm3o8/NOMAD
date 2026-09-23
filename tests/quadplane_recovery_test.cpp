@@ -105,8 +105,12 @@ void test_guided_vtol_configuration_must_be_read_back() {
     for (int failure = 0; failure < 2; ++failure) {
         FakeConnection connection;
         configure(connection);
-        if (failure == 0) connection.parameters.erase("Q_GUIDED_MODE");
-        if (failure == 1) connection.parameters["Q_GUIDED_MODE"] = 1.0F;
+        if (failure == 0) {
+            connection.parameters.erase("Q_GUIDED_MODE");
+        }
+        if (failure == 1) {
+            connection.parameters["Q_GUIDED_MODE"] = 1.0F;
+        }
         check_no_recovery_send(connection);
         CHECK(connection.parameter_read_count == 1);
     }
@@ -148,9 +152,15 @@ void test_command_rejection_and_session_change_at_send() {
     for (int failure = 0; failure < 3; ++failure) {
         FakeConnection connection;
         configure(connection);
-        if (failure == 0) connection.fixed_wing_waypoint_transport_enabled = false;
-        if (failure == 1) connection.fixed_wing_waypoint_ack = nomad::mavlink::CommandAck{192, 2};
-        if (failure == 2) connection.fixed_wing_waypoint_session_change_before_send = true;
+        if (failure == 0) {
+            connection.fixed_wing_waypoint_transport_enabled = false;
+        }
+        if (failure == 1) {
+            connection.fixed_wing_waypoint_ack = nomad::mavlink::CommandAck{192, 2};
+        }
+        if (failure == 2) {
+            connection.fixed_wing_waypoint_session_change_before_send = true;
+        }
         Vehicle vehicle(connection);
         CHECK(!vehicle.fixed_wing_recovery(kRecovery).success);
         CHECK(connection.fixed_wing_waypoint_send_count == (failure == 2 ? 0 : 1));
@@ -162,14 +172,20 @@ void test_ack_without_real_progress_cannot_complete() {
         FakeConnection connection;
         configure(connection);
         connection.fixed_wing_waypoint_auto_complete = false;
-        if (failure == 1) connection.fixed_wing_waypoint_samples = {{44.9990, -73.0, 30.0F, 20.0F}};
+        if (failure == 1) {
+            connection.fixed_wing_waypoint_samples = {{44.9990, -73.0, 30.0F, 20.0F}};
+        }
         if (failure == 2) {
             connection.fixed_wing_waypoint_position_before_ack = Position{45.00215, -73.0, 30.0F, 20.0F};
             connection.fixed_wing_waypoint_samples = {{45.0022, -73.0, 30.0F, 20.0F}};
         }
-        if (failure == 3) connection.fixed_wing_waypoint_completion_before_ack = true;
-        if (failure == 4) connection.fixed_wing_waypoint_samples = {{45.0025, -73.0, 30.0F, 28.0F}};
-        if (failure == 3) connection.fixed_wing_waypoint_auto_complete = true;
+        if (failure == 3) {
+            connection.fixed_wing_waypoint_completion_before_ack = true;
+            connection.fixed_wing_waypoint_auto_complete = true;
+        }
+        if (failure == 4) {
+            connection.fixed_wing_waypoint_samples = {{45.0025, -73.0, 30.0F, 28.0F}};
+        }
         auto vehicle = short_vehicle(connection);
         const auto result = vehicle.fixed_wing_recovery(kRecovery);
         CHECK(!result.success);
@@ -179,18 +195,39 @@ void test_ack_without_real_progress_cannot_complete() {
 }
 
 void test_post_command_interruption_fails_closed() {
-    for (int failure = 0; failure < 9; ++failure) {
+    for (int failure = 0; failure < 10; ++failure) {
         FakeConnection connection;
         configure(connection);
-        if (failure == 0) connection.fixed_wing_waypoint_session_change_on_send = true;
-        if (failure == 1) connection.fixed_wing_waypoint_link_loss_on_send = true;
-        if (failure == 2) connection.fixed_wing_waypoint_mode_loss_on_send = true;
-        if (failure == 3) connection.fixed_wing_waypoint_vtol_loss_on_send = true;
-        if (failure == 4) connection.fixed_wing_waypoint_stale_position_on_send = true;
-        if (failure == 5) connection.fixed_wing_waypoint_stale_gps_on_send = true;
-        if (failure == 6) connection.fixed_wing_waypoint_stale_vtol_on_send = true;
-        if (failure == 7) connection.fixed_wing_waypoint_disarm_on_send = true;
-        if (failure == 8) connection.fixed_wing_waypoint_vtol_mc_on_send = true;
+        if (failure == 0) {
+            connection.fixed_wing_waypoint_session_change_on_send = true;
+        }
+        if (failure == 1) {
+            connection.fixed_wing_waypoint_link_loss_on_send = true;
+        }
+        if (failure == 2) {
+            connection.fixed_wing_waypoint_mode_loss_on_send = true;
+        }
+        if (failure == 3) {
+            connection.fixed_wing_waypoint_vtol_loss_on_send = true;
+        }
+        if (failure == 4) {
+            connection.fixed_wing_waypoint_stale_position_on_send = true;
+        }
+        if (failure == 5) {
+            connection.fixed_wing_waypoint_stale_gps_on_send = true;
+        }
+        if (failure == 6) {
+            connection.fixed_wing_waypoint_stale_vtol_on_send = true;
+        }
+        if (failure == 7) {
+            connection.fixed_wing_waypoint_disarm_on_send = true;
+        }
+        if (failure == 8) {
+            connection.fixed_wing_waypoint_vtol_mc_on_send = true;
+        }
+        if (failure == 9) {
+            connection.fixed_wing_waypoint_heartbeat_loss_on_send = true;
+        }
         auto vehicle = short_vehicle(connection);
         CHECK(!vehicle.fixed_wing_recovery(kRecovery).success);
         CHECK(connection.fixed_wing_waypoint_send_count == 1);

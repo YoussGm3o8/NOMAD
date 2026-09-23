@@ -297,6 +297,11 @@ MAVLink encoder was needed. A two-point fixed-wing route and an explicit
 recovery point now use the typed `COMMAND_INT` path; general navigation, RTL,
 landing and full Task 1 coverage remain open. Everything up to and including
 the production cutover has landed.
+The recovery peer verifies command 192, relative-altitude frame, clear
+`CHANGE_MODE`, 30 m loiter radius, target system/component and denied ACK
+mapping. Pinned hosted [run 35897872732](https://github.com/YoussGm3o8/NOMAD/actions/runs/35897872732)
+also observed the post-route recovery target approached from 242.3 m to a
+42.3 m completion distance at 20 m requested relative-home altitude.
 
 Cover arm/disarm, mode, takeoff, land/RTL, goto, servo, relay, motor-test,
 gimbal-config and user-command. Unsupported verbs now belong in the fork: add the

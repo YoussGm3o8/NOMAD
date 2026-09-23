@@ -100,12 +100,25 @@ close its integration or release gate.
   Falsification: command acceptance, stale position or an intermediate
   waypoint is reported as route completion.
 
-- [~] G-M QuadPlane return/recovery strategy qualification: use the pinned
-  ArduPlane 4.7.1 `quadplane-tilttri` source and Task 1 recovery needs to select
-  one bounded fixed-wing return/recovery operation, then define authoritative
-  arrival, interruption and timeout evidence. Keep arbitrary mode changes,
-  transition-back and VTOL landing blocked until separately qualified.
-  Falsification: a mode/command ACK or stale position is reported as recovery.
+- [x] G-M QuadPlane return/recovery strategy qualification: one explicit
+  `RecoveryPoint` uses fixed-wing GUIDED `MAV_CMD_DO_REPOSITION` after the
+  qualified two-point route, with `Q_GUIDED_MODE=0` readback and no generic mode
+  authority. Completion requires a fresh post-ACK position at least 10 m closer
+  than the ACK-boundary position, within 45 m horizontally and 5 m of the
+  requested relative-home altitude, while armed in GUIDED fixed-wing state.
+  The pinned hosted [workflow run 35897872732](https://github.com/YoussGm3o8/NOMAD/actions/runs/35897872732)
+  passed on implementation head `6157d13ff0a9e9516d862a194768f07d7bc3e44b`:
+  the independent observer saw 242.3 m initial distance, 37.4 m minimum
+  distance, 42.3 m completion distance, 3.6 m altitude error, and 11.2 s
+  completion. Generic RTL/QRTL, transition-back, VTOL landing, link-loss
+  strategy, complete Task 1 flight and hardware remain unqualified.
+  Falsification: an ACK, stale or pre-command position, insufficient progress,
+  or interrupted session is reported as recovery.
+
+- [~] G-M QuadPlane fixed-wing to VTOL transition qualification: select and
+  qualify one pinned-profile transition from the recovered armed GUIDED
+  fixed-wing state, with authoritative post-command VTOL-state evidence and
+  failure-path tests. VTOL landing remains a later separate slice.
 
 - [x] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
   datagram parsing, prove nonzero-then-zero ordering independently, and rerun the

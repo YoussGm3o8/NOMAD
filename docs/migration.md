@@ -251,7 +251,7 @@ The pinned observation harness described below now provides QuadPlane SITL
 identity, telemetry, baseline-mode evidence, NOMAD arm + VTOL takeoff
 qualification and one live NOMAD VTOL-to-fixed-wing transition qualification.
 This does not close the aircraft gate: the full Task 1 course/lap route,
-return/recovery, landing, hosted fault evidence and the complete
+fixed-wing to VTOL transition, landing, hosted fault evidence and the complete
 supported-aircraft ROS/SITL and release matrix still require independent
 evidence.
 
@@ -509,6 +509,16 @@ The 45 m region follows the observed fixed-wing route tolerance, and is a
 qualification tolerance rather than an obstacle-clearance or landing guarantee.
 Completion leaves the aircraft armed in fixed-wing GUIDED loiter for the later
 transition-back slice.
+
+The independent observer in pinned hosted
+[workflow run 35897872732](https://github.com/YoussGm3o8/NOMAD/actions/runs/35897872732)
+passed after the two-point route on implementation head
+`6157d13ff0a9e9516d862a194768f07d7bc3e44b`. It saw the explicit target
+`42.3913000,-71.1476000` at 20.0 m relative-home altitude, 242.3 m initial
+distance, decreasing position samples through 60.0 m, 37.4 m minimum distance,
+42.3 m completion distance, 3.6 m altitude error and NOMAD completion in
+11.2 s. The 45 m bound admits the observed fixed-wing turn and remains smaller
+than the initial 242.3 m separation; it is a qualification tolerance only.
 
 The pinned failsafe paths remain independent: `ArduPlane/events.cpp` can change
 GUIDED mode on RC/GCS failsafe, `ArduPlane/fence.cpp` can redirect or enter RTL
