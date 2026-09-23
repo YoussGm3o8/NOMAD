@@ -24,17 +24,22 @@ pixi run build-plugin
 
 This task can install/overwrite the local plugin; it is a deployment operation.
 Use `lint-plugin` and focused `test-plugin-*` tasks for non-deploying checks.
-The current core client spawns a local CLI. Direct gimbal, mode/parameter and
-fence paths remain; the integrated target needs one active command owner and
-explicit handover (G2). The router management protocol is transport-only and
-does not replace the future authenticated C++ runtime protocol.
+`NomadCoreClient` supports `LegacyOneShot` and `PersistentRuntime`. Persistent
+mode connects to the C++ runtime over versioned loopback JSON Lines IPC, performs
+HELLO negotiation, then issues typed requests without spawning `nomad`. It does
+not automatically retry a request whose response is lost. The compatibility
+mode remains available until a deployment selects persistent mode. The runtime
+protocol is local-only and does not authenticate clients. Direct gimbal,
+mode/parameter and fence paths remain; global authority handover is still open.
 For CONOPS v1.0, the dedicated GCS display must show live aircraft position and
 competition area (AE27-OPS-004). Existing EmergencyLand and boundary parameter
 writes do not establish compliant independent all-mode termination; their
 ownership and acceptance gaps are recorded in migration GAP-05/06. No plugin
 termination behavior is changed or flight-qualified by the requirements review.
 
-Pure helper checks are available through the `test-plugin-*` Pixi tasks. See
+Core-client loopback protocol checks are available through
+`pixi run test-plugin-core-client`; the other pure helper checks are available
+through `test-plugin-*` Pixi tasks. See
 [the canonical architecture](../docs/architecture.md) and
 [development workflow](../docs/development.md) for ownership and verification.
 

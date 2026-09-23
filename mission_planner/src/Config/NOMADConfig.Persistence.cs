@@ -147,6 +147,16 @@ namespace NOMAD.MissionPlanner
         /// </summary>
         private void MigrateDefaults()
         {
+            if (!string.Equals(CoreClientMode, Connectivity.NomadCoreClient.PersistentRuntime,
+                               StringComparison.OrdinalIgnoreCase))
+            {
+                CoreClientMode = Connectivity.NomadCoreClient.LegacyOneShot;
+            }
+            if (CoreRuntimePort < 1 || CoreRuntimePort > 65535)
+            {
+                CoreRuntimePort = Connectivity.NomadCoreClient.DefaultRuntimePort;
+            }
+
             // Older profiles used an API-derived video URL. Keep them usable by
             // falling back to the standalone RTSP bridge's documented local URL.
             if (VideoUrl == "udp://@:5600" || string.IsNullOrWhiteSpace(VideoUrl))
@@ -285,6 +295,8 @@ namespace NOMAD.MissionPlanner
 
             ActiveProfile = defaults.ActiveProfile;
             CoreExePath = defaults.CoreExePath;
+            CoreClientMode = defaults.CoreClientMode;
+            CoreRuntimePort = defaults.CoreRuntimePort;
             CoreMavlinkEndpoint = defaults.CoreMavlinkEndpoint;
             RouterLinks = defaults.RouterLinks;
             RouterConsumers = defaults.RouterConsumers;

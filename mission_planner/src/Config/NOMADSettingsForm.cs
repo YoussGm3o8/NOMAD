@@ -27,6 +27,8 @@ namespace NOMAD.MissionPlanner
 
         // Connection Tab
         private TextBox _txtCoreExePath;
+        private ComboBox _cmbCoreClientMode;
+        private NumericUpDown _numCoreRuntimePort;
         private TextBox _txtCoreEndpoint;
         private TextBox _txtCoreApiKey;
 

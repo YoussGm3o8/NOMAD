@@ -47,7 +47,7 @@ The [example](example.json) has the following ownership on the ground computer:
 | `127.0.0.1:14600` | Router, consumer `mission_planner` | MP UDPCl sends here; downlink returns to MP's ephemeral socket |
 | Ephemeral MP port | Mission Planner | Receives telemetry and sends native GCS MAVLink |
 | `127.0.0.1:14602` | Router, consumer `nomad_core` | Sends downlink to `14601`; accepts outbound only from `14601` |
-| `127.0.0.1:14601` | One C++ CLI/runtime process | `udpin:127.0.0.1:14601`; MAVSDK learns router peer `14602` |
+| `127.0.0.1:14601` | One persistent C++ runtime or one exclusive direct CLI process | `udpin:127.0.0.1:14601`; MAVSDK learns router peer `14602` |
 | `127.0.0.1:14610` | Standalone router management server | JSON Lines status, events, and safe link-selection controls |
 
 Never run the embedded and standalone router with the same configuration
@@ -195,12 +195,15 @@ for them. Their callers must detect failure and restart/verify exchanges.
 The router owns transport selection, not command admission, payload policy,
 aircraft qualification or mission sequencing. MP native controls, pilot/RC and
 ArduPilot remain external authorities. C++ owns NOMAD validation, safety, deadlines
-and verified outcomes. There is no global single-writer authority or persistent
-C++ IPC here; integrated operation still requires handover and inhibition.
+and verified outcomes. The persistent C++ runtime now offers versioned loopback
+IPC for typed clients; the runtime IPC overview is in
+[docs/runtime-ipc.md](../../../docs/runtime-ipc.md). There is no global
+single-writer authority; integrated operation still requires handover and
+inhibition.
 Shared hardware/power/network paths do not provide independent redundancy.
 
-The versioned local status/config control client is now implemented for the
-standalone host. Next is the persistent C++ runtime's typed requests and explicit
-authority handover as a separately reviewed change. QuadPlane transition
-qualification remains the active aircraft item and is untouched by this transport
-extraction.
+The versioned local status/config control client is implemented for the
+standalone host. The persistent C++ runtime now exposes typed loopback IPC as a
+separate command path. Explicit authority handover remains separate work.
+QuadPlane fixed-wing route qualification is handled independently from the
+runtime and router transport changes.

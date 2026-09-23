@@ -207,6 +207,7 @@ bool consume_global_flag(Arguments &arguments, std::string_view flag, int argc, 
     }
     if (flag == "--endpoint") {
         arguments.endpoint = argv[++index];
+        arguments.endpoint_explicit = true;
         return true;
     }
     if (flag == "--system-id") {
@@ -215,6 +216,7 @@ bool consume_global_flag(Arguments &arguments, std::string_view flag, int argc, 
             return false;
         }
         arguments.system_id = static_cast<std::uint8_t>(*parsed);
+        arguments.system_id_explicit = true;
         return true;
     }
     return false;

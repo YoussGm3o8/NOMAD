@@ -6,6 +6,7 @@
 #include "cli_command_table.hpp"
 #include "cli_commands.hpp"
 #include "nomad/mavlink/mavsdk_transport.hpp"
+#include "runtime/cli_client.hpp"
 #include "nomad/safety/fence_config.hpp"
 #include "nomad/safety/velocity_config.hpp"
 #include "nomad/vehicle/vehicle.hpp"
@@ -40,7 +41,8 @@ void print_connect_failure(const nomad::mavlink::MavlinkConnection &connection, 
         std::cerr << "timed out waiting for ArduPilot heartbeat\n";
         return;
     }
-    std::cerr << "could not connect to " << endpoint << '\n';
+    std::cerr << "could not connect to direct MAVSDK endpoint " << endpoint
+              << "; if the NOMAD runtime owns it, use --runtime or stop the runtime before direct mode\n";
 }
 
 int run_command(nomad::mavlink::MavlinkConnection &connection, const Arguments &arguments) {
@@ -189,12 +191,20 @@ int run_command(nomad::mavlink::MavlinkConnection &connection, const Arguments &
 } // namespace
 
 int main(int argc, char **argv) {
+    const bool runtime_mode = argc > 1 && std::string_view(argv[1]) == "--runtime";
+    const bool direct_mode = argc > 1 && std::string_view(argv[1]) == "--direct";
+    if (runtime_mode || direct_mode) {
+        --argc;
+        ++argv;
+    }
     const auto arguments = parse_arguments(argc, argv);
     if (!arguments.has_value()) {
         print_usage();
         return EXIT_FAILURE;
     }
-
+    if (runtime_mode) {
+        return run_runtime_command(*arguments);
+    }
     const auto connection =
         nomad::mavlink::make_mavsdk_connection(arguments->endpoint, arguments->system_id, std::chrono::seconds(6));
     return run_command(*connection, *arguments);

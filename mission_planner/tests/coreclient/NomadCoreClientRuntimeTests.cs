@@ -1,0 +1,214 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 The NOMAD Authors
+
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
+using System.Web.Script.Serialization;
+using NOMAD.MissionPlanner.Connectivity;
+
+internal static partial class NomadCoreClientTests
+{
+    private static void PersistentRuntime_SendsTypedRequestWithoutStartingProcess()
+    {
+        using var runtime = new MockRuntime(2);
+        var client = new NomadCoreClient(
+            @"C:\__nomad_core_does_not_exist__.exe", apiKey: "test-key",
+            mode: NomadCoreClient.PersistentRuntime, runtimePort: runtime.Port);
+
+        Expect(client.Servo(8, 1500), "persistent mode succeeds without the configured CLI executable");
+        Expect(!client.Goto(45.5, 9.25, 5.0), "persistent mode rejects goto outside the protocol-v1 subset");
+        Expect(client.SetRelay(3, true), "persistent mode sends a typed relay request");
+        runtime.Wait();
+        Expect(client.Mode == NomadCoreClient.PersistentRuntime, "persistent mode is selected explicitly");
+        Expect(runtime.CommandCount == 2, "each action was sent once to the runtime");
+        Expect(runtime.LastCommandType == "set_relay", "relay maps to its semantic protocol type");
+        Expect(!runtime.LastCommand.ContainsKey("api_key"), "loopback protocol does not claim API-key authentication");
+        Expect(client.LastOutcome == NomadCoreRequestOutcome.Succeeded, "structured success is reported");
+    }
+
+    private static void PersistentRuntime_ReportsUnknownOutcomeWithoutReplay()
+    {
+        using var runtime = new MockRuntime(1, dropCommandResponse: true);
+        var client = new NomadCoreClient(
+            "nomad-does-not-need-to-exist", apiKey: "test-key",
+            mode: NomadCoreClient.PersistentRuntime, runtimePort: runtime.Port);
+
+        Expect(!client.Servo(8, 1500), "missing command response reports failure to the Boolean caller");
+        runtime.Wait();
+        Expect(client.LastOutcome == NomadCoreRequestOutcome.UnknownOutcome,
+            "disconnect after send is reported as an unknown vehicle outcome");
+        Expect(runtime.CommandCount == 1, "the client did not replay the mutating request");
+    }
+
+    private static void PersistentRuntime_RejectsIncompatibleHelloBeforeCommand()
+    {
+        using var runtime = new MockRuntime(1, helloVersion: 2);
+        var client = new NomadCoreClient(
+            "nomad-does-not-need-to-exist", apiKey: "test-key",
+            mode: NomadCoreClient.PersistentRuntime, runtimePort: runtime.Port);
+
+        Expect(!client.Servo(8, 1500), "incompatible runtime is rejected");
+        runtime.Wait();
+        Expect(client.LastOutcome == NomadCoreRequestOutcome.FailedBeforeSend,
+            "incompatible protocol fails before command send");
+        Expect(client.LastErrorCode == "incompatible_version", "version mismatch is explicit");
+        Expect(runtime.CommandCount == 0, "no command is sent before successful negotiation");
+    }
+
+    private static void PersistentRuntime_RejectsIncompatibleCommandResponseAsUnknown()
+    {
+        using var runtime = new MockRuntime(1, commandResponseVersion: 2);
+        var client = new NomadCoreClient(
+            "nomad-does-not-need-to-exist", apiKey: "test-key",
+            mode: NomadCoreClient.PersistentRuntime, runtimePort: runtime.Port);
+
+        Expect(!client.Servo(8, 1500), "incompatible command response is not reported as success");
+        runtime.Wait();
+        Expect(client.LastOutcome == NomadCoreRequestOutcome.UnknownOutcome,
+            "incompatible command response leaves the vehicle outcome unknown");
+        Expect(runtime.CommandCount == 1, "the client did not replay after an incompatible response");
+    }
+
+    private static void PersistentRuntime_ReconnectsForNextRequest()
+    {
+        var port = ReservePort();
+        var client = new NomadCoreClient(
+            "nomad-does-not-need-to-exist", apiKey: "test-key",
+            mode: NomadCoreClient.PersistentRuntime, runtimePort: port);
+        using (var firstRuntime = new MockRuntime(1, port: port))
+        {
+            Expect(client.Servo(8, 1500), "first runtime request succeeds");
+            firstRuntime.Wait();
+        }
+        using (var restartedRuntime = new MockRuntime(1, port: port))
+        {
+            Expect(client.SetRelay(3, true), "same client reconnects after runtime restart");
+            restartedRuntime.Wait();
+            Expect(restartedRuntime.LastCommandType == "set_relay", "reconnected client sends typed relay request");
+        }
+    }
+
+    private static int ReservePort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
+
+    private sealed class MockRuntime : IDisposable
+    {
+        private readonly TcpListener _listener;
+        private readonly Thread _worker;
+        private readonly int _expectedConnections;
+        private readonly bool _dropCommandResponse;
+        private readonly int _helloVersion;
+        private readonly int _commandResponseVersion;
+        private Exception _failure;
+
+        public int Port { get; }
+        public int CommandCount { get; private set; }
+        public string LastCommandType { get; private set; } = "";
+        public Dictionary<string, object> LastCommand { get; private set; } = new Dictionary<string, object>();
+
+        public MockRuntime(int expectedConnections, bool dropCommandResponse = false, int helloVersion = 1,
+                           int commandResponseVersion = 1, int port = 0)
+        {
+            _expectedConnections = expectedConnections;
+            _dropCommandResponse = dropCommandResponse;
+            _helloVersion = helloVersion;
+            _commandResponseVersion = commandResponseVersion;
+            _listener = new TcpListener(IPAddress.Loopback, port);
+            _listener.Start();
+            Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
+            _worker = new Thread(ServeConnections) { IsBackground = true };
+            _worker.Start();
+        }
+
+        private void ServeConnections()
+        {
+            try
+            {
+                for (var index = 0; index < _expectedConnections; index++)
+                {
+                    using var client = _listener.AcceptTcpClient();
+                    using var stream = client.GetStream();
+                    using var reader = new StreamReader(stream, Encoding.UTF8, false, 4096, true);
+                    using var writer = new StreamWriter(stream, new UTF8Encoding(false), 4096, true)
+                    {
+                        AutoFlush = true
+                    };
+                    var hello = Parse(reader.ReadLine());
+                    writer.WriteLine(Serialize(new Dictionary<string, object>
+                    {
+                        ["protocol"] = "nomad-core", ["version"] = _helloVersion,
+                        ["id"] = hello["id"], ["ok"] = true, ["type"] = "hello_response"
+                    }));
+                    if (_helloVersion != 1)
+                    {
+                        continue;
+                    }
+                    LastCommand = Parse(reader.ReadLine());
+                    LastCommandType = Convert.ToString(LastCommand["type"], CultureInfo.InvariantCulture);
+                    CommandCount++;
+                    if (_dropCommandResponse)
+                    {
+                        continue;
+                    }
+                    writer.WriteLine(Serialize(new Dictionary<string, object>
+                    {
+                        ["protocol"] = "nomad-core", ["version"] = _commandResponseVersion,
+                        ["id"] = LastCommand["id"], ["ok"] = true, ["type"] = "command_response",
+                        ["command_result"] = new Dictionary<string, object>
+                        {
+                            ["success"] = true, ["message"] = "command verified"
+                        }
+                    }));
+                }
+            }
+            catch (Exception error)
+            {
+                _failure = error;
+            }
+        }
+
+        public void Wait()
+        {
+            if (!_worker.Join(TimeSpan.FromSeconds(5)))
+            {
+                throw new TimeoutException("Mock runtime did not receive its expected request.");
+            }
+            if (_failure != null)
+            {
+                throw new InvalidOperationException("Mock runtime failed.", _failure);
+            }
+        }
+
+        public void Dispose()
+        {
+            _listener.Stop();
+            if (_worker.IsAlive)
+            {
+                _worker.Join(TimeSpan.FromSeconds(1));
+            }
+        }
+
+        private static Dictionary<string, object> Parse(string line)
+        {
+            return new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(line);
+        }
+
+        private static string Serialize(Dictionary<string, object> value)
+        {
+            return new JavaScriptSerializer().Serialize(value);
+        }
+    }
+
+}

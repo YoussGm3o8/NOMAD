@@ -22,7 +22,7 @@ merged baseline, hosted qualification results, and remaining fork/adapter work.
 | Missions | src/mission/executor.cpp; core_test.cpp | Synchronous small step executor; no integrated cancellation, persisted resume, survey or Task 2 workflow |
 | Safety | src/safety; safety_test, fence_config_test, velocity_config_test, vio_source_test | Finite/range gates, VIO-conditioned velocity, watchdog, configured target fence, upload/readback and payload interlock |
 | Stop delivery | tests/mavsdk_zero_delivery_test.cpp; scripts/dev/core_sitl_zero_delivery.py | Live peer-driven wire tests cover every stop path on the MAVSDK transport; whole-link outage cannot guarantee delivery; merged-main Copter SITL evidence is recorded below and must be rerun when the transport, fixture or firmware changes |
-| Mission Planner | NomadCoreClient, OutputController, FlightModeController, GimbalController, BoundaryManager, MPFenceUploader | goto/discrete outputs use CLI; direct parameter/mode/gimbal/fence paths and UI-owned decisions remain |
+| Mission Planner | NomadCoreClient, OutputController, FlightModeController, GimbalController, BoundaryManager, MPFenceUploader | LegacyOneShot retains goto/discrete outputs; PersistentRuntime covers only its protocol-v1 typed subset; native parameter/mode/gimbal/fence paths and UI-owned decisions remain |
 | ROS 2 | ros2/nomad_ros/src/node.cpp, translation.cpp; tests/ros | Owns a Vehicle, telemetry topics, VIO health/source gate and Trigger services; blocking callbacks, no selected estimator or navigation fusion |
 | Video | python/tools/simple_video_bridge.py, video_bridge_server.py; test_simple_video_bridge.py | ROS image to GStreamer/RTSP; control HTTP is loopback-only; no validated capture/CV/VIO product pipeline |
 | Profiles | scripts/profile.py; three product profile files; test_deployment_profiles.py | Canonical endpoint and stale-setting checks exist; optional workloads and hardware remain unqualified |
@@ -73,7 +73,7 @@ not authorization to fly. Major gate evidence is expanded below this table.
 
 | Gap / requirements | Required behavior and current source coverage | Owner | Dependencies | Safety risk | Objective test / required evidence | Gate | Blocked decision |
 |---|---|---|---|---|---|---|---|
-| GAP-01 / U-CORE-01, U-ADAPT-01 | One authority; main.cpp creates UDP connection, ROS node owns another Vehicle, plugin starts CLI and writes directly | C++ runtime / client adapters | G-M, versioned client contract | Conflicting actions and stale authorization | Concurrent client/pilot takeover/replay tests; one accepted writer, no automatic resume | G2 | D02/D10 |
+| GAP-01 / U-CORE-01, U-ADAPT-01 | Persistent C++ runtime and versioned local IPC now provide one NOMAD command owner for typed clients; ROS, native Mission Planner MAVLink, pilot/RC and maintenance writers remain independent | C++ runtime / client adapters | G-M, global handover contract | Conflicting actions and stale authorization | Concurrent client/pilot takeover/replay tests; one accepted writer, no automatic resume | G2 | D02/D10 |
 | GAP-02 / AE27-NET-002 through AE27-NET-006 | Required telemetry fields; state.hpp lacks per-field age, position accuracy, link metrics and official mode model; protocol.cpp supplies MSL/home-relative altitude | C++ telemetry / link adapter | Firmware sources, time and datum model | False position/AGL/health | Independent fixtures for terrain change, fresh heartbeat with frozen position, unknown accuracy/battery/link and overlapping modes | G2/G4 | D08/Q04 |
 | GAP-03 / AE27-NET-001, AE27-NET-009 through AE27-NET-014 | Authenticated armed 1 Hz upload and scoring receipt; no competition adapter exists; MAVLink heartbeat is unrelated | Competition adapter | GAP-02, official token/schema contract | Hidden outage or blocked control | Independent receiver clocks, 300 s armed run, 30 s+ outages, cadence boundaries, expired auth, startup armed; official server acceptance | G4 | Q04/D11 |
 | GAP-04 / AE27-NET-007/008, AE27-INT-002 | Receive 1 Hz traffic and avoid cylinders; no traffic model or advisories | Adapter / C++ safety / operator | GAP-02/03, approved cylinder semantics and response budget | Collision / stale feed interpreted clear | Crossing/head-on/overtaking, vertical separation, exact boundary, duplicate IDs, stale/reordered feed; demonstrate actual operator avoidance within budget | G4/G7 | Q04/D05/D08 |
@@ -502,7 +502,35 @@ rollback to a prior qualified build remain open release gates.
 
 ### G2 — One authority and aircraft semantics (core + safety leads; G1/G-M)
 
-Add the small persistent runtime and client boundary; unify mission/payload/
+#### Persistent runtime IPC foundation - 2026-09-23
+
+At baseline `3cd11aee48b9e844e75829a9ef2d65bc1ecfa1f3`, every Mission Planner
+core request launched a fresh CLI process and the CLI constructed a new MAVSDK
+connection/`Vehicle`; ROS independently owned another connection and `Vehicle`.
+The runtime IPC slice adds `nomad-runtime`, which owns one long-lived MAVSDK
+connection and one `Vehicle`, plus JSON Lines protocol v1 on IPv4 loopback. HELLO,
+PING, STATUS and typed requests for existing Vehicle methods are covered by
+deterministic fake-connection tests. Mission Planner can opt into persistent
+mode; explicit `LegacyOneShot` remains available. `nomad --runtime` is a typed
+client path, while bare verbs and `--direct` retain the standalone path.
+
+The runtime serializes mutating operations with a try-lock; a second concurrent
+mutation receives `busy`. It keeps 256 completed request responses in memory,
+keyed by client/request ID, and reports unknown outcome after a post-send
+disconnect. The cache clears on process restart and operations do not resume.
+This establishes one NOMAD command owner only for clients connected to this
+runtime. Protocol v1 does not expose navigation requests while the separate
+QuadPlane route slice is in progress. Native Mission Planner controls, RC/pilot,
+ArduPilot, ROS and direct maintenance clients remain independent authorities.
+The API key remains a nonempty local actuation gate, not authentication. No aircraft capability,
+route, transition, takeoff, safety admission or completion behavior changed;
+QuadPlane fixed-wing route qualification remains a separate aircraft slice.
+
+The runtime/IPC foundation closes only the persistent ownership and local
+transport portion of G2. Explicit global authority/handover, all-client
+migration, complete audit and persisted mission/restart policy remain open.
+
+Continue G2 by unifying mission/payload/
 traffic state, stop/cancel/restart semantics and audit. Correct C04-C09/C13/C15.
 Implement vehicle-class capability checks before interpreting mode numbers.
 Plan Task 1 around ArduPlane/QuadPlane mission execution and Task 2 around Copter;

@@ -39,6 +39,8 @@ if(NOT EXISTS "${NOMAD_MAVSDK_SOURCE_DIR}/cpp/CMakeLists.txt")
 endif()
 add_nomad_mavsdk()
 
+set(NOMAD_MAVSDK_INSTALL_DIR "${CMAKE_BINARY_DIR}/mavsdk/third_party/install")
+
 add_library(nomad_mavsdk_validation src/mavlink/mavsdk_validation.cpp)
 target_include_directories(nomad_mavsdk_validation PUBLIC include)
 target_compile_features(nomad_mavsdk_validation PUBLIC cxx_std_20)
@@ -90,13 +92,36 @@ endif()
 
 add_executable(nomad
     src/main.cpp
+    src/runtime/cli_client.cpp
     src/cli_arguments.cpp
     src/cli_command_table.cpp
     src/cli_commands.cpp
     src/cli_demos.cpp
     src/cli_velocity.cpp
 )
+target_include_directories(nomad PRIVATE "${NOMAD_MAVSDK_INSTALL_DIR}/include")
 target_link_libraries(nomad PRIVATE nomad_core nomad_mavsdk_connection)
+
+add_library(nomad_runtime_core
+    src/runtime/ipc_server.cpp
+    src/runtime/runtime.cpp)
+target_include_directories(nomad_runtime_core PUBLIC include PRIVATE
+    "${NOMAD_MAVSDK_INSTALL_DIR}/include")
+target_compile_features(nomad_runtime_core PUBLIC cxx_std_20)
+add_dependencies(nomad_runtime_core mavsdk)
+target_link_libraries(nomad_runtime_core PUBLIC nomad_core)
+if(WIN32)
+    target_link_libraries(nomad_runtime_core PUBLIC ws2_32)
+endif()
+if(MSVC)
+    target_compile_options(nomad_runtime_core PRIVATE /W4 /permissive- /EHsc)
+else()
+    target_compile_options(nomad_runtime_core PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_executable(nomad-runtime tools/runtime/main.cpp)
+target_link_libraries(nomad-runtime PRIVATE nomad_runtime_core nomad_mavsdk_connection)
+target_compile_definitions(nomad-runtime PRIVATE NOMAD_VERSION="${PROJECT_VERSION}")
 
 if(PROJECT_IS_TOP_LEVEL)
     include(GNUInstallDirs)
@@ -105,7 +130,7 @@ if(PROJECT_IS_TOP_LEVEL)
     # into the CLI, so the staged runtime does not depend on the build tree. Headers,
     # configuration templates and the reviewed dependency notices travel with the
     # executable for clean install and rollback review.
-    install(TARGETS nomad RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT nomad_runtime)
+    install(TARGETS nomad nomad-runtime RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT nomad_runtime)
     install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT nomad_runtime)
     install(FILES LICENSE NOTICE DESTINATION ${CMAKE_INSTALL_DATADIR}/nomad COMPONENT nomad_runtime)
     install(FILES config/README.md config/nomad.env.example
@@ -115,7 +140,7 @@ if(PROJECT_IS_TOP_LEVEL)
 
     set(CPACK_PACKAGE_NAME "nomad-core")
     set(CPACK_PACKAGE_VENDOR "The NOMAD Authors")
-    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "NOMAD C++ vehicle core and CLI")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "NOMAD C++ vehicle core, runtime and CLI")
     set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
     set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}")
     set(CPACK_COMPONENTS_ALL nomad_runtime)
@@ -131,7 +156,6 @@ endif()
 # fmt installs a per-configuration archive (`fmtd` in Debug), so the location
 # has to name both: the Debug CTest tree and the Release transport tree are the
 # two configurations the Pixi tasks build.
-set(NOMAD_MAVSDK_INSTALL_DIR "${CMAKE_BINARY_DIR}/mavsdk/third_party/install")
 set(NOMAD_MAVSDK_FMT_LIBRARY
     "${NOMAD_MAVSDK_INSTALL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}fmt${CMAKE_STATIC_LIBRARY_SUFFIX}")
 set(NOMAD_MAVSDK_FMT_DEBUG_LIBRARY
@@ -181,6 +205,12 @@ target_link_libraries(nomad_mavsdk_phase_a_smoke PRIVATE nomad_mavsdk_connection
 # The adapter packages embed this file as a subproject; only build the CTest
 # targets when the tests/ source tree is actually present.
 if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    add_executable(nomad_runtime_tests tests/runtime_ipc_test.cpp)
+    target_include_directories(nomad_runtime_tests PRIVATE "${NOMAD_MAVSDK_INSTALL_DIR}/include")
+    target_link_libraries(nomad_runtime_tests PRIVATE nomad_runtime_core)
+    target_compile_definitions(nomad_runtime_tests PRIVATE NOMAD_TESTS)
+    add_test(NAME nomad_runtime_tests COMMAND nomad_runtime_tests)
+
     add_executable(nomad_mavsdk_phase_a_tests tests/mavsdk_phase_a_test.cpp)
     target_link_libraries(nomad_mavsdk_phase_a_tests PRIVATE nomad_mavsdk_validation)
     if(MSVC)

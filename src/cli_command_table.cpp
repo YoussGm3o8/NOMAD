@@ -62,7 +62,7 @@ bool is_actuation_command(std::string_view command) {
 
 void print_usage() {
     const auto commands = cli_commands();
-    std::cout << "Usage: nomad <";
+    std::cout << "Usage: nomad [--runtime|--direct] <";
     for (std::size_t index = 0; index < commands.size(); ++index) {
         std::cout << (index == 0 ? "" : "|") << commands[index].name;
     }
@@ -73,4 +73,6 @@ void print_usage() {
         }
     }
     std::cout << "Actuation commands require the NOMAD_API_KEY environment variable.\n";
+    std::cout << "--runtime sends the supported typed requests to NOMAD_RUNTIME_IPC_PORT (default 14611).\n";
+    std::cout << "--direct opens a one-shot MAVSDK connection; bare verbs retain this legacy behavior.\n";
 }

@@ -22,7 +22,7 @@ using System.Globalization;
 using System.IO;
 using NOMAD.MissionPlanner.Connectivity;
 
-internal static class NomadCoreClientTests
+internal static partial class NomadCoreClientTests
 {
     private static int _failures;
 
@@ -40,6 +40,11 @@ internal static class NomadCoreClientTests
         MotorTest_FailsClosedOnInvalidInput();
         GimbalConfigure_FailsClosedOnInvalidInput();
         SendUserCommand_RequiresExactlySevenFiniteValues();
+        PersistentRuntime_SendsTypedRequestWithoutStartingProcess();
+        PersistentRuntime_ReportsUnknownOutcomeWithoutReplay();
+        PersistentRuntime_RejectsIncompatibleHelloBeforeCommand();
+        PersistentRuntime_RejectsIncompatibleCommandResponseAsUnknown();
+        PersistentRuntime_ReconnectsForNextRequest();
         RunCliAuthenticationGate();
 
         Console.WriteLine(_failures == 0

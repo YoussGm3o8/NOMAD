@@ -43,14 +43,17 @@ if (-not (Test-Path $csc)) {
 # ---- Compile ----
 $sources = @(
     (Join-Path $repoRoot 'mission_planner\src\Connectivity\NomadCoreClient.cs'),
-    (Join-Path $repoRoot 'mission_planner\tests\coreclient\NomadCoreClientTests.cs')
+    (Join-Path $repoRoot 'mission_planner\src\Connectivity\NomadRuntimeClient.cs'),
+    (Join-Path $repoRoot 'mission_planner\tests\coreclient\NomadCoreClientTests.cs'),
+    (Join-Path $repoRoot 'mission_planner\tests\coreclient\NomadCoreClientRuntimeTests.cs')
 )
 $outDir = Join-Path $repoRoot 'mission_planner\tests\coreclient\bin'
 New-Item -ItemType Directory -Force $outDir | Out-Null
 $exe = Join-Path $outDir 'NomadCoreClientTests.exe'
 
 Write-Host "Compiling core-client tests..." -ForegroundColor Yellow
-& $csc /nologo /target:exe /langversion:latest "/out:$exe" @sources
+$systemWebExtensions = Join-Path ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) 'System.Web.Extensions.dll'
+& $csc /nologo /target:exe /langversion:latest "/reference:$systemWebExtensions" "/out:$exe" @sources
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Compile FAILED." -ForegroundColor Red
     exit 1

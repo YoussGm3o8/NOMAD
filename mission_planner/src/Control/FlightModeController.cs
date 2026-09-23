@@ -83,7 +83,10 @@ namespace NOMAD.MissionPlanner
             var ok = client.Goto(lat, lng, altRelM);
             if (!ok)
             {
-                Log.Warn("GuidedGoto: core rejected or could not reach the vehicle.");
+                var outcome = client.LastOutcome == NomadCoreRequestOutcome.UnknownOutcome
+                    ? "vehicle outcome is unknown after the runtime connection ended"
+                    : "core rejected or could not reach the vehicle";
+                Log.Warn($"GuidedGoto: {outcome}.");
             }
             return ok;
         }
@@ -94,7 +97,8 @@ namespace NOMAD.MissionPlanner
             {
                 return null;
             }
-            return new NomadCoreClient(_config.CoreExePath, _config.CoreMavlinkEndpoint, _config.CoreApiKey);
+            return new NomadCoreClient(_config.CoreExePath, _config.CoreMavlinkEndpoint, _config.CoreApiKey,
+                                       _config.CoreClientMode, _config.CoreRuntimePort);
         }
 
         private static bool TrySetMode(object comPort, string modeName)

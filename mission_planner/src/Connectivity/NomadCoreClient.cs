@@ -3,11 +3,11 @@
 // ============================================================
 // NOMAD Core Client
 // ============================================================
-// MP-free client for the C++ core CLI boundary. The core owns vehicle
-// behavior, command validation, and safety decisions; this class only spawns
-// the local `nomad` binary with a verb and reports its result. It must stay
-// free of Mission Planner references so the standalone csc test harness can
-// compile it (see scripts/build/test_plugin_core_client.ps1).
+// MP-free client for the C++ core boundary. The core owns vehicle behavior,
+// command validation and safety decisions; this class supports both a
+// persistent typed runtime connection and the compatibility one-shot CLI. It
+// must stay free of Mission Planner references so the standalone csc test
+// harness can compile it (see scripts/build/test_plugin_core_client.ps1).
 //
 // The core CLI refuses actuation verbs without NOMAD_API_KEY and emits an
 // audit line for every attempt, so an empty key here fails closed before any
@@ -20,8 +20,17 @@ using System.Globalization;
 
 namespace NOMAD.MissionPlanner.Connectivity
 {
+    public enum NomadCoreRequestOutcome
+    {
+        NotAttempted,
+        Succeeded,
+        Rejected,
+        FailedBeforeSend,
+        UnknownOutcome
+    }
+
     /// <summary>
-    /// Invokes the C++ core CLI for the vehicle operations the plugin needs.
+    /// Sends typed core requests through the persistent runtime or legacy CLI.
     /// </summary>
     public sealed class NomadCoreClient
     {
@@ -30,16 +39,31 @@ namespace NOMAD.MissionPlanner.Connectivity
         /// peer from the first datagram (same as the SITL runners).
         /// </summary>
         public const string DefaultEndpoint = "udpin:127.0.0.1:14601";
+        public const int DefaultRuntimePort = 14611;
+        public const string LegacyOneShot = "LegacyOneShot";
+        public const string PersistentRuntime = "PersistentRuntime";
 
         public string ExecutablePath { get; }
         public string Endpoint { get; }
         public string ApiKey { get; }
+        public string Mode { get; }
+        public int RuntimePort { get; }
+        public NomadCoreRequestOutcome LastOutcome { get; private set; }
+        public string LastErrorCode { get; private set; } = "";
+        public string LastMessage { get; private set; } = "";
+        private readonly NomadRuntimeClient _runtimeClient;
 
-        public NomadCoreClient(string executablePath, string endpoint = DefaultEndpoint, string apiKey = "")
+        public NomadCoreClient(string executablePath, string endpoint = DefaultEndpoint, string apiKey = "",
+                               string mode = LegacyOneShot, int runtimePort = DefaultRuntimePort)
         {
             ExecutablePath = string.IsNullOrWhiteSpace(executablePath) ? "nomad" : executablePath;
             Endpoint = string.IsNullOrWhiteSpace(endpoint) ? DefaultEndpoint : endpoint;
             ApiKey = apiKey ?? "";
+            Mode = string.Equals(mode, PersistentRuntime, StringComparison.OrdinalIgnoreCase)
+                ? PersistentRuntime
+                : LegacyOneShot;
+            RuntimePort = runtimePort >= 1 && runtimePort <= 65535 ? runtimePort : DefaultRuntimePort;
+            _runtimeClient = new NomadRuntimeClient(RuntimePort, ApiKey, Guid.NewGuid().ToString("N"));
         }
 
         /// <summary>
@@ -217,6 +241,22 @@ namespace NOMAD.MissionPlanner.Connectivity
 
         private int RunCore(string verb, params string[] values)
         {
+            LastOutcome = NomadCoreRequestOutcome.NotAttempted;
+            LastErrorCode = "";
+            LastMessage = "";
+            if (Mode == PersistentRuntime)
+            {
+                var result = _runtimeClient.Run(verb, values);
+                LastOutcome = _runtimeClient.LastOutcome;
+                LastErrorCode = _runtimeClient.LastErrorCode;
+                LastMessage = _runtimeClient.LastMessage;
+                return result;
+            }
+            return RunOneShot(verb, values);
+        }
+
+        private int RunOneShot(string verb, string[] values)
+        {
             var start = new ProcessStartInfo
             {
                 FileName = ExecutablePath,
@@ -235,20 +275,27 @@ namespace NOMAD.MissionPlanner.Connectivity
             {
                 if (!process.Start())
                 {
+                    LastOutcome = NomadCoreRequestOutcome.FailedBeforeSend;
                     return -1;
                 }
             }
             catch (Exception)
             {
+                LastOutcome = NomadCoreRequestOutcome.FailedBeforeSend;
                 return -1;
             }
             process.WaitForExit(60000);
             if (!process.HasExited)
             {
                 process.Kill();
+                LastOutcome = NomadCoreRequestOutcome.UnknownOutcome;
                 return -1;
             }
+            LastOutcome = process.ExitCode == 0
+                ? NomadCoreRequestOutcome.Succeeded
+                : NomadCoreRequestOutcome.Rejected;
             return process.ExitCode;
         }
+
     }
 }
