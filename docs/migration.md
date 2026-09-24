@@ -542,10 +542,12 @@ for the requested multicopter state, clears forward-throttle demand and adjusts
 the pitch limit. The command therefore cannot run directly from recovery's
 armed GUIDED state. The qualification authority installs a single
 `NAV_LOITER_UNLIM` mission item at the explicitly reviewed recovery coordinates
-and sets AUTO before NOMAD acts. It uses the fresh recovered relative altitude
-as the transition altitude only when that altitude is inside 15–25 m above
-home. This avoids making the setup climb or descend to the recovery request's
-altitude. This is test setup; generic QuadPlane `set_mode` remains blocked.
+and sets AUTO before NOMAD acts. The loiter item keeps the explicit
+recovery-point altitude. Fresh recovered altitude must independently be inside
+15–25 m above home, and the core waits for that target's ±2 m gate before
+transmitting. This keeps the live command at the reviewed recovery altitude
+while separating readiness from the recovery result; generic QuadPlane
+`set_mode` remains blocked.
 
 The direct transition path is distinct from ArduPlane's VTOL landing approach.
 [`QuadPlane::get_mav_vtol_state`](https://github.com/ArduPilot/ardupilot/blob/dbe792162d06cab66c3475fd5556bf7a120f119e/ArduPlane/quadplane.cpp#L4286-L4309)
@@ -586,11 +588,11 @@ state: same nonzero session and system, pinned ArduPilot QuadPlane identity,
 fresh heartbeat, position, velocity, 3D GPS and authoritative fixed-wing VTOL
 state, armed AUTO mode, a valid relative-home target from 15 to 25 m, and current
 position within 55 m of the explicit recovery coordinates and within 2 m of the
-freshly captured post-recovery altitude. The target altitude is captured only
-after the recovery result and is rejected if it falls outside 15–25 m; the
-horizontal center remains the explicitly reviewed recovery point. This keeps
-the transition envelope tied to the intended region while avoiding altitude
-correction during AUTO setup.
+caller-supplied recovery-point altitude. Fresh recovered altitude must
+independently be inside 15–25 m. The AUTO loiter mission keeps the explicit
+recovery altitude; the core waits until current altitude returns within 2 m of
+that target. This separates recovery's broad arrival tolerance from the narrower
+transition-ready band.
 The pinned transition parameters are re-read as `Q_ENABLE=2`,
 `Q_FRAME_CLASS=7`, `Q_TILT_ENABLE=1`, `Q_TILT_MASK=3`, `Q_TILT_TYPE=0`,
 `Q_TILT_RATE_UP=40` and `Q_TILT_MAX=45`, then session, identity and fixed-wing
@@ -609,13 +611,19 @@ never become ready in this pinned loiter setup: the independent observer paired
 20 m/s, with a 26.8 m/s maximum. The recovery observer measured a 43.2 m
 completion distance and the transition-ready observer last measured 41.9 m.
 The revised 55 m region adds 11.8 m beyond the observed recovery completion
-distance. The independent observer now reports the maximum distance of its
-stable readiness window so the next exact-head SITL run can verify that the
-loiter track stays inside this boundary. The 28 m/s ceiling allows 1.2 m/s
-above the measured peak. Both are still bounded by the 2 s dwell, 8 m radial
-variation, 3 m/s speed variation, 1 m/s climb and altitude constraints; they
-are specific to the pinned SITL qualification profile and are not hardware
-flight approval.
+distance. The first 55 m exact-head attempt showed why the explicit recovery-
+point altitude must remain the transition target: the harness invoked NOMAD
+with a captured 24.102 m target near the 25 m ceiling, and the core rejected an
+altitude outside its reviewed gate before sending command 3000. That failure
+did not distinguish the absolute 15–25 m band from the target ±2 m rule, so the
+core now reports actual and target altitude separately.
+The qualification keeps the original 20 m recovery target and requires the AUTO
+loiter state to settle within the existing 15–25 m band before transmission.
+The independent observer reports the maximum distance of its stable readiness
+window. The 28 m/s ceiling allows 1.2 m/s above the previously measured peak.
+Both are still bounded by the 2 s dwell, 8 m radial variation, 3 m/s speed
+variation, 1 m/s climb and altitude constraints; they are specific to the pinned
+SITL qualification profile and are not hardware flight approval.
 
 The core then sends exactly one command 3000 request with target state 3. The
 accepted ACK establishes only a verification boundary: the maximum of ACK

@@ -166,11 +166,16 @@ std::optional<std::string> transition_state_error(const telemetry::VehicleState 
         !std::isfinite(state.velocity.groundspeed_mps) || !std::isfinite(state.velocity.climb_rate_mps)) {
         return "velocity telemetry is unavailable or stale";
     }
-    if (state.position.relative_altitude_m < point.relative_altitude_m - kTransitionAltitudeToleranceMeters ||
-        state.position.relative_altitude_m > point.relative_altitude_m + kTransitionAltitudeToleranceMeters ||
-        state.position.relative_altitude_m < kTransitionAltitudeMinimumMeters ||
+    if (state.position.relative_altitude_m < kTransitionAltitudeMinimumMeters ||
         state.position.relative_altitude_m > kTransitionAltitudeMaximumMeters) {
-        return "aircraft is outside the reviewed transition altitude band";
+        return "aircraft altitude " + std::to_string(state.position.relative_altitude_m) +
+               " m is outside the reviewed 15-25 m transition band";
+    }
+    if (state.position.relative_altitude_m < point.relative_altitude_m - kTransitionAltitudeToleranceMeters ||
+        state.position.relative_altitude_m > point.relative_altitude_m + kTransitionAltitudeToleranceMeters) {
+        return "aircraft altitude " + std::to_string(state.position.relative_altitude_m) +
+               " m differs from the transition target " + std::to_string(point.relative_altitude_m) +
+               " m by more than 2 m";
     }
     return {};
 }

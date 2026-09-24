@@ -165,17 +165,18 @@ The transition-back harness repeats the pinned identity/takeoff/forward
 transition/route/recovery sequence. It then gives AUTO one explicit
 `NAV_LOITER_UNLIM` mission item at the explicit recovery coordinates through the
 independent test authority because the pinned transition handler requires AUTO.
-It captures the first fresh recovered relative altitude as the transition target
-altitude, and rejects setup unless it is within the reviewed 15–25 m band. This
-avoids asking AUTO to climb or descend to the original requested recovery
-altitude. The reference profile enters AUTO in VTOL state; the already-qualified
-`transition-to-fixed-wing` operation reestablishes fixed-wing state before the
-transition-ready dwell starts. NOMAD verifies the pinned frame and tilt
-parameters before it separately requires the aircraft within 55 m of that
-horizontal point, within 2 m of that captured altitude while remaining within
-15–25 m relative to home, groundspeed no greater than 28 m/s with at most 3 m/s
-variation, climb rate no greater than 1 m/s, and five fresh position samples
-spanning 2 s with bounded altitude/radial variation. The 55 m radius extends
+It verifies the first fresh recovered relative altitude is inside the reviewed
+15–25 m band, then keeps the explicit recovery-point altitude as the AUTO loiter
+and transition target. NOMAD waits until the aircraft settles within 2 m of that
+target before sending the transition. The reference profile enters AUTO in
+VTOL state. The already-qualified `transition-to-fixed-wing` operation restores
+fixed-wing state before the transition-ready dwell starts. NOMAD verifies the
+pinned frame and tilt parameters before it requires the aircraft within 55 m of
+the horizontal point and within 2 m of the explicit recovery-point altitude.
+It must remain within 15–25 m relative to home, at no more than 28 m/s
+groundspeed with at most 3 m/s variation and at most 1 m/s climb rate. Five
+fresh position samples must span 2 s, with bounded altitude and radial variation.
+The 55 m radius extends
 11.8 m beyond the measured recovery completion distance, and the independent
 observer reports the farthest position in its stable readiness window. The
 speed cap is below the measured 26.8 m/s maximum plus a 1.2 m/s margin.

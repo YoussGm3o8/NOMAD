@@ -172,6 +172,25 @@ def test_quadplane_transition_back_harness_uses_reviewed_auto_loiter_setup() -> 
     assert transition_back.VTOL_DWELL_SECONDS == 2.0
 
 
+def test_transition_setup_keeps_the_explicit_recovery_altitude(monkeypatch: pytest.MonkeyPatch) -> None:
+    status = {
+        "position": "45.0,-73.0",
+        "relative_altitude_m": "24.1",
+        "mode": str(transition_back.MODE_GUIDED),
+        "armed": "true",
+    }
+    monkeypatch.setattr(transition_back, "read_status", lambda _binary, _port: status)
+    monkeypatch.setattr(transition_back, "require_fresh_vtol_state", lambda _status, _state: None)
+
+    point, recovery_distance, recovery_altitude_error = transition_back.get_transition_point_from_recovery(
+        ROOT / "build" / "core" / "nomad.exe", "14570", (45.0, -73.0, 20.0)
+    )
+
+    assert point == (45.0, -73.0, 20.0)
+    assert recovery_distance == 0.0
+    assert recovery_altitude_error == pytest.approx(4.1)
+
+
 def test_quadplane_transition_back_observer_accepts_only_fresh_stable_envelope() -> None:
     observer = route.RouteObserver(14581)
     point = (45.5, -73.5, 20.0)

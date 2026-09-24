@@ -201,6 +201,26 @@ void test_transition_to_vtol_requires_quadplane_and_reviewed_ready_state() {
     check_rejects_before_transition(changed_session);
 }
 
+void test_transition_to_vtol_reports_altitude_gate_and_sends_nothing() {
+    FakeConnection outside_band;
+    configure_transition_ready_state(outside_band);
+    outside_band.state->position.relative_altitude_m = 12.0F;
+    auto outside_band_vehicle = short_vehicle(outside_band);
+    const auto outside_band_result = outside_band_vehicle.transition_to_vtol(kTransitionPoint);
+    CHECK(!outside_band_result.success);
+    CHECK(outside_band_result.message.find("outside the reviewed 15-25 m transition band") != std::string::npos);
+    CHECK(outside_band.command_history.empty());
+
+    FakeConnection away_from_target;
+    configure_transition_ready_state(away_from_target);
+    away_from_target.state->position.relative_altitude_m = 22.5F;
+    auto away_from_target_vehicle = short_vehicle(away_from_target);
+    const auto away_from_target_result = away_from_target_vehicle.transition_to_vtol(kTransitionPoint);
+    CHECK(!away_from_target_result.success);
+    CHECK(away_from_target_result.message.find("differs from the transition target") != std::string::npos);
+    CHECK(away_from_target.command_history.empty());
+}
+
 void test_transition_to_vtol_sends_multicopter_target_and_verifies_stability() {
     VtolTransitionFakeConnection connection;
     configure_transition_ready_state(connection);
@@ -290,6 +310,7 @@ void test_transition_to_vtol_accepts_only_safe_state_progression() {
 int main() {
     return nomad::test::run_tests([] {
         test_transition_to_vtol_requires_quadplane_and_reviewed_ready_state();
+        test_transition_to_vtol_reports_altitude_gate_and_sends_nothing();
         test_transition_to_vtol_sends_multicopter_target_and_verifies_stability();
         test_transition_to_vtol_ack_and_state_are_independent();
         test_transition_to_vtol_accepts_only_safe_state_progression();

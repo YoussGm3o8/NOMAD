@@ -323,13 +323,13 @@ def get_transition_point_from_recovery(
     if status.get("mode") != str(MODE_GUIDED) or status.get("armed") != "true":
         raise ScenarioError(f"recovery must end in armed GUIDED fixed-wing state: {status}")
     recovery_distance = distance_m(parse_position(status), recovery_point[:2])
-    altitude_error = abs(parse_relative_altitude(status) - recovery_point[2])
-    transition_altitude = parse_relative_altitude(status)
-    if not READY_MIN_ALTITUDE_METERS <= transition_altitude <= READY_MAX_ALTITUDE_METERS:
+    recovered_altitude = parse_relative_altitude(status)
+    altitude_error = abs(recovered_altitude - recovery_point[2])
+    if not READY_MIN_ALTITUDE_METERS <= recovered_altitude <= READY_MAX_ALTITUDE_METERS:
         raise ScenarioError(
-            f"recovered altitude is outside the reviewed 15-25 m transition band: {transition_altitude:.1f} m"
+            f"recovered altitude is outside the reviewed 15-25 m transition band: {recovered_altitude:.1f} m"
         )
-    return (recovery_point[0], recovery_point[1], transition_altitude), recovery_distance, altitude_error
+    return recovery_point, recovery_distance, altitude_error
 
 
 def execute_transition_to_vtol(

@@ -233,9 +233,10 @@ profile. ArduPlane 4.7.1 accepts `MAV_CMD_DO_VTOL_TRANSITION` only in AUTO, so
 the recovered GUIDED aircraft is not ready by itself. An independent operator
 or qualification authority must replace the completed route with one
 `NAV_LOITER_UNLIM` item at the explicitly reviewed recovery coordinates and
-establish AUTO. The transition altitude is captured from fresh recovery
-telemetry and must be within 15–25 m above home; this avoids an altitude change
-during setup. The pinned profile's `Q_ENABLE=2` AUTO entry starts in VTOL AUTO,
+establish AUTO. Fresh recovered altitude must be within 15–25 m above home.
+The test authority keeps the explicit recovery-point altitude as the AUTO loiter
+target, and NOMAD waits for the aircraft to settle within 2 m before sending the
+transition. The pinned profile's `Q_ENABLE=2` AUTO entry starts in VTOL AUTO,
 so the already-qualified NOMAD `transition-to-fixed-wing` operation restores
 fixed-wing flight before readiness is measured. NOMAD still rejects arbitrary
 QuadPlane `set_mode`, re-reads `Q_ENABLE=2`, and independently requires the
@@ -243,9 +244,11 @@ aircraft to remain armed, in AUTO, fixed-wing and inside the reviewed
 transition-ready envelope. It also verifies the pinned frame and tilt profile
 (`Q_FRAME_CLASS=7`, `Q_TILT_ENABLE=1`, `Q_TILT_MASK=3`, `Q_TILT_TYPE=0`,
 `Q_TILT_RATE_UP=40`, and `Q_TILT_MAX=45`) before transmission.
+`Q_GUIDED_MODE=0` controls the preceding GUIDED recovery reposition; it has no
+effect on this AUTO-only transition handler.
 
 That envelope is within 55 m horizontally of the explicit recovery coordinates,
-within 2 m of the captured post-recovery altitude and between 15 and 25 m above
+within 2 m of the explicit recovery-point altitude and between 15 and 25 m above
 home, with at most 28 m/s groundspeed, at most 3 m/s groundspeed variation and
 1 m/s climb rate. Five distinct fresh position samples must span 2 s; altitude
 variation must stay within 1 m and radial-distance variation within 8 m. The
