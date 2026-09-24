@@ -251,7 +251,7 @@ The pinned observation harness described below now provides QuadPlane SITL
 identity, telemetry, baseline-mode evidence, NOMAD arm + VTOL takeoff
 qualification and one live NOMAD VTOL-to-fixed-wing transition qualification.
 This does not close the aircraft gate: the full Task 1 course/lap route,
-return/recovery, landing, hosted fault evidence and the complete
+fixed-wing to VTOL transition, landing, hosted fault evidence and the complete
 supported-aircraft ROS/SITL and release matrix still require independent
 evidence.
 
@@ -461,6 +461,74 @@ PR head before review. This evidence qualifies only the two-point fixed-wing
 route; it does not qualify route planning, return/recovery, fixed-wing link-loss
 response, transition-back, landing or the complete Task 1 flight.
 
+### QuadPlane fixed-wing recovery qualification - 2026-09-23
+
+The selected return mechanism is one explicit `RecoveryPoint` in GUIDED mode,
+sent as `MAV_CMD_DO_REPOSITION` through the same typed `COMMAND_INT` transport as
+the qualified route. The target is a caller-supplied coordinate and
+relative-home altitude; it is not inferred from ArduPlane home or mission state.
+The positive hosted scenario uses the independently observed start of
+fixed-wing route qualification as its recovery point, after both route points
+have passed, at no less than 20 m relative-home altitude. The operation does
+not grant generic goto or arbitrary mode control.
+
+Pinned ArduPlane source supports this choice:
+`ArduPlane/GCS_MAVLink_Plane.cpp::handle_command_int_do_reposition` accepts an
+already-GUIDED target with `CHANGE_MODE=0`, converts the relative-altitude
+frame, installs the point and applies a positive loiter radius.
+`ArduPlane/commands.cpp::Plane::set_guided_WP` clears VTOL loiter and guided
+takeoff, while `ArduPlane/mode_guided.cpp::ModeGuided::navigate` flies the
+fixed-wing loiter target. `ArduPlane/quadplane.cpp::guided_mode_enabled` permits
+VTOL control in GUIDED when `Q_GUIDED_MODE` is nonzero, so NOMAD requires an
+authoritative `Q_GUIDED_MODE=0` parameter readback before transmission and
+rechecks the same session and full readiness state afterward. The pinned source
+default is zero; this PR does not alter the aircraft profile.
+
+RTL and QRTL are rejected for this slice. `ArduPlane/mode_rtl.cpp::ModeRTL::_enter`
+and `navigate` may switch to QRTL or an autoland sequence depending on RTL
+configuration; `ArduPlane/mode_qrtl.cpp::ModeQRTL::run` enters VTOL position
+control and landing. `ArduPlane/commands_logic.cpp::exit_mission_callback`
+can enter RTL at AUTO mission exhaustion. Those paths would make fixed-wing
+arrival or post-return state ambiguous. Neither a mission end nor an automatic
+failsafe is part of NOMAD's recovery proof.
+
+The readiness gate requires current QuadPlane/ArduPilot/fixed-wing identity,
+same nonzero session, live heartbeat, fresh finite position and 3D GPS, armed
+state, fresh authoritative `EXTENDED_SYS_STATE=FW`, GUIDED mode, a valid target
+and relative altitude from 2 to 100 m, and NOMAD fence inclusion when configured.
+The starting distance must exceed 55 m. NOMAD sends exactly one relative-altitude
+`COMMAND_INT` reposition packet with a 30 m loiter radius, unset heading and
+`CHANGE_MODE=0`. An accepted ACK only starts verification: the position must
+advance beyond the maximum of ACK receipt and the last position timestamp,
+move at least 10 m closer than the ACK-boundary position, enter 45 m
+horizontally, and be within 5 m of the requested relative-home altitude.
+Every sample must retain the same session, fresh heartbeat/position/GPS/VTOL,
+armed GUIDED mode and fixed-wing VTOL state. Loss, rejection or no arrival
+fails; command/ACK and overall recovery deadlines are 3 s and 180 s.
+The 45 m region follows the observed fixed-wing route tolerance, and is a
+qualification tolerance rather than an obstacle-clearance or landing guarantee.
+Completion leaves the aircraft armed in fixed-wing GUIDED loiter for the later
+transition-back slice.
+
+The independent observer in pinned hosted
+[workflow run 35897872732](https://github.com/YoussGm3o8/NOMAD/actions/runs/35897872732)
+passed after the two-point route on implementation head
+`6157d13ff0a9e9516d862a194768f07d7bc3e44b`. It saw the explicit target
+`42.3913000,-71.1476000` at 20.0 m relative-home altitude, 242.3 m initial
+distance, decreasing position samples through 60.0 m, 37.4 m minimum distance,
+42.3 m completion distance, 3.6 m altitude error and NOMAD completion in
+11.2 s. The 45 m bound admits the observed fixed-wing turn and remains smaller
+than the initial 242.3 m separation; it is a qualification tolerance only.
+
+The pinned failsafe paths remain independent: `ArduPlane/events.cpp` can change
+GUIDED mode on RC/GCS failsafe, `ArduPlane/fence.cpp` can redirect or enter RTL
+on a breach, and the configured `Q_TRANS_FAIL=0` disables the transition-failure
+timer in `ArduPlane/quadplane.cpp`. NOMAD neither changes those failsafes nor
+counts their side effects as recovery; a mode/state change or lost telemetry
+fails recovery verification. QuadPlane fixed-wing link-loss response remains
+unqualified. Runtime IPC v1 does not expose this operation; the core and direct
+CLI own it.
+
 ### Aircraft operation capability boundary - 2026-09-23
 
 `VehicleOperation` and `supports_operation` now make command admission an
@@ -468,9 +536,10 @@ explicit policy rather than a consequence of recognizing an aircraft class.
 The full before/after audit is in [Aircraft operation capabilities](architecture.md#aircraft-operation-capabilities).
 The policy now admits only the evidence-backed QuadPlane subset: `arm`, semantic
 `set_guided_mode`, dedicated `vtol_takeoff`, dedicated
-`transition_to_fixed_wing`, and `fixed_wing_route`. The route operation is exactly
-two validated waypoints through the ArduPlane GUIDED reposition path. Generic
-`takeoff`, arbitrary mode setting, generic `goto_location`, landing, return,
+`transition_to_fixed_wing`, `fixed_wing_route`, and `fixed_wing_recovery`. The route
+operation remains exactly two validated waypoints; recovery is one explicit
+point through the ArduPlane GUIDED reposition path. Generic
+`takeoff`, arbitrary mode setting, generic `goto_location`, landing, RTL/QRTL,
 body velocity, payload/output and fence transport remain rejected before
 transmission. Plane and Unknown remain fail-closed for every aircraft-dependent
 command. Focused tests inspect policy cells, fake transport histories/counters,
@@ -483,7 +552,7 @@ The independent Python driver establishes baseline modes without granting
 GUIDED arm + direct NAV_TAKEOFF climb, forward transition and fixed-wing route.
 The route harness still uses the independent driver to establish AUTO before the
 transition; that setup does not qualify NOMAD's arbitrary mode operation.
-Disarm, arbitrary modes, generic takeoff/goto/land/RTL, return/recovery, VTOL
+Disarm, arbitrary modes, generic takeoff/goto/land/RTL, VTOL
 back-transition, landing, fixed-wing QuadPlane link-loss response and complete
 Task 1 remain separate gates. The ground-router slice is independent and does
 not carry flight command authority.
@@ -1127,6 +1196,7 @@ status, events, and safe link selection; it does not implement persistent C++ IP
 remove one-shot CLI clients, arbitrate global command authority, qualify an
 aircraft operation or establish independent physical redundancy. Mission/fence/FTP
 transaction pinning is not implemented. QuadPlane forward transition and the
-narrow two-point fixed-wing route are qualified for their stated pinned profile.
-Full Task 1 course/lap execution, return/recovery, fixed-wing link-loss response,
+narrow two-point fixed-wing route and explicit fixed-wing recovery point are
+qualified for their stated pinned profile. Full Task 1 course/lap execution,
+generic RTL/QRTL, fixed-wing link-loss response,
 transition-back, landing and hardware qualification remain open.

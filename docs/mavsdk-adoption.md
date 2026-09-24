@@ -116,7 +116,7 @@ fork owns the semantics above:
 | Gap | Evidence at the pin |
 |---|---|
 | No way to set a mode | `Action` exposes no mode-setting call; only NOMAD's `DO_SET_MODE` path exists today |
-| Guided goto is absolute-only | Generic Copter goto uses the fork's relative-altitude `Action::goto_location_relative`. The narrowly qualified fixed-wing QuadPlane route uses MAVSDK's typed `MavlinkPassthrough::CommandInt`/`send_command_int` for `MAV_CMD_DO_REPOSITION`; NOMAD creates no raw MAVLink bytes |
+| Guided goto is absolute-only | Generic Copter goto uses the fork's relative-altitude `Action::goto_location_relative`. The narrow fixed-wing QuadPlane route and explicit recovery point use MAVSDK's typed `MavlinkPassthrough::CommandInt`/`send_command_int` for `MAV_CMD_DO_REPOSITION`; NOMAD creates no raw MAVLink bytes |
 | Missing output verbs | No `DO_MOTOR_TEST`; `Action::set_actuator` is command 187, not `DO_SET_SERVO`; no user-command passthrough; no `COMMAND_ACK` result-code exposure |
 | Mode handling is read-only | `core/ardupilot_custom_mode.hpp` and `core/flight_mode.cpp` translate Copter/Plane/Rover modes for reading; nothing sets one |
 | Documentation is PX4-centric | Public comments link to `docs.px4.io` even where ArduPilot behaves differently |
@@ -139,7 +139,7 @@ checklist: a row moves only after the fork has its own executable regression.
 | Translate MAVSDK telemetry types into `VehicleState` | Thin translation | Keep, with no ArduPilot protocol decisions |
 | Translate MAVSDK result enums into NOMAD acknowledgements | Thin translation | Keep while the NOMAD interface exposes MAVLink result codes |
 | Build `COMMAND_LONG` for general commands through `MavlinkPassthrough` | Thin translation | Keep for commands with no suitable high-level API; qualify transport and ACK mapping in the fork |
-| Adapt relative-altitude navigation | Thin translation | Generic Copter goto uses the fork's `Action::goto_location_relative`. The fixed-wing QuadPlane route builds MAVSDK's typed `CommandInt` only because it must keep `CHANGE_MODE` clear in already-confirmed GUIDED; a deterministic peer checks the exact wire fields and pinned SITL checks ordered position arrival. NOMAD keeps capability, target validation, fence policy and authoritative completion; MAVSDK serializes the packet |
+| Adapt relative-altitude navigation | Thin translation | Generic Copter goto uses the fork's `Action::goto_location_relative`. The fixed-wing QuadPlane route and recovery point build MAVSDK's typed `CommandInt` with `CHANGE_MODE` clear in already-confirmed GUIDED; a deterministic peer checks recovery wire fields and pinned SITL checks route-then-recovery arrival. NOMAD keeps capability, target validation, fence policy and authoritative completion; MAVSDK serializes the packet |
 | Translate one-shot body-velocity setpoints | Thin translation | Use `Offboard::set_velocity_body_once`; MAVSDK owns frame, mask and encoding without storing or resending the command. NOMAD converts yaw radians to degrees and retains authorization, freshness, watchdogs and zero-on-stop policy. Fork wire tests cover stalled producers, zero, destruction, removed links, invalid input and refusal to mix automatic resends; pinned Copter SITL verifies expiry under its unchanged `GUID_TIMEOUT` |
 | Upload/download fence plans through `Geofence` | Thin translation | Keep; protocol transfer already belongs to MAVSDK |
 | Validate fence shape, enabled state, and exact readback | NOMAD policy | Keep; these are operating-area and authoritative-verification rules |
@@ -293,8 +293,15 @@ as C23 in the migration contradictions. Explicit vehicle-class identification
 is landed for the pinned profiles, and the deterministic peer now covers the
 QuadPlane startup and transition operations. The transition uses MAVSDK's
 existing typed `subscribe_vtol_state` path; no fork edit or hand-written
-MAVLink encoder was needed. Navigation, return and landing coverage remain
-open. Everything up to and including the production cutover has landed.
+MAVLink encoder was needed. A two-point fixed-wing route and an explicit
+recovery point now use the typed `COMMAND_INT` path; general navigation, RTL,
+landing and full Task 1 coverage remain open. Everything up to and including
+the production cutover has landed.
+The recovery peer verifies command 192, relative-altitude frame, clear
+`CHANGE_MODE`, 30 m loiter radius, target system/component and denied ACK
+mapping. Pinned hosted [run 35897872732](https://github.com/YoussGm3o8/NOMAD/actions/runs/35897872732)
+also observed the post-route recovery target approached from 242.3 m to a
+42.3 m completion distance at 20 m requested relative-home altitude.
 
 Cover arm/disarm, mode, takeoff, land/RTL, goto, servo, relay, motor-test,
 gimbal-config and user-command. Unsupported verbs now belong in the fork: add the

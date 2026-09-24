@@ -21,6 +21,8 @@ std::string_view operation_name(VehicleOperation operation) {
         return "transition to fixed wing";
     case VehicleOperation::FixedWingRoute:
         return "fixed-wing route";
+    case VehicleOperation::FixedWingRecovery:
+        return "fixed-wing recovery";
     case VehicleOperation::GotoLocation:
         return "goto location";
     case VehicleOperation::Land:
@@ -71,6 +73,7 @@ bool supports_operation(telemetry::AircraftClass aircraft_class, VehicleOperatio
         case VehicleOperation::VtolTakeoff:
         case VehicleOperation::TransitionToFixedWing:
         case VehicleOperation::FixedWingRoute:
+        case VehicleOperation::FixedWingRecovery:
             return false;
         }
         return false;
@@ -83,6 +86,7 @@ bool supports_operation(telemetry::AircraftClass aircraft_class, VehicleOperatio
         case VehicleOperation::VtolTakeoff:
         case VehicleOperation::TransitionToFixedWing:
         case VehicleOperation::FixedWingRoute:
+        case VehicleOperation::FixedWingRecovery:
             return true;
         case VehicleOperation::Disarm:
         case VehicleOperation::SetMode:

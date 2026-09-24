@@ -214,6 +214,19 @@ those operations. Add mock competition telemetry/traffic and
 recorded image/tracker feeds before demanding GPU simulation. Gazebo/Isaac are
 optional when sensor/physics evidence requires them, not core build dependencies.
 
+The bounded fixed-wing recovery verb is `fixed-wing-recovery <latitude>
+<longitude> <relative_altitude_m>`. Supply a deliberate recovery point after
+the qualified two-point route; the current core does not infer a home point.
+The command requires armed QuadPlane fixed-wing GUIDED state, fresh position,
+GPS, VTOL and heartbeat telemetry, and `Q_GUIDED_MODE=0` autopilot readback.
+Success means at least 10 m of post-ACK progress and a new position within
+45 m horizontally and 5 m of the requested
+relative-home altitude. The 45 m radius is a fixed-wing SITL qualification
+tolerance, not obstacle clearance. The aircraft remains armed in GUIDED and
+circles the target; an operator must retain control until later transition-back
+and landing capabilities are separately qualified. The overall deadline is
+180 s; the ACK wait is capped at 3 s. Runtime IPC v1 does not expose this verb.
+
 ## Observability and evidence
 
 Display ownship and each field's age, aircraft type/mode, command owner/outcome,

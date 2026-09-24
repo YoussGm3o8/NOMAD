@@ -132,6 +132,11 @@ int run_command(nomad::mavlink::MavlinkConnection &connection, const Arguments &
         };
         return print_result(vehicle.fixed_wing_route(route));
     }
+    if (arguments.command == "fixed-wing-recovery" && arguments.fixed_wing_recovery_values.size() == 3) {
+        const auto &values = arguments.fixed_wing_recovery_values;
+        const nomad::vehicle::RecoveryPoint point{values[0], values[1], static_cast<float>(values[2])};
+        return print_result(vehicle.fixed_wing_recovery(point));
+    }
     if (arguments.command == "goto" && arguments.latitude.has_value() && arguments.longitude.has_value() &&
         arguments.altitude.has_value()) {
         const nomad::vehicle::Location target{*arguments.latitude, *arguments.longitude, *arguments.altitude};

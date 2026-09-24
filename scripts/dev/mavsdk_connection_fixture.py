@@ -63,6 +63,10 @@ from mavsdk_peer import (
     CommandRecord,
     VehiclePeer,
 )
+from mavsdk_recovery_fixture import (
+    case_quadplane_fixed_wing_recovery_rejects_denied_ack,
+    case_quadplane_fixed_wing_recovery_uses_reposition_command_int,
+)
 from mavsdk_route_fixture import case_quadplane_fixed_wing_route_uses_reposition_command_int
 from pymavlink.dialects.v20 import ardupilotmega as mavlink
 
@@ -415,6 +419,12 @@ def case_user_command_parity(cli: Path) -> None:
     )
 
 
+def case_quadplane_navigation(cli: Path) -> None:
+    case_quadplane_fixed_wing_route_uses_reposition_command_int(cli)
+    case_quadplane_fixed_wing_recovery_uses_reposition_command_int(cli)
+    case_quadplane_fixed_wing_recovery_rejects_denied_ack(cli)
+
+
 def main() -> int:
     cli = find_binary("nomad")
     probe = find_binary("nomad_mavsdk_connection_tests")
@@ -445,7 +455,7 @@ def main() -> int:
     case_takeoff_is_verified(cli)
     case_quadplane_vtol_takeoff_is_verified(cli)
     case_quadplane_transition_is_verified(cli)
-    case_quadplane_fixed_wing_route_uses_reposition_command_int(cli)
+    case_quadplane_navigation(cli)
     case_goto_is_verified(cli)
     case_rtl_is_verified(cli)
     case_land_is_verified(cli)
