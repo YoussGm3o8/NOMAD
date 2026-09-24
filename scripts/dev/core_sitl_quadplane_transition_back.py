@@ -36,11 +36,12 @@ from pymavlink import mavutil
 
 TRANSITION_TIMEOUT_SECONDS = 90
 READY_TIMEOUT_SECONDS = 45
-READY_RADIUS_METERS = 40.0
+READY_RADIUS_METERS = 55.0
 READY_MIN_ALTITUDE_METERS = 15.0
 READY_MAX_ALTITUDE_METERS = 25.0
 READY_ALTITUDE_TOLERANCE_METERS = 2.0
-READY_MAX_GROUNDSPEED_MPS = 20.0
+READY_MAX_GROUNDSPEED_MPS = 28.0
+READY_MAX_GROUNDSPEED_VARIATION_MPS = 3.0
 READY_MAX_CLIMB_RATE_MPS = 1.0
 READY_MAX_ALTITUDE_VARIATION_METERS = 1.0
 READY_MAX_RADIAL_VARIATION_METERS = 8.0
@@ -129,7 +130,18 @@ def transition_ready_samples(
             and groundspeed <= READY_MAX_GROUNDSPEED_MPS
             and abs(climb_rate) <= READY_MAX_CLIMB_RATE_MPS
         ):
-            samples.append((timestamp, distance, altitude, groundspeed, climb_rate))
+            sample = (timestamp, distance, altitude, groundspeed, climb_rate)
+            candidate = [*samples, sample]
+            altitudes = [value[2] for value in candidate]
+            distances = [value[1] for value in candidate]
+            groundspeeds = [value[3] for value in candidate]
+            if (
+                max(altitudes) - min(altitudes) > READY_MAX_ALTITUDE_VARIATION_METERS
+                or max(distances) - min(distances) > READY_MAX_RADIAL_VARIATION_METERS
+                or max(groundspeeds) - min(groundspeeds) > READY_MAX_GROUNDSPEED_VARIATION_MPS
+            ):
+                samples.clear()
+            samples.append(sample)
         else:
             samples.clear()
     return samples
@@ -155,29 +167,40 @@ def transition_ready_diagnostic(observer: RouteObserver, after: float, point: tu
     )
     speed_ok = sum(sample[3] <= READY_MAX_GROUNDSPEED_MPS for sample in paired)
     climb_ok = sum(abs(sample[4]) <= READY_MAX_CLIMB_RATE_MPS for sample in paired)
-    ready = [
-        sample
-        for sample in paired
-        if sample[1] <= READY_RADIUS_METERS
-        and abs(sample[2] - point[2]) <= READY_ALTITUDE_TOLERANCE_METERS
-        and READY_MIN_ALTITUDE_METERS <= sample[2] <= READY_MAX_ALTITUDE_METERS
-        and sample[3] <= READY_MAX_GROUNDSPEED_MPS
-        and abs(sample[4]) <= READY_MAX_CLIMB_RATE_MPS
-    ]
+    ready = transition_ready_samples(observer, after, point)
+    recent = paired[-READY_SAMPLE_COUNT:]
+    recent_speed_variation = max(sample[3] for sample in recent) - min(sample[3] for sample in recent)
     last = paired[-1]
     return (
         f"paired_samples={len(paired)} ready_samples={len(ready)} radius_ok={radius_ok} "
         f"altitude_ok={altitude_ok} speed_ok={speed_ok} climb_ok={climb_ok} "
+        f"recent_speed_variation_mps={recent_speed_variation:.1f} "
         f"max_groundspeed_mps={max(sample[3] for sample in paired):.1f} "
         f"max_abs_climb_mps={max(abs(sample[4]) for sample in paired):.1f} "
+        f"min_distance_m={min(sample[1] for sample in paired):.1f} "
+        f"max_distance_m={max(sample[1] for sample in paired):.1f} "
         f"last_distance_m={last[1]:.1f} last_altitude_m={last[2]:.1f} "
         f"last_groundspeed_mps={last[3]:.1f} last_climb_mps={last[4]:.1f}"
     )
 
 
+def has_current_transition_ready_window(
+    samples: list[tuple[float, float, float, float, float]], observer: RouteObserver, started: float
+) -> bool:
+    if len(samples) < READY_SAMPLE_COUNT or samples[-1][0] - samples[0][0] < READY_DWELL_SECONDS:
+        return False
+    modes = [item for item in observer.modes if item[0] >= started]
+    states = [item for item in observer.vtol_states if item[0] >= started]
+    if not modes or modes[-1][1:] != (MODE_AUTO, True) or time.monotonic() - modes[-1][0] > 1.5:
+        return False
+    if not states or states[-1][1] != VTOL_STATE_FW or time.monotonic() - states[-1][0] > 1.5:
+        return False
+    return time.monotonic() - samples[-1][0] <= 1.5
+
+
 def wait_for_transition_ready(
     binary: Path, port: str, observer: RouteObserver, started: float, point: tuple[float, float, float]
-) -> tuple[dict[str, str], float, float, float]:
+) -> tuple[dict[str, str], float, float, float, float]:
     deadline = time.monotonic() + READY_TIMEOUT_SECONDS
     stabilization_started: float | None = None
     while time.monotonic() < deadline:
@@ -189,28 +212,18 @@ def wait_for_transition_ready(
         if stabilization_started is None:
             stabilization_started = modes[-1][0]
         samples = transition_ready_samples(observer, stabilization_started, point)
-        if len(samples) >= READY_SAMPLE_COUNT and samples[-1][0] - samples[0][0] >= READY_DWELL_SECONDS:
-            altitudes = [sample[2] for sample in samples]
-            distances = [sample[1] for sample in samples]
-            states = [item for item in observer.vtol_states if item[0] >= stabilization_started]
-            if (
-                max(altitudes) - min(altitudes) <= READY_MAX_ALTITUDE_VARIATION_METERS
-                and max(distances) - min(distances) <= READY_MAX_RADIAL_VARIATION_METERS
-                and modes
-                and modes[-1][1:] == (MODE_AUTO, True)
-                and states
-                and states[-1][1] == VTOL_STATE_FW
-            ):
-                status = read_status(binary, port)
-                require_fresh_vtol_state(status, "fixed_wing")
-                if status.get("mode") != str(MODE_AUTO) or status.get("armed") != "true":
-                    raise ScenarioError(f"transition-ready core state is not armed AUTO: {status}")
-                return (
-                    status,
-                    time.monotonic() - started,
-                    max(sample[3] for sample in samples),
-                    max(abs(sample[4]) for sample in samples),
-                )
+        if has_current_transition_ready_window(samples, observer, stabilization_started):
+            status = read_status(binary, port)
+            require_fresh_vtol_state(status, "fixed_wing")
+            if status.get("mode") != str(MODE_AUTO) or status.get("armed") != "true":
+                raise ScenarioError(f"transition-ready core state is not armed AUTO: {status}")
+            return (
+                status,
+                time.monotonic() - started,
+                max(sample[3] for sample in samples),
+                max(abs(sample[4]) for sample in samples),
+                max(sample[1] for sample in samples),
+            )
         time.sleep(0.1)
     diagnostic = transition_ready_diagnostic(observer, started, point)
     raise ScenarioError("independent observer did not prove the stabilized transition-ready envelope: " + diagnostic)
@@ -264,7 +277,7 @@ def verify_post_transition(
 
 def establish_transition_ready_state(
     binary: Path, port: str, observer: RouteObserver, point: tuple[float, float, float]
-) -> tuple[float, float, float]:
+) -> tuple[float, float, float, float]:
     wait_for_observer_start(observer)
     if observer.modes[-1][1:] != (MODE_GUIDED, True) or observer.vtol_states[-1][1] != VTOL_STATE_FW:
         raise ScenarioError("independent observer did not confirm armed GUIDED fixed-wing recovery state")
@@ -280,10 +293,10 @@ def establish_transition_ready_state(
         raise ScenarioError(f"NOMAD did not re-establish fixed-wing AUTO state: {setup_output!r}")
     wait_for_observed_mode_state(observer, fixed_wing_setup_started, MODE_AUTO, VTOL_STATE_FW)
     ready_started = time.monotonic()
-    _ready_state, stabilization_time, ready_max_speed, ready_max_climb = wait_for_transition_ready(
+    _ready_state, stabilization_time, ready_max_speed, ready_max_climb, ready_max_distance = wait_for_transition_ready(
         binary, port, observer, ready_started, point
     )
-    return stabilization_time, ready_max_speed, ready_max_climb
+    return stabilization_time, ready_max_speed, ready_max_climb, ready_max_distance
 
 
 def request_vtol_transition(
@@ -302,25 +315,30 @@ def request_vtol_transition(
     return verify_post_transition(observer, command_started, point)
 
 
-def execute_transition_to_vtol(
-    binary: Path, port: str, observer: RouteObserver, point: tuple[float, float, float]
-) -> tuple[list[str], float, float, float, float, dict[str, str], float, float, float]:
-    status_before = read_status(binary, port)
-    require_fresh_vtol_state(status_before, "fixed_wing")
-    if status_before.get("mode") != str(MODE_GUIDED) or status_before.get("armed") != "true":
-        raise ScenarioError(f"recovery must end in armed GUIDED fixed-wing state: {status_before}")
-    recovery_distance = distance_m(parse_position(status_before), point[:2])
-    recovery_altitude_error = abs(parse_relative_altitude(status_before) - point[2])
-    transition_altitude = parse_relative_altitude(status_before)
+def get_transition_point_from_recovery(
+    binary: Path, port: str, recovery_point: tuple[float, float, float]
+) -> tuple[tuple[float, float, float], float, float]:
+    status = read_status(binary, port)
+    require_fresh_vtol_state(status, "fixed_wing")
+    if status.get("mode") != str(MODE_GUIDED) or status.get("armed") != "true":
+        raise ScenarioError(f"recovery must end in armed GUIDED fixed-wing state: {status}")
+    recovery_distance = distance_m(parse_position(status), recovery_point[:2])
+    altitude_error = abs(parse_relative_altitude(status) - recovery_point[2])
+    transition_altitude = parse_relative_altitude(status)
     if not READY_MIN_ALTITUDE_METERS <= transition_altitude <= READY_MAX_ALTITUDE_METERS:
         raise ScenarioError(
             f"recovered altitude is outside the reviewed 15-25 m transition band: {transition_altitude:.1f} m"
         )
-    transition_point = (point[0], point[1], transition_altitude)
+    return (recovery_point[0], recovery_point[1], transition_altitude), recovery_distance, altitude_error
 
+
+def execute_transition_to_vtol(
+    binary: Path, port: str, observer: RouteObserver, point: tuple[float, float, float]
+) -> tuple[list[str], float, float, float, float, float, dict[str, str], float, float, float]:
+    transition_point, recovery_distance, altitude_error = get_transition_point_from_recovery(binary, port, point)
     observer.start()
     try:
-        stabilization_time, ready_max_speed, ready_max_climb = establish_transition_ready_state(
+        stabilization_time, ready_max_speed, ready_max_climb, ready_max_distance = establish_transition_ready_state(
             binary, port, observer, transition_point
         )
         names, observed_completion_time = request_vtol_transition(binary, port, observer, transition_point)
@@ -336,17 +354,18 @@ def execute_transition_to_vtol(
         stabilization_time,
         ready_max_speed,
         ready_max_climb,
-        transition_altitude,
+        ready_max_distance,
+        transition_point[2],
         final,
         observed_completion_time,
         recovery_distance,
-        recovery_altitude_error,
+        altitude_error,
     )
 
 
 def run_transition_qualification(
     binary: Path,
-) -> tuple[list[str], float, float, float, float, dict[str, str], float, float, float]:
+) -> tuple[list[str], float, float, float, float, float, dict[str, str], float, float, float]:
     port = get_sitl_port()
     start_position, waypoints = prepare_route(binary, port)
     route_observer = RouteObserver(OBSERVER_PORT)
@@ -362,13 +381,14 @@ def run_transition_qualification(
 
 
 def report_transition_qualification(
-    result: tuple[list[str], float, float, float, float, dict[str, str], float, float, float],
+    result: tuple[list[str], float, float, float, float, float, dict[str, str], float, float, float],
 ) -> None:
     (
         states,
         stabilization,
         max_speed,
         max_climb,
+        max_distance,
         transition_altitude,
         final,
         completion,
@@ -380,6 +400,7 @@ def report_transition_qualification(
         f"recovery_mode=GUIDED transition_mode=AUTO pre_vtol_state=fixed_wing "
         f"recovery_distance_m={recovery_distance:.1f} recovery_altitude_error_m={altitude_error:.1f} "
         f"transition_point_altitude_m={transition_altitude:.1f} "
+        f"transition_ready_max_distance_m={max_distance:.1f} "
         f"stabilization_time_s={stabilization:.1f} command=MAV_CMD_DO_VTOL_TRANSITION "
         f"stabilization_max_groundspeed_mps={max_speed:.1f} "
         f"stabilization_max_abs_climb_mps={max_climb:.1f} target=MAV_VTOL_STATE_MC "

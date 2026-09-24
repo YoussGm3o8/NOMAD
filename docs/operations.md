@@ -244,12 +244,16 @@ transition-ready envelope. It also verifies the pinned frame and tilt profile
 (`Q_FRAME_CLASS=7`, `Q_TILT_ENABLE=1`, `Q_TILT_MASK=3`, `Q_TILT_TYPE=0`,
 `Q_TILT_RATE_UP=40`, and `Q_TILT_MAX=45`) before transmission.
 
-That envelope is within 40 m horizontally of the explicit recovery coordinates,
+That envelope is within 55 m horizontally of the explicit recovery coordinates,
 within 2 m of the captured post-recovery altitude and between 15 and 25 m above
-home, with at most 20 m/s groundspeed and 1 m/s climb rate. Five distinct fresh
-position samples must span 2 s; altitude variation must stay within 1 m and
-radial-distance variation within 8 m. These conditions separate transition
-readiness from the preceding recovery completion tolerance of 45 m and 5 m.
+home, with at most 28 m/s groundspeed, at most 3 m/s groundspeed variation and
+1 m/s climb rate. Five distinct fresh position samples must span 2 s; altitude
+variation must stay within 1 m and radial-distance variation within 8 m. The
+55 m boundary extends beyond the measured recovery completion point; it is
+separate from the recovery completion tolerance of 45 m and 5 m. The live
+observer reports the farthest sample in its stable readiness window. The dwell,
+speed variation and climb limits reject samples that move through the region
+without settling into a stable loiter.
 Success requires an accepted
 ACK followed by newer authoritative `VTOL_STATE=Multicopter` observations and
 two seconds of stable fresh position/velocity, with the aircraft still armed

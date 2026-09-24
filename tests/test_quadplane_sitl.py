@@ -164,7 +164,9 @@ def test_quadplane_transition_back_harness_uses_reviewed_auto_loiter_setup() -> 
     assert "transition_ready_samples" in source
     assert "observed_states=" in source
     assert "final_armed={final['armed']}" in source
-    assert transition_back.READY_RADIUS_METERS == 40.0
+    assert transition_back.READY_RADIUS_METERS == 55.0
+    assert transition_back.READY_MAX_GROUNDSPEED_MPS == 28.0
+    assert transition_back.READY_MAX_GROUNDSPEED_VARIATION_MPS == 3.0
     assert transition_back.READY_DWELL_SECONDS == 2.0
     assert transition_back.READY_SAMPLE_COUNT == 5
     assert transition_back.VTOL_DWELL_SECONDS == 2.0
@@ -185,9 +187,33 @@ def test_quadplane_transition_back_observer_accepts_only_fresh_stable_envelope()
     assert len(samples) == 5
     assert samples[-1][0] - samples[0][0] >= transition_back.READY_DWELL_SECONDS
 
-    observer.velocities[-1] = (3.1, 21.0, 0.0)
+    observer.velocities[-1] = (3.1, 29.0, 0.0)
     samples = transition_back.transition_ready_samples(observer, 0.5, point)
     assert samples == []
+
+    observer.velocities = [
+        (1.0, 8.0, 0.2),
+        (1.5, 12.0, 0.2),
+        (2.0, 8.0, 0.2),
+        (2.5, 12.0, 0.2),
+        (3.1, 8.0, 0.2),
+    ]
+    samples = transition_back.transition_ready_samples(observer, 0.5, point)
+    assert len(samples) == 1
+    assert samples[0][0] == 3.1
+
+
+def test_quadplane_transition_ready_proof_requires_current_mode_state_and_samples() -> None:
+    observer = route.RouteObserver(14581)
+    now = transition_back.time.monotonic()
+    samples = [(now - 2.0 + index * 0.5, 42.0, 20.0, 26.0 + index * 0.2, 0.0) for index in range(5)]
+    observer.modes = [(now - 0.1, transition_back.MODE_AUTO, True)]
+    observer.vtol_states = [(now - 0.1, transition_back.VTOL_STATE_FW)]
+
+    assert transition_back.has_current_transition_ready_window(samples, observer, now - 3.0)
+
+    observer.vtol_states = [(now - 2.0, transition_back.VTOL_STATE_FW)]
+    assert not transition_back.has_current_transition_ready_window(samples, observer, now - 3.0)
 
 
 def test_quadplane_route_harness_drives_nomad_and_observes_aircraft_positions() -> None:

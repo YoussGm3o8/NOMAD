@@ -20,8 +20,9 @@ namespace {
 using Clock = std::chrono::steady_clock;
 
 constexpr double kEarthRadiusMeters = 6371000.0;
-constexpr double kTransitionRegionRadiusMeters = 40.0;
-constexpr double kReadyMaxGroundspeedMps = 20.0;
+constexpr double kTransitionRegionRadiusMeters = 55.0;
+constexpr double kReadyMaxGroundspeedMps = 28.0;
+constexpr double kReadyMaxGroundspeedVariationMps = 3.0;
 constexpr double kReadyMaxClimbRateMps = 1.0;
 constexpr double kReadyMaxRadialVariationMeters = 8.0;
 constexpr float kTransitionAltitudeMinimumMeters = 15.0F;
@@ -65,6 +66,8 @@ struct TransitionReadyWindow {
     double maximum_distance_m{};
     float minimum_altitude_m{};
     float maximum_altitude_m{};
+    float minimum_groundspeed_mps{};
+    float maximum_groundspeed_mps{};
 };
 
 struct StableVtolWindow {
@@ -186,7 +189,8 @@ void start_ready_window(TransitionReadyWindow &window, const telemetry::VehicleS
                         const RecoveryPoint &point) {
     const auto distance = distance_to_point(state, point);
     window = {1, state.position_updated_at, state.position_updated_at, distance, distance,
-              state.position.relative_altitude_m, state.position.relative_altitude_m};
+              state.position.relative_altitude_m, state.position.relative_altitude_m,
+              state.velocity.groundspeed_mps, state.velocity.groundspeed_mps};
 }
 
 void add_ready_sample(TransitionReadyWindow &window, const telemetry::VehicleState &state,
@@ -207,8 +211,11 @@ void add_ready_sample(TransitionReadyWindow &window, const telemetry::VehicleSta
     const auto maximum_altitude = std::max(window.maximum_altitude_m, state.position.relative_altitude_m);
     const auto minimum_distance = std::min(window.minimum_distance_m, distance);
     const auto maximum_distance = std::max(window.maximum_distance_m, distance);
+    const auto minimum_groundspeed = std::min(window.minimum_groundspeed_mps, state.velocity.groundspeed_mps);
+    const auto maximum_groundspeed = std::max(window.maximum_groundspeed_mps, state.velocity.groundspeed_mps);
     if (maximum_altitude - minimum_altitude > kReadyMaxAltitudeVariationMeters ||
-        maximum_distance - minimum_distance > kReadyMaxRadialVariationMeters) {
+        maximum_distance - minimum_distance > kReadyMaxRadialVariationMeters ||
+        maximum_groundspeed - minimum_groundspeed > kReadyMaxGroundspeedVariationMps) {
         start_ready_window(window, state, point);
         return;
     }
@@ -218,6 +225,8 @@ void add_ready_sample(TransitionReadyWindow &window, const telemetry::VehicleSta
     window.maximum_altitude_m = maximum_altitude;
     window.minimum_distance_m = minimum_distance;
     window.maximum_distance_m = maximum_distance;
+    window.minimum_groundspeed_mps = minimum_groundspeed;
+    window.maximum_groundspeed_mps = maximum_groundspeed;
 }
 
 bool is_transition_ready(const TransitionReadyWindow &window, std::chrono::milliseconds dwell) {

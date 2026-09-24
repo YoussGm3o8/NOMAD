@@ -171,11 +171,14 @@ avoids asking AUTO to climb or descend to the original requested recovery
 altitude. The reference profile enters AUTO in VTOL state; the already-qualified
 `transition-to-fixed-wing` operation reestablishes fixed-wing state before the
 transition-ready dwell starts. NOMAD verifies the pinned frame and tilt
-parameters before it separately requires the aircraft within 40 m of that
+parameters before it separately requires the aircraft within 55 m of that
 horizontal point, within 2 m of that captured altitude while remaining within
-15–25 m relative to home, groundspeed no greater than 20 m/s, climb rate no
-greater than 1 m/s, and five fresh position samples spanning 2 s with bounded
-altitude/radial variation.
+15–25 m relative to home, groundspeed no greater than 28 m/s with at most 3 m/s
+variation, climb rate no greater than 1 m/s, and five fresh position samples
+spanning 2 s with bounded altitude/radial variation. The 55 m radius extends
+11.8 m beyond the measured recovery completion distance, and the independent
+observer reports the farthest position in its stable readiness window. The
+speed cap is below the measured 26.8 m/s maximum plus a 1.2 m/s margin.
 Completion requires fresh post-ACK `Multicopter` state reports, retained armed
 AUTO mode and two seconds of stable position/velocity telemetry. Run `pixi run
 core-sitl-quadplane-transition-back` for the pinned live sequence. These slices

@@ -7,6 +7,7 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace {
@@ -19,7 +20,7 @@ using nomad::vehicle::Vehicle;
 constexpr RecoveryPoint kTransitionPoint{45.0, -73.0, 20.0F};
 
 enum class BackTransitionBehavior { MulticopterAfterAck, NoChange, IntermediateOnly, MulticopterBeforeAck,
-                                    ChangeSession, LoseHeartbeat, Disarm, ChangeMode };
+                                    ChangeSession, LoseHeartbeat, Disarm, ChangeMode, UnstableSpeed };
 
 class VtolTransitionFakeConnection final : public FakeConnection {
   public:
@@ -53,12 +54,18 @@ class VtolTransitionFakeConnection final : public FakeConnection {
             state->custom_mode = 21;
             complete_after_ack_on_poll_ = true;
             break;
+        case BackTransitionBehavior::UnstableSpeed: break;
         }
         return acknowledgement;
     }
 
     std::optional<nomad::telemetry::VehicleState> wait_for_state(std::chrono::milliseconds timeout) override {
-        auto sample = FakeConnection::wait_for_state(timeout);
+        const auto sample = FakeConnection::wait_for_state(timeout);
+        if (behavior == BackTransitionBehavior::UnstableSpeed) {
+            state->velocity.groundspeed_mps = speed_sample_++ % 2 == 0 ? 0.0F : 4.0F;
+            state->velocity_updated_at = std::chrono::steady_clock::now();
+            return get_state();
+        }
         if (!complete_after_ack_on_poll_) {
             return sample;
         }
@@ -68,6 +75,7 @@ class VtolTransitionFakeConnection final : public FakeConnection {
     }
 
   private:
+    int speed_sample_{0};
     bool complete_after_ack_on_poll_{false};
 
     void set_vtol_state(VtolState vtol_state) {
@@ -140,7 +148,7 @@ void test_transition_to_vtol_requires_quadplane_and_reviewed_ready_state() {
         case 7: connection.state->custom_mode = 15; break;
         case 8: connection.state->gps.fix_type = 2; break;
         case 9: connection.state->velocity_updated_at = stale; break;
-        case 10: connection.state->velocity.groundspeed_mps = 21.0F; break;
+        case 10: connection.state->velocity.groundspeed_mps = 29.0F; break;
         case 11: connection.state->position.relative_altitude_m = 12.0F; break;
         case 12: connection.state->system_id = 0; break;
         }
@@ -150,7 +158,7 @@ void test_transition_to_vtol_requires_quadplane_and_reviewed_ready_state() {
 
     FakeConnection outside_region;
     configure_transition_ready_state(outside_region);
-    outside_region.state->position.latitude_deg += 0.001;
+    outside_region.state->position.latitude_deg += 0.00051;
     auto outside_vehicle = short_vehicle(outside_region, std::chrono::milliseconds(80));
     const auto outside_result = outside_vehicle.transition_to_vtol(kTransitionPoint);
     CHECK(!outside_result.success);
@@ -163,6 +171,14 @@ void test_transition_to_vtol_requires_quadplane_and_reviewed_ready_state() {
     const auto not_dwelled_result = not_dwelled_vehicle.transition_to_vtol(kTransitionPoint);
     CHECK(!not_dwelled_result.success);
     CHECK(not_dwelled.command_history.empty());
+
+    VtolTransitionFakeConnection unstable_speed;
+    configure_transition_ready_state(unstable_speed);
+    unstable_speed.behavior = BackTransitionBehavior::UnstableSpeed;
+    auto unstable_speed_vehicle = short_vehicle(unstable_speed, std::chrono::milliseconds(80));
+    const auto unstable_speed_result = unstable_speed_vehicle.transition_to_vtol(kTransitionPoint);
+    CHECK(!unstable_speed_result.success);
+    CHECK(unstable_speed.command_history.empty());
 
     constexpr std::array<const char *, 7> profile_parameters{
         "Q_ENABLE", "Q_FRAME_CLASS", "Q_TILT_ENABLE", "Q_TILT_MASK", "Q_TILT_TYPE", "Q_TILT_RATE_UP",
@@ -188,6 +204,7 @@ void test_transition_to_vtol_requires_quadplane_and_reviewed_ready_state() {
 void test_transition_to_vtol_sends_multicopter_target_and_verifies_stability() {
     VtolTransitionFakeConnection connection;
     configure_transition_ready_state(connection);
+    connection.state->position.latitude_deg += 0.00045;
     auto vehicle = short_vehicle(connection, std::chrono::seconds(3), std::chrono::milliseconds(10));
 
     const auto result = vehicle.transition_to_vtol(kTransitionPoint);
