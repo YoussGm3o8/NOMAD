@@ -32,6 +32,7 @@ MODE_GUIDED = 15
 VTOL_STATE_NAMES = {
     mavutil.mavlink.MAV_VTOL_STATE_MC: "multicopter",
     mavutil.mavlink.MAV_VTOL_STATE_TRANSITION_TO_FW: "transition_to_fixed_wing",
+    mavutil.mavlink.MAV_VTOL_STATE_TRANSITION_TO_MC: "transition_to_multicopter",
     VTOL_STATE_FW: "fixed_wing",
 }
 
@@ -44,6 +45,7 @@ class RouteObserver:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.positions: list[tuple[float, float, float, float]] = []
+        self.velocities: list[tuple[float, float, float]] = []
         self.modes: list[tuple[float, int, bool]] = []
         self.vtol_states: list[tuple[float, int]] = []
 
@@ -70,6 +72,9 @@ class RouteObserver:
                 if kind == "GLOBAL_POSITION_INT":
                     self.positions.append(
                         (observed_at, message.lat / 1e7, message.lon / 1e7, message.relative_alt / 1000.0)
+                    )
+                    self.velocities.append(
+                        (observed_at, math.hypot(message.vx, message.vy) / 100.0, -message.vz / 100.0)
                     )
                 elif kind == "HEARTBEAT":
                     is_armed = bool(message.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)

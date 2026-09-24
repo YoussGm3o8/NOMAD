@@ -42,6 +42,7 @@ struct Arguments {
     int user_parameter_count{0};
     std::vector<double> fixed_wing_route_values;
     std::vector<double> fixed_wing_recovery_values;
+    std::vector<double> transition_to_vtol_values;
 };
 
 // Defined in cli_arguments.cpp.

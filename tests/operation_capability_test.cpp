@@ -22,6 +22,7 @@ constexpr std::array kAircraftOperations{
     VehicleOperation::Takeoff,
     VehicleOperation::VtolTakeoff,
     VehicleOperation::TransitionToFixedWing,
+    VehicleOperation::TransitionToVtol,
     VehicleOperation::FixedWingRoute,
     VehicleOperation::FixedWingRecovery,
     VehicleOperation::GotoLocation,
@@ -40,6 +41,7 @@ constexpr std::array kAircraftOperations{
 void test_copter_supports_qualified_operations() {
     for (const auto operation : kAircraftOperations) {
         if (operation == VehicleOperation::VtolTakeoff || operation == VehicleOperation::TransitionToFixedWing ||
+            operation == VehicleOperation::TransitionToVtol ||
             operation == VehicleOperation::FixedWingRoute || operation == VehicleOperation::FixedWingRecovery) {
             CHECK(!nomad::vehicle::supports_operation(AircraftClass::Copter, operation));
         } else {
@@ -67,9 +69,11 @@ void test_quadplane_supports_only_qualified_operations() {
     CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::TransitionToFixedWing));
     CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::FixedWingRoute));
     CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::FixedWingRecovery));
+    CHECK(nomad::vehicle::supports_operation(AircraftClass::QuadPlane, VehicleOperation::TransitionToVtol));
     for (const auto operation : kAircraftOperations) {
         if (operation == VehicleOperation::Arm || operation == VehicleOperation::SetGuidedMode ||
             operation == VehicleOperation::VtolTakeoff || operation == VehicleOperation::TransitionToFixedWing ||
+            operation == VehicleOperation::TransitionToVtol ||
             operation == VehicleOperation::FixedWingRoute || operation == VehicleOperation::FixedWingRecovery) {
             continue;
         }

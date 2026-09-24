@@ -69,6 +69,7 @@ add_library(nomad_core
       src/vehicle/vehicle_route.cpp
       src/vehicle/vehicle_recovery.cpp
     src/vehicle/vehicle_transition.cpp
+    src/vehicle/vehicle_transition_to_vtol.cpp
     src/vehicle/vehicle_velocity.cpp
 )
 
@@ -232,6 +233,11 @@ if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_link_libraries(nomad_quadplane_transition_tests PRIVATE nomad_core)
     target_compile_definitions(nomad_quadplane_transition_tests PRIVATE NOMAD_TESTS)
     add_test(NAME nomad_quadplane_transition_tests COMMAND nomad_quadplane_transition_tests)
+
+    add_executable(nomad_quadplane_transition_to_vtol_tests tests/quadplane_transition_to_vtol_test.cpp)
+    target_link_libraries(nomad_quadplane_transition_to_vtol_tests PRIVATE nomad_core)
+    target_compile_definitions(nomad_quadplane_transition_to_vtol_tests PRIVATE NOMAD_TESTS)
+    add_test(NAME nomad_quadplane_transition_to_vtol_tests COMMAND nomad_quadplane_transition_to_vtol_tests)
 
     add_executable(nomad_quadplane_route_tests tests/quadplane_route_test.cpp)
     target_link_libraries(nomad_quadplane_route_tests PRIVATE nomad_core)

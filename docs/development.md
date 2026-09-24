@@ -161,10 +161,23 @@ ordered aircraft position trace. The recovery harness then repeats that
 sequence and asks NOMAD to reposition to an explicit point near its starting
 route location. Independent post-command position, altitude, mode and VTOL
 telemetry must show the bounded recovery region reached while fixed wing.
-These slices do not qualify disarm, generic
-takeoff/goto, route planning, arbitrary RTL/QRTL, transition back to VTOL, VTOL
-landing, QuadPlane link-loss response or the complete Task 1 flight. Copter mode numbers and
-velocity-stop behavior cannot stand in for those tests. Gazebo/Isaac are
+The transition-back harness repeats the pinned identity/takeoff/forward
+transition/route/recovery sequence. It then gives AUTO one explicit
+`NAV_LOITER_UNLIM` mission item at the recovery point through the independent
+test authority because the pinned transition handler requires AUTO. The
+reference profile enters AUTO in VTOL state; the already-qualified
+`transition-to-fixed-wing` operation reestablishes fixed-wing state before the
+transition-ready dwell starts. NOMAD verifies the pinned frame and tilt
+parameters before it separately requires the aircraft within 40 m of that
+point, 15–25 m relative-home altitude and within 2 m of the requested altitude,
+groundspeed no greater than 20 m/s, climb rate no greater than 1 m/s, and five
+fresh position samples spanning 2 s with bounded altitude/radial variation.
+Completion requires fresh post-ACK `Multicopter` state reports, retained armed
+AUTO mode and two seconds of stable position/velocity telemetry. Run `pixi run
+core-sitl-quadplane-transition-back` for the pinned live sequence. These slices
+do not qualify disarm, generic takeoff/goto, route planning, arbitrary RTL/QRTL,
+VTOL landing, QuadPlane link-loss response or the complete Task 1 flight. Copter
+mode numbers and velocity-stop behavior cannot stand in for those tests. Gazebo/Isaac are
 optional sensor-evidence tools; they are not prerequisites for basic unit or
 server-contract tests. The independent pymavlink mode driver establishes
 `AUTO` because NOMAD deliberately rejects arbitrary QuadPlane `set_mode`; this

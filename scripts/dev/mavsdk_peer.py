@@ -137,16 +137,10 @@ def read_parameters(kind: str, message) -> tuple[float, ...]:
 
 
 class VehiclePeer:
-    """ArduPilot-like peer that streams telemetry and answers commands.
+    """UDP ArduPilot-like peer for command and state parity tests.
 
-    stream=False models a heartbeat-gated relay: the peer listens and records
-    what NOMAD announces but never sends, so no vehicle is ever discovered.
-    coalesce=True models a MAVProxy-style link that joins the frames of a burst
-    into one datagram, acknowledgements included. telemetry_seconds models a
-    vehicle whose heartbeat dies while its delivery path stays open. bind=True
-    makes the port the caller points NOMAD at the peer's own socket, which a
-    silent peer needs: nothing arrives on a port it never bound, so a test that
-    only sends would prove nothing.
+    It can model relay gating, burst coalescing, and a silent bound endpoint.
+    Accepted commands update simulated vehicle state for readback checks.
     """
 
     def __init__(
@@ -165,7 +159,9 @@ class VehiclePeer:
         initial_mode: int = 0,
         initial_armed: bool = False,
         vtol_state: int | None = None,
+        initial_relative_altitude_m: float = 0.0,
         transition_reaches_fixed_wing: bool = True,
+        transition_reaches_multicopter: bool = True,
         transition_reports_intermediate: bool = True,
     ) -> None:
         self._address, self._system_id, self._ack_result = ("127.0.0.1", port), system_id, ack_result
@@ -180,9 +176,15 @@ class VehiclePeer:
         self._fence_arriving: list[tuple[int, float, float, float]] = []
         self._armed, self._custom_mode = initial_armed, initial_mode
         self._transition = TransitionModel.create(
-            vtol_state, vehicle_type, self._params, transition_reaches_fixed_wing, transition_reports_intermediate
+            vtol_state,
+            vehicle_type,
+            self._params,
+            transition_reaches_fixed_wing,
+            transition_reaches_multicopter,
+            transition_reports_intermediate,
         )
-        self._latitude_deg, self._longitude_deg, self._relative_altitude_m = HOME_LATITUDE_DEG, HOME_LONGITUDE_DEG, 0.0
+        self._latitude_deg, self._longitude_deg = HOME_LATITUDE_DEG, HOME_LONGITUDE_DEG
+        self._relative_altitude_m = initial_relative_altitude_m
         self._route_progress = RouteProgress()
         self._commands, self.command_targets = [], []
         self._stop = threading.Event()
@@ -395,15 +397,12 @@ class VehiclePeer:
             self._armed = float(message.param1) > 0.0
         elif command == COMMAND_DO_SET_MODE:
             self._custom_mode = int(float(message.param2))
-        elif command == COMMAND_DO_VTOL_TRANSITION and int(float(message.param1)) == mavlink.MAV_VTOL_STATE_FW:
-            if self._ack_result != ACCEPTED:
-                return
-            if self._transition.reports_intermediate:
-                self._transition.vtol_state = mavlink.MAV_VTOL_STATE_TRANSITION_TO_FW
-                if self._transition.reaches_fixed_wing:
-                    self._transition.finish_at = time.monotonic() + 0.6
-            elif self._transition.reaches_fixed_wing:
-                self._transition.vtol_state = mavlink.MAV_VTOL_STATE_FW
+        elif command == COMMAND_DO_VTOL_TRANSITION and int(float(message.param1)) in (
+            mavlink.MAV_VTOL_STATE_FW,
+            mavlink.MAV_VTOL_STATE_MC,
+        ):
+            if self._ack_result == ACCEPTED:
+                self._transition.request(int(float(message.param1)), time.monotonic())
         elif command == COMMAND_NAV_TAKEOFF:
             self._relative_altitude_m = float(message.param7)
         elif command == COMMAND_DO_REPOSITION and kind == "COMMAND_INT":
@@ -418,9 +417,7 @@ class VehiclePeer:
         if not self._streaming or self._telemetry_ended():
             return
         self._advance_route_position()
-        if self._transition.finish_at is not None and time.monotonic() >= self._transition.finish_at:
-            self._transition.vtol_state = mavlink.MAV_VTOL_STATE_FW
-            self._transition.finish_at = None
+        self._transition.advance(time.monotonic())
         frames = [
             self._heartbeat_message(),
             self._position_message(),

@@ -16,6 +16,7 @@ import core_sitl_quadplane_observe as quadplane  # noqa: E402
 import core_sitl_quadplane_recovery as recovery  # noqa: E402
 import core_sitl_quadplane_route as route  # noqa: E402
 import core_sitl_quadplane_transition as transition  # noqa: E402
+import core_sitl_quadplane_transition_back as transition_back  # noqa: E402
 import core_sitl_quadplane_vtol_takeoff as vtol_takeoff  # noqa: E402
 
 
@@ -151,6 +152,42 @@ def test_quadplane_transition_state_sequence_is_collapsed_without_fabrication() 
         (0.8, transition.VTOL_STATE_FW),
     ]
     assert transition.observed_state_names(states) == ["multicopter", "transition_to_fixed_wing", "fixed_wing"]
+
+
+def test_quadplane_transition_back_harness_uses_reviewed_auto_loiter_setup() -> None:
+    source = (ROOT / "scripts" / "dev" / "core_sitl_quadplane_transition_back.py").read_text(encoding="utf-8")
+    assert '"transition-to-vtol"' in source
+    assert "MAV_CMD_DO_VTOL_TRANSITION" in source
+    assert "MAV_VTOL_STATE_MC" in source
+    assert "MAV_CMD_NAV_LOITER_UNLIM" in source
+    assert "request_observed_mode(port, MODE_AUTO)" in source
+    assert "transition_ready_samples" in source
+    assert "observed_states=" in source
+    assert "final_armed={final['armed']}" in source
+    assert transition_back.READY_RADIUS_METERS == 40.0
+    assert transition_back.READY_DWELL_SECONDS == 2.0
+    assert transition_back.READY_SAMPLE_COUNT == 5
+    assert transition_back.VTOL_DWELL_SECONDS == 2.0
+
+
+def test_quadplane_transition_back_observer_accepts_only_fresh_stable_envelope() -> None:
+    observer = route.RouteObserver(14581)
+    point = (45.5, -73.5, 20.0)
+    observer.positions = [
+        (1.0, 45.5, -73.5, 20.0),
+        (1.5, 45.50001, -73.5, 20.1),
+        (2.0, 45.50002, -73.5, 19.9),
+        (2.5, 45.50001, -73.5, 20.0),
+        (3.1, 45.5, -73.5, 20.0),
+    ]
+    observer.velocities = [(sample[0], 8.0, 0.2) for sample in observer.positions]
+    samples = transition_back.transition_ready_samples(observer, 0.5, point)
+    assert len(samples) == 5
+    assert samples[-1][0] - samples[0][0] >= transition_back.READY_DWELL_SECONDS
+
+    observer.velocities[-1] = (3.1, 21.0, 0.0)
+    samples = transition_back.transition_ready_samples(observer, 0.5, point)
+    assert samples == []
 
 
 def test_quadplane_route_harness_drives_nomad_and_observes_aircraft_positions() -> None:

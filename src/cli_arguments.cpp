@@ -79,6 +79,18 @@ bool consume_fixed_wing_recovery(Arguments &arguments, std::string_view value) {
     return true;
 }
 
+bool consume_transition_to_vtol(Arguments &arguments, std::string_view value) {
+    if (arguments.transition_to_vtol_values.size() >= 3) {
+        return false;
+    }
+    const auto parsed = parse_double(value);
+    if (!parsed.has_value()) {
+        return false;
+    }
+    arguments.transition_to_vtol_values.push_back(*parsed);
+    return true;
+}
+
 bool consume_mode(Arguments &arguments, std::string_view value) {
     if (arguments.mode.has_value()) {
         return false;
@@ -255,6 +267,9 @@ bool consume_verb_value(Arguments &arguments, std::string_view token, int argc, 
     if (command == "fixed-wing-recovery") {
         return consume_fixed_wing_recovery(arguments, token);
     }
+    if (command == "transition-to-vtol") {
+        return consume_transition_to_vtol(arguments, token);
+    }
     if (command == "mode") {
         return consume_mode(arguments, token);
     }
@@ -324,6 +339,9 @@ bool has_required_arguments(const Arguments &arguments) {
     }
     if (command == "fixed-wing-recovery") {
         return arguments.fixed_wing_recovery_values.size() == 3;
+    }
+    if (command == "transition-to-vtol") {
+        return arguments.transition_to_vtol_values.size() == 3;
     }
     return true;
 }

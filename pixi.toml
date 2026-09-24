@@ -286,6 +286,10 @@ env = { NOMAD_API_KEY = "nomad-dev-sitl-key", NOMAD_QUADPLANE_SITL_PORT = "14580
 cmd = "pixi run build-core && python scripts/dev/core_sitl_quadplane_recovery.py"
 env = { NOMAD_API_KEY = "nomad-dev-sitl-key", NOMAD_QUADPLANE_SITL_PORT = "14580" }
 
+[tasks.core-sitl-quadplane-transition-back]
+cmd = "pixi run build-core && python scripts/dev/core_sitl_quadplane_transition_back.py"
+env = { NOMAD_API_KEY = "nomad-dev-sitl-key", NOMAD_QUADPLANE_SITL_PORT = "14580" }
+
 [tasks.core-sitl-command-flow]
 cmd = "pixi run build-core && python scripts/dev/core_sitl_command_flow.py"
 env = { NOMAD_API_KEY = "nomad-dev-sitl-key" }

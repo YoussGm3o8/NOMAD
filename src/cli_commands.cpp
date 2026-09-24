@@ -42,6 +42,11 @@ void print_state(const nomad::telemetry::VehicleState &state) {
                   << " satellites=" << static_cast<int>(state.gps.satellites)
                   << " gps_age_ms=" << age_milliseconds(state.gps_updated_at) << '\n';
     }
+    if (state.velocity_updated_at != std::chrono::steady_clock::time_point{}) {
+        std::cout << "groundspeed_mps=" << state.velocity.groundspeed_mps
+                  << " climb_rate_mps=" << state.velocity.climb_rate_mps
+                  << " velocity_age_ms=" << age_milliseconds(state.velocity_updated_at) << '\n';
+    }
     if (state.attitude_valid) {
         std::cout << "attitude=" << state.attitude.roll_deg << ',' << state.attitude.pitch_deg << ','
                   << state.attitude.yaw_deg << " attitude_age_ms=" << age_milliseconds(state.attitude_updated_at)
