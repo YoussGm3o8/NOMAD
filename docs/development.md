@@ -163,15 +163,19 @@ route location. Independent post-command position, altitude, mode and VTOL
 telemetry must show the bounded recovery region reached while fixed wing.
 The transition-back harness repeats the pinned identity/takeoff/forward
 transition/route/recovery sequence. It then gives AUTO one explicit
-`NAV_LOITER_UNLIM` mission item at the recovery point through the independent
-test authority because the pinned transition handler requires AUTO. The
-reference profile enters AUTO in VTOL state; the already-qualified
+`NAV_LOITER_UNLIM` mission item at the explicit recovery coordinates through the
+independent test authority because the pinned transition handler requires AUTO.
+It captures the first fresh recovered relative altitude as the transition target
+altitude, and rejects setup unless it is within the reviewed 15–25 m band. This
+avoids asking AUTO to climb or descend to the original requested recovery
+altitude. The reference profile enters AUTO in VTOL state; the already-qualified
 `transition-to-fixed-wing` operation reestablishes fixed-wing state before the
 transition-ready dwell starts. NOMAD verifies the pinned frame and tilt
 parameters before it separately requires the aircraft within 40 m of that
-point, 15–25 m relative-home altitude and within 2 m of the requested altitude,
-groundspeed no greater than 20 m/s, climb rate no greater than 1 m/s, and five
-fresh position samples spanning 2 s with bounded altitude/radial variation.
+horizontal point, within 2 m of that captured altitude while remaining within
+15–25 m relative to home, groundspeed no greater than 20 m/s, climb rate no
+greater than 1 m/s, and five fresh position samples spanning 2 s with bounded
+altitude/radial variation.
 Completion requires fresh post-ACK `Multicopter` state reports, retained armed
 AUTO mode and two seconds of stable position/velocity telemetry. Run `pixi run
 core-sitl-quadplane-transition-back` for the pinned live sequence. These slices

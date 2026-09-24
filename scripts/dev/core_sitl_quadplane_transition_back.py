@@ -37,6 +37,8 @@ from pymavlink import mavutil
 TRANSITION_TIMEOUT_SECONDS = 90
 READY_TIMEOUT_SECONDS = 45
 READY_RADIUS_METERS = 40.0
+READY_MIN_ALTITUDE_METERS = 15.0
+READY_MAX_ALTITUDE_METERS = 25.0
 READY_ALTITUDE_TOLERANCE_METERS = 2.0
 READY_MAX_GROUNDSPEED_MPS = 20.0
 READY_MAX_CLIMB_RATE_MPS = 1.0
@@ -123,6 +125,7 @@ def transition_ready_samples(
         if (
             distance <= READY_RADIUS_METERS
             and abs(altitude - point[2]) <= READY_ALTITUDE_TOLERANCE_METERS
+            and READY_MIN_ALTITUDE_METERS <= altitude <= READY_MAX_ALTITUDE_METERS
             and groundspeed <= READY_MAX_GROUNDSPEED_MPS
             and abs(climb_rate) <= READY_MAX_CLIMB_RATE_MPS
         ):
@@ -130,6 +133,46 @@ def transition_ready_samples(
         else:
             samples.clear()
     return samples
+
+
+def transition_ready_diagnostic(observer: RouteObserver, after: float, point: tuple[float, float, float]) -> str:
+    paired = []
+    for position, velocity in zip(observer.positions, observer.velocities, strict=False):
+        timestamp, latitude, longitude, altitude = position
+        velocity_time, groundspeed, climb_rate = velocity
+        if timestamp <= after or abs(timestamp - velocity_time) > 0.05:
+            continue
+        distance = distance_m((latitude, longitude), point[:2])
+        paired.append((timestamp, distance, altitude, groundspeed, climb_rate))
+    if not paired:
+        return "paired_samples=0"
+
+    radius_ok = sum(sample[1] <= READY_RADIUS_METERS for sample in paired)
+    altitude_ok = sum(
+        abs(sample[2] - point[2]) <= READY_ALTITUDE_TOLERANCE_METERS
+        and READY_MIN_ALTITUDE_METERS <= sample[2] <= READY_MAX_ALTITUDE_METERS
+        for sample in paired
+    )
+    speed_ok = sum(sample[3] <= READY_MAX_GROUNDSPEED_MPS for sample in paired)
+    climb_ok = sum(abs(sample[4]) <= READY_MAX_CLIMB_RATE_MPS for sample in paired)
+    ready = [
+        sample
+        for sample in paired
+        if sample[1] <= READY_RADIUS_METERS
+        and abs(sample[2] - point[2]) <= READY_ALTITUDE_TOLERANCE_METERS
+        and READY_MIN_ALTITUDE_METERS <= sample[2] <= READY_MAX_ALTITUDE_METERS
+        and sample[3] <= READY_MAX_GROUNDSPEED_MPS
+        and abs(sample[4]) <= READY_MAX_CLIMB_RATE_MPS
+    ]
+    last = paired[-1]
+    return (
+        f"paired_samples={len(paired)} ready_samples={len(ready)} radius_ok={radius_ok} "
+        f"altitude_ok={altitude_ok} speed_ok={speed_ok} climb_ok={climb_ok} "
+        f"max_groundspeed_mps={max(sample[3] for sample in paired):.1f} "
+        f"max_abs_climb_mps={max(abs(sample[4]) for sample in paired):.1f} "
+        f"last_distance_m={last[1]:.1f} last_altitude_m={last[2]:.1f} "
+        f"last_groundspeed_mps={last[3]:.1f} last_climb_mps={last[4]:.1f}"
+    )
 
 
 def wait_for_transition_ready(
@@ -169,7 +212,8 @@ def wait_for_transition_ready(
                     max(abs(sample[4]) for sample in samples),
                 )
         time.sleep(0.1)
-    raise ScenarioError("independent observer did not prove the stabilized transition-ready envelope")
+    diagnostic = transition_ready_diagnostic(observer, started, point)
+    raise ScenarioError("independent observer did not prove the stabilized transition-ready envelope: " + diagnostic)
 
 
 def has_stable_multicopter_window(samples: list[tuple[float, float, float, float]]) -> bool:
@@ -260,20 +304,26 @@ def request_vtol_transition(
 
 def execute_transition_to_vtol(
     binary: Path, port: str, observer: RouteObserver, point: tuple[float, float, float]
-) -> tuple[list[str], float, float, float, dict[str, str], float, float, float]:
+) -> tuple[list[str], float, float, float, float, dict[str, str], float, float, float]:
     status_before = read_status(binary, port)
     require_fresh_vtol_state(status_before, "fixed_wing")
     if status_before.get("mode") != str(MODE_GUIDED) or status_before.get("armed") != "true":
         raise ScenarioError(f"recovery must end in armed GUIDED fixed-wing state: {status_before}")
     recovery_distance = distance_m(parse_position(status_before), point[:2])
     recovery_altitude_error = abs(parse_relative_altitude(status_before) - point[2])
+    transition_altitude = parse_relative_altitude(status_before)
+    if not READY_MIN_ALTITUDE_METERS <= transition_altitude <= READY_MAX_ALTITUDE_METERS:
+        raise ScenarioError(
+            f"recovered altitude is outside the reviewed 15-25 m transition band: {transition_altitude:.1f} m"
+        )
+    transition_point = (point[0], point[1], transition_altitude)
 
     observer.start()
     try:
         stabilization_time, ready_max_speed, ready_max_climb = establish_transition_ready_state(
-            binary, port, observer, point
+            binary, port, observer, transition_point
         )
-        names, observed_completion_time = request_vtol_transition(binary, port, observer, point)
+        names, observed_completion_time = request_vtol_transition(binary, port, observer, transition_point)
     finally:
         observer.stop()
 
@@ -286,6 +336,7 @@ def execute_transition_to_vtol(
         stabilization_time,
         ready_max_speed,
         ready_max_climb,
+        transition_altitude,
         final,
         observed_completion_time,
         recovery_distance,
@@ -295,7 +346,7 @@ def execute_transition_to_vtol(
 
 def run_transition_qualification(
     binary: Path,
-) -> tuple[list[str], float, float, float, dict[str, str], float, float, float]:
+) -> tuple[list[str], float, float, float, float, dict[str, str], float, float, float]:
     port = get_sitl_port()
     start_position, waypoints = prepare_route(binary, port)
     route_observer = RouteObserver(OBSERVER_PORT)
@@ -311,13 +362,24 @@ def run_transition_qualification(
 
 
 def report_transition_qualification(
-    result: tuple[list[str], float, float, float, dict[str, str], float, float, float],
+    result: tuple[list[str], float, float, float, float, dict[str, str], float, float, float],
 ) -> None:
-    states, stabilization, max_speed, max_climb, final, completion, recovery_distance, altitude_error = result
+    (
+        states,
+        stabilization,
+        max_speed,
+        max_climb,
+        transition_altitude,
+        final,
+        completion,
+        recovery_distance,
+        altitude_error,
+    ) = result
     print(
         "QuadPlane fixed-wing-to-VTOL transition qualification passed: "
         f"recovery_mode=GUIDED transition_mode=AUTO pre_vtol_state=fixed_wing "
         f"recovery_distance_m={recovery_distance:.1f} recovery_altitude_error_m={altitude_error:.1f} "
+        f"transition_point_altitude_m={transition_altitude:.1f} "
         f"stabilization_time_s={stabilization:.1f} command=MAV_CMD_DO_VTOL_TRANSITION "
         f"stabilization_max_groundspeed_mps={max_speed:.1f} "
         f"stabilization_max_abs_climb_mps={max_climb:.1f} target=MAV_VTOL_STATE_MC "

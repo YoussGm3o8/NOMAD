@@ -541,9 +541,11 @@ That handler rejects any current mode except AUTO, sets `auto_state.vtol_mode`
 for the requested multicopter state, clears forward-throttle demand and adjusts
 the pitch limit. The command therefore cannot run directly from recovery's
 armed GUIDED state. The qualification authority installs a single
-`NAV_LOITER_UNLIM` mission item centered on the explicit transition point and
-sets AUTO before NOMAD acts. This is test setup; generic QuadPlane `set_mode`
-remains blocked.
+`NAV_LOITER_UNLIM` mission item at the explicitly reviewed recovery coordinates
+and sets AUTO before NOMAD acts. It uses the fresh recovered relative altitude
+as the transition altitude only when that altitude is inside 15–25 m above
+home. This avoids making the setup climb or descend to the recovery request's
+altitude. This is test setup; generic QuadPlane `set_mode` remains blocked.
 
 The direct transition path is distinct from ArduPlane's VTOL landing approach.
 [`QuadPlane::get_mav_vtol_state`](https://github.com/ArduPilot/ardupilot/blob/dbe792162d06cab66c3475fd5556bf7a120f119e/ArduPlane/quadplane.cpp#L4286-L4309)
@@ -583,15 +585,22 @@ post-ACK sample. This operation requires a separate fixed-wing transition-ready
 state: same nonzero session and system, pinned ArduPilot QuadPlane identity,
 fresh heartbeat, position, velocity, 3D GPS and authoritative fixed-wing VTOL
 state, armed AUTO mode, a valid relative-home target from 15 to 25 m, and current
-position within 40 m of the explicit point and within 2 m of its target altitude.
+position within 40 m of the explicit recovery coordinates and within 2 m of the
+freshly captured post-recovery altitude. The target altitude is captured only
+after the recovery result and is rejected if it falls outside 15–25 m; the
+horizontal center remains the explicitly reviewed recovery point. This keeps
+the transition envelope tied to the intended region while avoiding altitude
+correction during AUTO setup.
 The pinned transition parameters are re-read as `Q_ENABLE=2`,
 `Q_FRAME_CLASS=7`, `Q_TILT_ENABLE=1`, `Q_TILT_MASK=3`, `Q_TILT_TYPE=0`,
 `Q_TILT_RATE_UP=40` and `Q_TILT_MAX=45`, then session, identity and fixed-wing
 state are checked again. Groundspeed must not exceed 20 m/s and
 absolute climb rate 1 m/s. Five distinct fresh position samples must span at
 least 2 s; over those samples altitude may vary by at most 1 m and distance from
-the transition point by at most 8 m. Thus the core independently stabilizes the
-boundary instead of reusing the recovery arrival sample.
+the transition point by at most 8 m. The live harness reports per-limit sample
+counts, peak speed/climb and the final observed distance/altitude if the
+independent readiness proof times out. Thus the core independently stabilizes
+the boundary instead of reusing the recovery arrival sample.
 
 The core then sends exactly one command 3000 request with target state 3. The
 accepted ACK establishes only a verification boundary: the maximum of ACK

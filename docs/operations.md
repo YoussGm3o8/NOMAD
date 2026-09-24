@@ -232,9 +232,11 @@ The semantic direct CLI verb `transition-to-vtol <latitude> <longitude>
 profile. ArduPlane 4.7.1 accepts `MAV_CMD_DO_VTOL_TRANSITION` only in AUTO, so
 the recovered GUIDED aircraft is not ready by itself. An independent operator
 or qualification authority must replace the completed route with one
-`NAV_LOITER_UNLIM` item centered on the explicit transition point and establish
-AUTO. The pinned profile's `Q_ENABLE=2` AUTO entry starts in VTOL AUTO, so the
-already-qualified NOMAD `transition-to-fixed-wing` operation restores
+`NAV_LOITER_UNLIM` item at the explicitly reviewed recovery coordinates and
+establish AUTO. The transition altitude is captured from fresh recovery
+telemetry and must be within 15–25 m above home; this avoids an altitude change
+during setup. The pinned profile's `Q_ENABLE=2` AUTO entry starts in VTOL AUTO,
+so the already-qualified NOMAD `transition-to-fixed-wing` operation restores
 fixed-wing flight before readiness is measured. NOMAD still rejects arbitrary
 QuadPlane `set_mode`, re-reads `Q_ENABLE=2`, and independently requires the
 aircraft to remain armed, in AUTO, fixed-wing and inside the reviewed
@@ -242,12 +244,13 @@ transition-ready envelope. It also verifies the pinned frame and tilt profile
 (`Q_FRAME_CLASS=7`, `Q_TILT_ENABLE=1`, `Q_TILT_MASK=3`, `Q_TILT_TYPE=0`,
 `Q_TILT_RATE_UP=40`, and `Q_TILT_MAX=45`) before transmission.
 
-That envelope is within 40 m horizontally of the requested point, between 15
-and 25 m above home and within 2 m of the requested altitude, with at most
-20 m/s groundspeed and 1 m/s climb rate. Five distinct fresh position samples
-must span 2 s; altitude variation must stay within 1 m and radial-distance
-variation within 8 m. These conditions deliberately tighten the preceding
-recovery completion tolerance of 45 m and 5 m. Success requires an accepted
+That envelope is within 40 m horizontally of the explicit recovery coordinates,
+within 2 m of the captured post-recovery altitude and between 15 and 25 m above
+home, with at most 20 m/s groundspeed and 1 m/s climb rate. Five distinct fresh
+position samples must span 2 s; altitude variation must stay within 1 m and
+radial-distance variation within 8 m. These conditions separate transition
+readiness from the preceding recovery completion tolerance of 45 m and 5 m.
+Success requires an accepted
 ACK followed by newer authoritative `VTOL_STATE=Multicopter` observations and
 two seconds of stable fresh position/velocity, with the aircraft still armed
 in AUTO. The command does not land or disarm. VTOL landing, generic land/RTL/QRTL, link-loss/manual
