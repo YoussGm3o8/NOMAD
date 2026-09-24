@@ -648,7 +648,23 @@ fresh telemetry, armed AUTO mode, the 15 m minimum altitude floor, authoritative
 newer multicopter reports and the two-second stable-position requirement. The full Copter
 regression in the same workflow passed at this code head (job `107536628135`);
 it provides regression evidence only and does not qualify transition-back. The
-transition attempt is diagnostic only.
+failed transition attempt is diagnostic only.
+
+The corrected exact-head workflow `35973919013` passed both the transition-back
+qualification and full Copter regression on
+`3b1efb9b5bb3840f9957fae12b18103e167fa1a2`. The repeated route/recovery setup
+again passed; recovery completed 42.3 m from the requested point with 4.3 m
+altitude error in 10.5 s. After the independent AUTO loiter setup and the
+already-qualified fixed-wing transition, NOMAD proved readiness with a 20.0 m
+target altitude, 50.8 m maximum distance, 21.1 s stabilization, 25.4 m/s
+maximum groundspeed and 0.4 m/s maximum absolute climb. It sent command 3000
+with target `MAV_VTOL_STATE_MC`; the observer saw exactly
+`[fixed_wing, multicopter]` and no guaranteed intermediate state. Stable
+post-ACK completion took 45.7 s, with final mode 10 (AUTO) and armed state.
+The transition operation and all exact-head ordinary CI checks passed. This
+qualifies the pinned SITL transition to armed multicopter flight only; it does
+not qualify VTOL landing, autonomous GUIDED-to-AUTO setup, manual takeover or
+hardware flight.
 The independent observer reports the maximum distance of its stable readiness
 window. The 28 m/s ceiling allows 1.2 m/s above the previously measured peak.
 Both are still bounded by the 2 s dwell, 8 m radial variation, 3 m/s speed
@@ -673,10 +689,9 @@ Deterministic C++ falsification covers unsupported aircraft classes, every
 pre-admission gate with zero transmission, outside-envelope and undwelled
 states, command id/target params, missing/denied ACK, ACK-only, pre-ACK state,
 intermediate-only state, session/heartbeat/disarm/mode interruptions and stable
-post-ACK completion. The MAVSDK peer checks COMMAND_LONG, command 3000, the
-target system/component, param1=3 and denied ACK handling. Exact-head pinned
-QuadPlane and full Copter hosted results are recorded in this section after
-the PR workflows complete.
+post-ACK completion, including a measured 25.197 m transition climb and a
+post-command 15 m floor. The MAVSDK peer checks COMMAND_LONG, command 3000, the
+target system/component, param1=3 and denied ACK handling.
 
 ### Aircraft operation capability boundary - 2026-09-23
 

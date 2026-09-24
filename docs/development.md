@@ -195,6 +195,14 @@ server-contract tests. The independent pymavlink mode driver establishes
 does not qualify an autonomous GUIDED -> AUTO -> transition sequence or transfer
 command authority to the test driver.
 
+Exact-head hosted [run 35973919013](https://github.com/YoussGm3o8/NOMAD/actions/runs/35973919013)
+passed the pinned transition and full Copter regression at
+`3b1efb9b5bb3840f9957fae12b18103e167fa1a2`. The transition observer reported
+50.8 m maximum readiness distance, 21.1 s stabilization, 25.4 m/s groundspeed,
+0.4 m/s maximum climb, observed states `[fixed_wing, multicopter]`, completion
+in 45.7 s, final AUTO mode 10 and armed state. This remains SITL evidence and
+does not establish landing or hardware qualification.
+
 ## Adapter and optional build checks
 
 The `build-core-mavsdk` and `mavsdk-phase-a-smoke` task names are historical:

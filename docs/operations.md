@@ -267,6 +267,13 @@ does not land or disarm. VTOL landing, generic land/RTL/QRTL, link-loss/manual
 takeover and hardware flight remain unqualified. Runtime IPC v1 does not expose
 the operation.
 
+The pinned exact-head hosted [run 35973919013](https://github.com/YoussGm3o8/NOMAD/actions/runs/35973919013)
+passed the transition and full Copter regression at
+`3b1efb9b5bb3840f9957fae12b18103e167fa1a2`. The independent observer recorded
+`fixed_wing -> multicopter`, 21.1 s stabilization and final armed AUTO mode 10.
+The evidence is limited to the pinned SITL profile; landing and hardware flight
+remain unqualified.
+
 ## Observability and evidence
 
 Display ownship and each field's age, aircraft type/mode, command owner/outcome,

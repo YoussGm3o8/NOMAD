@@ -115,10 +115,38 @@ close its integration or release gate.
   Falsification: an ACK, stale or pre-command position, insufficient progress,
   or interrupted session is reported as recovery.
 
-- [~] G-M QuadPlane fixed-wing to VTOL transition qualification: select and
-  qualify one pinned-profile transition from the recovered armed GUIDED
-  fixed-wing state, with authoritative post-command VTOL-state evidence and
-  failure-path tests. VTOL landing remains a later separate slice.
+- [x] G-M QuadPlane fixed-wing to VTOL transition qualification: pinned ArduPlane
+  4.7.1 accepts `MAV_CMD_DO_VTOL_TRANSITION` (3000) with
+  `param1=MAV_VTOL_STATE_MC` only in AUTO. An independent loiter setup moves the
+  recovered armed GUIDED fixed-wing aircraft into AUTO; NOMAD then requires the
+  stable 15–25 m/55 m transition-ready envelope before sending the request.
+  Exact-head hosted [run 35973919013](https://github.com/YoussGm3o8/NOMAD/actions/runs/35973919013)
+  passed at `3b1efb9b5bb3840f9957fae12b18103e167fa1a2`, with full Copter
+  regression success. The independent observer saw
+  `fixed_wing -> multicopter`, 50.8 m maximum ready distance, 21.1 s dwell,
+  25.4 m/s maximum speed, 0.4 m/s maximum climb, 45.7 s completion, final AUTO
+  mode 10 and armed state. ArduPlane emitted no intermediate transition state.
+  This proves transition to multicopter flight only; landing remains separate.
+  Falsification: an ACK, pre-ACK multicopter state, stale telemetry, gate failure,
+  non-multicopter final state, unstable position, disarm or unexpected mode is
+  reported as transition completion.
+
+- [~] G-M QuadPlane VTOL landing qualification: select and qualify one pinned
+  QuadPlane VTOL landing mechanism from the armed stable multicopter state, with
+  authoritative touchdown/landing completion. Generic land and RTL/QRTL remain
+  blocked.
+
+- [ ] G-M QuadPlane link-loss/manual takeover qualification: define and prove
+  the aircraft and operator response to lost link during supported QuadPlane
+  states, without disabling ArduPilot failsafes.
+
+- [ ] G-M complete Task 1 flight qualification: integrate the separately
+  qualified QuadPlane phases into one end-to-end flight and prove the full
+  mission outcome.
+
+- [ ] G-M QuadPlane hardware qualification: repeat the reviewed aircraft
+  configuration and flight evidence on hardware with an authorized safety
+  process.
 
 - [x] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
   datagram parsing, prove nonzero-then-zero ordering independently, and rerun the
