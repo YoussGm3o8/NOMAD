@@ -120,8 +120,8 @@ class Vehicle {
     CommandResult wait_for_transition_ready(const RecoveryPoint &point, std::uint64_t expected_session_id,
                                             std::uint8_t expected_system_id, std::uint8_t expected_component_id,
                                             std::chrono::steady_clock::time_point deadline);
-    CommandResult verify_transition_profile(const RecoveryPoint &point, std::uint64_t expected_session_id,
-                                            std::uint8_t expected_system_id, std::uint8_t expected_component_id,
+    CommandResult verify_transition_profile(std::uint64_t expected_session_id, std::uint8_t expected_system_id,
+                                            std::uint8_t expected_component_id,
                                             std::chrono::steady_clock::time_point deadline);
     CommandResult wait_for_multicopter_state(const RecoveryPoint &point, std::uint64_t expected_session_id,
                                               std::uint8_t expected_system_id, std::uint8_t expected_component_id,

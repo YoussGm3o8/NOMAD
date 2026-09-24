@@ -235,8 +235,7 @@ or qualification authority must replace the completed route with one
 `NAV_LOITER_UNLIM` item at the explicitly reviewed recovery coordinates and
 establish AUTO. Fresh recovered altitude must be within 15–25 m above home.
 The test authority keeps the explicit recovery-point altitude as the AUTO loiter
-target, and NOMAD waits for the aircraft to settle within 2 m before sending the
-transition. The pinned profile's `Q_ENABLE=2` AUTO entry starts in VTOL AUTO,
+target. The pinned profile's `Q_ENABLE=2` AUTO entry starts in VTOL AUTO,
 so the already-qualified NOMAD `transition-to-fixed-wing` operation restores
 fixed-wing flight before readiness is measured. NOMAD still rejects arbitrary
 QuadPlane `set_mode`, re-reads `Q_ENABLE=2`, and independently requires the
@@ -248,10 +247,11 @@ transition-ready envelope. It also verifies the pinned frame and tilt profile
 effect on this AUTO-only transition handler.
 
 That envelope is within 55 m horizontally of the explicit recovery coordinates,
-within 2 m of the explicit recovery-point altitude and between 15 and 25 m above
-home, with at most 28 m/s groundspeed, at most 3 m/s groundspeed variation and
-1 m/s climb rate. Five distinct fresh position samples must span 2 s; altitude
-variation must stay within 1 m and radial-distance variation within 8 m. The
+with the requested and measured altitude both between 15 and 25 m above home,
+with at most 28 m/s groundspeed, at most 3 m/s groundspeed variation and 1 m/s
+climb rate. The measured altitude may differ from the loiter target within this
+band, but five distinct fresh position samples must span 2 s with altitude
+variation within 1 m and radial-distance variation within 8 m. The
 55 m boundary extends beyond the measured recovery completion point; it is
 separate from the recovery completion tolerance of 45 m and 5 m. The live
 observer reports the farthest sample in its stable readiness window. The dwell,

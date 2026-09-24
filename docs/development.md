@@ -167,13 +167,14 @@ transition/route/recovery sequence. It then gives AUTO one explicit
 independent test authority because the pinned transition handler requires AUTO.
 It verifies the first fresh recovered relative altitude is inside the reviewed
 15–25 m band, then keeps the explicit recovery-point altitude as the AUTO loiter
-and transition target. NOMAD waits until the aircraft settles within 2 m of that
-target before sending the transition. The reference profile enters AUTO in
-VTOL state. The already-qualified `transition-to-fixed-wing` operation restores
-fixed-wing state before the transition-ready dwell starts. NOMAD verifies the
-pinned frame and tilt parameters before it requires the aircraft within 55 m of
-the horizontal point and within 2 m of the explicit recovery-point altitude.
-It must remain within 15–25 m relative to home, at no more than 28 m/s
+and transition target. The reference profile enters AUTO in VTOL state. The
+already-qualified `transition-to-fixed-wing` operation restores fixed-wing
+state before the transition-ready dwell starts. NOMAD verifies the pinned
+frame and tilt parameters before it requires the measured altitude and requested
+loiter altitude to remain within 15–25 m relative to home, and the aircraft
+within 55 m of the horizontal point. The measured altitude need not exactly
+match the mission target; its five fresh samples must vary by no more than 1 m.
+It must remain at no more than 28 m/s
 groundspeed with at most 3 m/s variation and at most 1 m/s climb rate. Five
 fresh position samples must span 2 s, with bounded altitude and radial variation.
 The 55 m radius extends

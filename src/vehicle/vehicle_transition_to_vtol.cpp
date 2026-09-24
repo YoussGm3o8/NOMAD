@@ -27,7 +27,6 @@ constexpr double kReadyMaxClimbRateMps = 1.0;
 constexpr double kReadyMaxRadialVariationMeters = 8.0;
 constexpr float kTransitionAltitudeMinimumMeters = 15.0F;
 constexpr float kTransitionAltitudeMaximumMeters = 25.0F;
-constexpr float kTransitionAltitudeToleranceMeters = 2.0F;
 constexpr float kReadyMaxAltitudeVariationMeters = 1.0F;
 constexpr float kVtolMaxGroundspeedMps = 3.0F;
 constexpr float kVtolMaxClimbRateMps = 0.5F;
@@ -123,7 +122,6 @@ bool timestamp_is_fresh(Clock::time_point timestamp, std::chrono::milliseconds t
 
 std::optional<std::string> transition_state_error(const telemetry::VehicleState &state, std::uint64_t expected_session,
                                                   std::uint8_t expected_system_id, std::uint8_t expected_component_id,
-                                                  const RecoveryPoint &point,
                                                   std::chrono::milliseconds telemetry_freshness) {
     if (state.identity.aircraft_class != telemetry::AircraftClass::QuadPlane ||
         state.identity.autopilot_type != telemetry::kArduPilotAutopilot ||
@@ -170,12 +168,6 @@ std::optional<std::string> transition_state_error(const telemetry::VehicleState 
         state.position.relative_altitude_m > kTransitionAltitudeMaximumMeters) {
         return "aircraft altitude " + std::to_string(state.position.relative_altitude_m) +
                " m is outside the reviewed 15-25 m transition band";
-    }
-    if (state.position.relative_altitude_m < point.relative_altitude_m - kTransitionAltitudeToleranceMeters ||
-        state.position.relative_altitude_m > point.relative_altitude_m + kTransitionAltitudeToleranceMeters) {
-        return "aircraft altitude " + std::to_string(state.position.relative_altitude_m) +
-               " m differs from the transition target " + std::to_string(point.relative_altitude_m) +
-               " m by more than 2 m";
     }
     return {};
 }
@@ -305,7 +297,7 @@ CommandResult Vehicle::transition_to_vtol(const RecoveryPoint &point) {
     const auto session_id = initial.session_id;
     const auto system_id = initial.system_id;
     const auto component_id = initial.component_id;
-    if (const auto error = transition_state_error(initial, session_id, system_id, component_id, point,
+    if (const auto error = transition_state_error(initial, session_id, system_id, component_id,
                                                   position_freshness_timeout_);
         error.has_value()) {
         return {false, "transition to VTOL rejected: " + *error};
@@ -314,7 +306,7 @@ CommandResult Vehicle::transition_to_vtol(const RecoveryPoint &point) {
         return {false, "transition to VTOL rejected: authoritative VTOL state is not fixed wing"};
     }
 
-    const auto profile = verify_transition_profile(point, session_id, system_id, component_id, deadline);
+    const auto profile = verify_transition_profile(session_id, system_id, component_id, deadline);
     if (!profile.success) {
         return profile;
     }
@@ -348,8 +340,8 @@ CommandResult Vehicle::transition_to_vtol(const RecoveryPoint &point) {
     return wait_for_multicopter_state(point, session_id, system_id, component_id, ack_boundary, deadline);
 }
 
-CommandResult Vehicle::verify_transition_profile(const RecoveryPoint &point, std::uint64_t session_id,
-                                                 std::uint8_t system_id, std::uint8_t component_id,
+CommandResult Vehicle::verify_transition_profile(std::uint64_t session_id, std::uint8_t system_id,
+                                                 std::uint8_t component_id,
                                                  Clock::time_point deadline) {
     const auto timeout = std::chrono::duration_cast<std::chrono::milliseconds>(kProfileReadbackTimeout);
     for (const auto &parameter : kPinnedTransitionParameters) {
@@ -365,7 +357,7 @@ CommandResult Vehicle::verify_transition_profile(const RecoveryPoint &point, std
     }
 
     const auto state = connection_.get_state();
-    if (const auto error = transition_state_error(state, session_id, system_id, component_id, point,
+    if (const auto error = transition_state_error(state, session_id, system_id, component_id,
                                                   position_freshness_timeout_);
         error.has_value()) {
         return {false, "transition to VTOL rejected after profile readback: " + *error};
@@ -385,7 +377,7 @@ CommandResult Vehicle::wait_for_transition_ready(const RecoveryPoint &point, std
     while (Clock::now() < deadline) {
         const auto update = connection_.wait_for_state(kPollTimeout);
         const auto sample = update.value_or(connection_.get_state());
-        if (const auto error = transition_state_error(sample, session_id, system_id, component_id, point,
+        if (const auto error = transition_state_error(sample, session_id, system_id, component_id,
                                                       position_freshness_timeout_);
             error.has_value()) {
             return {false, "transition to VTOL readiness failed: " + *error};
@@ -410,7 +402,7 @@ CommandResult Vehicle::wait_for_multicopter_state(const RecoveryPoint &point, st
     while (Clock::now() < deadline) {
         const auto update = connection_.wait_for_state(kPollTimeout);
         const auto sample = update.value_or(connection_.get_state());
-        if (const auto error = transition_state_error(sample, session_id, system_id, component_id, point,
+        if (const auto error = transition_state_error(sample, session_id, system_id, component_id,
                                                       position_freshness_timeout_);
             error.has_value()) {
             return {false, "transition to VTOL verification failed: " + *error};
@@ -447,7 +439,7 @@ CommandResult Vehicle::verify_final_multicopter_state(const RecoveryPoint &point
                                                       std::uint8_t system_id, std::uint8_t component_id,
                                                       Clock::time_point ack_boundary) const {
     const auto final = connection_.get_state();
-    if (const auto error = transition_state_error(final, session_id, system_id, component_id, point,
+    if (const auto error = transition_state_error(final, session_id, system_id, component_id,
                                                   position_freshness_timeout_);
         error.has_value()) {
         return {false, "transition to VTOL verification failed: " + *error};

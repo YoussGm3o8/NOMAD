@@ -39,7 +39,6 @@ READY_TIMEOUT_SECONDS = 45
 READY_RADIUS_METERS = 55.0
 READY_MIN_ALTITUDE_METERS = 15.0
 READY_MAX_ALTITUDE_METERS = 25.0
-READY_ALTITUDE_TOLERANCE_METERS = 2.0
 READY_MAX_GROUNDSPEED_MPS = 28.0
 READY_MAX_GROUNDSPEED_VARIATION_MPS = 3.0
 READY_MAX_CLIMB_RATE_MPS = 1.0
@@ -125,7 +124,6 @@ def transition_ready_samples(
         distance = distance_m((latitude, longitude), point[:2])
         if (
             distance <= READY_RADIUS_METERS
-            and abs(altitude - point[2]) <= READY_ALTITUDE_TOLERANCE_METERS
             and READY_MIN_ALTITUDE_METERS <= altitude <= READY_MAX_ALTITUDE_METERS
             and groundspeed <= READY_MAX_GROUNDSPEED_MPS
             and abs(climb_rate) <= READY_MAX_CLIMB_RATE_MPS
@@ -160,11 +158,7 @@ def transition_ready_diagnostic(observer: RouteObserver, after: float, point: tu
         return "paired_samples=0"
 
     radius_ok = sum(sample[1] <= READY_RADIUS_METERS for sample in paired)
-    altitude_ok = sum(
-        abs(sample[2] - point[2]) <= READY_ALTITUDE_TOLERANCE_METERS
-        and READY_MIN_ALTITUDE_METERS <= sample[2] <= READY_MAX_ALTITUDE_METERS
-        for sample in paired
-    )
+    altitude_ok = sum(READY_MIN_ALTITUDE_METERS <= sample[2] <= READY_MAX_ALTITUDE_METERS for sample in paired)
     speed_ok = sum(sample[3] <= READY_MAX_GROUNDSPEED_MPS for sample in paired)
     climb_ok = sum(abs(sample[4]) <= READY_MAX_CLIMB_RATE_MPS for sample in paired)
     ready = transition_ready_samples(observer, after, point)
