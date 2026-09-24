@@ -164,10 +164,36 @@ std::optional<std::string> transition_state_error(const telemetry::VehicleState 
         !std::isfinite(state.velocity.groundspeed_mps) || !std::isfinite(state.velocity.climb_rate_mps)) {
         return "velocity telemetry is unavailable or stale";
     }
+    return {};
+}
+
+std::optional<std::string> transition_ready_state_error(
+    const telemetry::VehicleState &state, std::uint64_t expected_session, std::uint8_t expected_system_id,
+    std::uint8_t expected_component_id, std::chrono::milliseconds telemetry_freshness) {
+    if (const auto error = transition_state_error(state, expected_session, expected_system_id, expected_component_id,
+                                                  telemetry_freshness);
+        error.has_value()) {
+        return error;
+    }
     if (state.position.relative_altitude_m < kTransitionAltitudeMinimumMeters ||
         state.position.relative_altitude_m > kTransitionAltitudeMaximumMeters) {
         return "aircraft altitude " + std::to_string(state.position.relative_altitude_m) +
                " m is outside the reviewed 15-25 m transition band";
+    }
+    return {};
+}
+
+std::optional<std::string> multicopter_verification_state_error(
+    const telemetry::VehicleState &state, std::uint64_t expected_session, std::uint8_t expected_system_id,
+    std::uint8_t expected_component_id, std::chrono::milliseconds telemetry_freshness) {
+    if (const auto error = transition_state_error(state, expected_session, expected_system_id, expected_component_id,
+                                                  telemetry_freshness);
+        error.has_value()) {
+        return error;
+    }
+    if (state.position.relative_altitude_m < kTransitionAltitudeMinimumMeters) {
+        return "aircraft altitude " + std::to_string(state.position.relative_altitude_m) +
+               " m fell below the 15 m transition safety floor";
     }
     return {};
 }
@@ -297,8 +323,8 @@ CommandResult Vehicle::transition_to_vtol(const RecoveryPoint &point) {
     const auto session_id = initial.session_id;
     const auto system_id = initial.system_id;
     const auto component_id = initial.component_id;
-    if (const auto error = transition_state_error(initial, session_id, system_id, component_id,
-                                                  position_freshness_timeout_);
+    if (const auto error = transition_ready_state_error(initial, session_id, system_id, component_id,
+                                                       position_freshness_timeout_);
         error.has_value()) {
         return {false, "transition to VTOL rejected: " + *error};
     }
@@ -357,8 +383,8 @@ CommandResult Vehicle::verify_transition_profile(std::uint64_t session_id, std::
     }
 
     const auto state = connection_.get_state();
-    if (const auto error = transition_state_error(state, session_id, system_id, component_id,
-                                                  position_freshness_timeout_);
+    if (const auto error = transition_ready_state_error(state, session_id, system_id, component_id,
+                                                       position_freshness_timeout_);
         error.has_value()) {
         return {false, "transition to VTOL rejected after profile readback: " + *error};
     }
@@ -377,8 +403,8 @@ CommandResult Vehicle::wait_for_transition_ready(const RecoveryPoint &point, std
     while (Clock::now() < deadline) {
         const auto update = connection_.wait_for_state(kPollTimeout);
         const auto sample = update.value_or(connection_.get_state());
-        if (const auto error = transition_state_error(sample, session_id, system_id, component_id,
-                                                      position_freshness_timeout_);
+        if (const auto error = transition_ready_state_error(sample, session_id, system_id, component_id,
+                                                           position_freshness_timeout_);
             error.has_value()) {
             return {false, "transition to VTOL readiness failed: " + *error};
         }
@@ -402,8 +428,8 @@ CommandResult Vehicle::wait_for_multicopter_state(const RecoveryPoint &point, st
     while (Clock::now() < deadline) {
         const auto update = connection_.wait_for_state(kPollTimeout);
         const auto sample = update.value_or(connection_.get_state());
-        if (const auto error = transition_state_error(sample, session_id, system_id, component_id,
-                                                      position_freshness_timeout_);
+        if (const auto error = multicopter_verification_state_error(sample, session_id, system_id, component_id,
+                                                                    position_freshness_timeout_);
             error.has_value()) {
             return {false, "transition to VTOL verification failed: " + *error};
         }
@@ -439,8 +465,8 @@ CommandResult Vehicle::verify_final_multicopter_state(const RecoveryPoint &point
                                                       std::uint8_t system_id, std::uint8_t component_id,
                                                       Clock::time_point ack_boundary) const {
     const auto final = connection_.get_state();
-    if (const auto error = transition_state_error(final, session_id, system_id, component_id,
-                                                  position_freshness_timeout_);
+    if (const auto error = multicopter_verification_state_error(final, session_id, system_id, component_id,
+                                                                position_freshness_timeout_);
         error.has_value()) {
         return {false, "transition to VTOL verification failed: " + *error};
     }

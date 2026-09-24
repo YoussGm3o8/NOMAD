@@ -25,6 +25,7 @@ enum class BackTransitionBehavior { MulticopterAfterAck, NoChange, IntermediateO
 class VtolTransitionFakeConnection final : public FakeConnection {
   public:
     BackTransitionBehavior behavior{BackTransitionBehavior::MulticopterAfterAck};
+    std::optional<float> post_transition_altitude_m;
 
     std::optional<nomad::mavlink::CommandAck> send_command(const nomad::mavlink::Command &command,
                                                            std::chrono::milliseconds timeout) override {
@@ -70,6 +71,10 @@ class VtolTransitionFakeConnection final : public FakeConnection {
             return sample;
         }
         set_vtol_state(VtolState::Multicopter);
+        if (post_transition_altitude_m.has_value()) {
+            state->position.relative_altitude_m = *post_transition_altitude_m;
+            state->position_updated_at = std::chrono::steady_clock::now();
+        }
         complete_after_ack_on_poll_ = false;
         return get_state();
     }
@@ -201,7 +206,7 @@ void test_transition_to_vtol_requires_quadplane_and_reviewed_ready_state() {
     check_rejects_before_transition(changed_session);
 }
 
-void test_transition_to_vtol_enforces_altitude_band() {
+void test_transition_to_vtol_enforces_pre_transition_altitude_band() {
     FakeConnection outside_band;
     configure_transition_ready_state(outside_band);
     outside_band.state->position.relative_altitude_m = 12.0F;
@@ -229,6 +234,29 @@ void test_transition_to_vtol_enforces_altitude_band() {
     CHECK(stable_altitude_result.success);
     CHECK(altitude_differs_from_recovery_point.command_history.size() == 1);
     CHECK(altitude_differs_from_recovery_point.state->vtol_state == VtolState::Multicopter);
+}
+
+void test_transition_to_vtol_allows_transition_climb_but_keeps_altitude_floor() {
+    VtolTransitionFakeConnection climbs_during_transition;
+    configure_transition_ready_state(climbs_during_transition);
+    climbs_during_transition.post_transition_altitude_m = 25.197F;
+    auto climb_vehicle = short_vehicle(climbs_during_transition, std::chrono::seconds(3),
+                                       std::chrono::milliseconds(10));
+    const auto climbed_result = climb_vehicle.transition_to_vtol(kTransitionPoint);
+    CHECK(climbed_result.success);
+    CHECK(climbs_during_transition.command_history.size() == 1);
+    CHECK(climbs_during_transition.state->position.relative_altitude_m == 25.197F);
+    CHECK(climbs_during_transition.state->vtol_state == VtolState::Multicopter);
+
+    VtolTransitionFakeConnection falls_below_floor;
+    configure_transition_ready_state(falls_below_floor);
+    falls_below_floor.post_transition_altitude_m = 14.9F;
+    auto floor_vehicle = short_vehicle(falls_below_floor, std::chrono::seconds(3),
+                                       std::chrono::milliseconds(10));
+    const auto floor_result = floor_vehicle.transition_to_vtol(kTransitionPoint);
+    CHECK(!floor_result.success);
+    CHECK(floor_result.message.find("fell below the 15 m transition safety floor") != std::string::npos);
+    CHECK(falls_below_floor.command_history.size() == 1);
 }
 
 void test_transition_to_vtol_sends_multicopter_target_and_verifies_stability() {
@@ -320,7 +348,8 @@ void test_transition_to_vtol_accepts_only_safe_state_progression() {
 int main() {
     return nomad::test::run_tests([] {
         test_transition_to_vtol_requires_quadplane_and_reviewed_ready_state();
-        test_transition_to_vtol_enforces_altitude_band();
+        test_transition_to_vtol_enforces_pre_transition_altitude_band();
+        test_transition_to_vtol_allows_transition_climb_but_keeps_altitude_floor();
         test_transition_to_vtol_sends_multicopter_target_and_verifies_stability();
         test_transition_to_vtol_ack_and_state_are_independent();
         test_transition_to_vtol_accepts_only_safe_state_progression();

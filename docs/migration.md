@@ -544,8 +544,9 @@ armed GUIDED state. The qualification authority installs a single
 `NAV_LOITER_UNLIM` mission item at the explicitly reviewed recovery coordinates
 and sets AUTO before NOMAD acts. The loiter item keeps the explicit
 recovery-point altitude. Both the requested loiter altitude and measured
-aircraft altitude must independently be inside 15–25 m above home. The core
-then requires a five-sample, two-second readiness window with no more than 1 m
+aircraft altitude must independently be inside 15–25 m above home before
+command transmission. The core then requires a five-sample, two-second readiness
+window with no more than 1 m
 of altitude variation; it does not require instantaneous altitude to match the
 loiter target. Generic QuadPlane `set_mode` remains blocked.
 
@@ -587,10 +588,11 @@ post-ACK sample. This operation requires a separate fixed-wing transition-ready
 state: same nonzero session and system, pinned ArduPilot QuadPlane identity,
 fresh heartbeat, position, velocity, 3D GPS and authoritative fixed-wing VTOL
 state, armed AUTO mode, a valid relative-home target from 15 to 25 m, and current
-position within 55 m of the explicit recovery coordinates. Both the requested
-loiter altitude and measured aircraft altitude must independently be inside
-15–25 m above home. The measured altitude need not match the loiter target:
-five distinct fresh position samples must remain within a 1 m altitude range
+position within 55 m of the explicit recovery coordinates. Before command
+transmission, both the requested loiter altitude and measured aircraft altitude
+must independently be inside 15–25 m above home. The measured altitude need
+not match the loiter target: five distinct fresh position samples must remain
+within a 1 m altitude range
 for at least 2 s, independently proving the aircraft has settled. This separates
 recovery's broad arrival tolerance from the narrower transition-ready band.
 The pinned transition parameters are re-read as `Q_ENABLE=2`,
@@ -618,7 +620,10 @@ altitude outside its reviewed gate before sending command 3000. That failure
 did not clearly distinguish the absolute 15–25 m band from the target-match
 check. The core was updated to report those conditions separately.
 The qualification keeps the original 20 m recovery target and requires the AUTO
-loiter state to settle within the existing 15–25 m band before transmission.
+loiter state to settle within the 15–25 m band before transmission. The band is
+a pre-transition admission envelope; after command acceptance the aircraft must
+stay at or above 15 m, but the 25 m ceiling does not constrain climb during
+transition.
 The next exact-head attempt, `35962664640` at `8b77a4052504c550e356c1d706151b4748decadf`,
 completed route and recovery, and the independent observer established the
 stable readiness window. NOMAD sent command 3000 and entered post-ACK
@@ -628,8 +633,22 @@ recovery-point target, a 2.303 m difference, while still inside the 15–25 m
 band. That run did not prove stable final multicopter state. The extra ±2 m
 target-match rule added no terrain/ground separation evidence beyond the
 absolute altitude band and the 1 m stable-window limit, so it is removed while
-both target and measured altitude remain band-limited. This run is diagnostic,
-not transition qualification evidence.
+both target and measured altitude remain band-limited before command
+transmission. This run is diagnostic, not transition qualification evidence.
+
+The corrected exact-head attempt `35969810201` at
+`20a3c520f9323ce7955bfc4d77bf224f7f9aa5f1` repeated the route and recovery.
+Recovery completed at 40.4 m horizontal distance with 3.2 m altitude error.
+After the readiness window, ArduPlane accepted command 3000 and logged
+`Entered VTOL mode`; post-ACK telemetry then reached 25.197 m and the core
+failed because the 25 m pre-transition ceiling was still applied during
+verification. That run did not prove stable final multicopter state. The
+validator now applies 15–25 m only before transmission. After ACK, it retains
+fresh telemetry, armed AUTO mode, the 15 m minimum altitude floor, authoritative
+newer multicopter reports and the two-second stable-position requirement. The full Copter
+regression in the same workflow passed at this code head (job `107536628135`);
+it provides regression evidence only and does not qualify transition-back. The
+transition attempt is diagnostic only.
 The independent observer reports the maximum distance of its stable readiness
 window. The 28 m/s ceiling allows 1.2 m/s above the previously measured peak.
 Both are still bounded by the 2 s dwell, 8 m radial variation, 3 m/s speed

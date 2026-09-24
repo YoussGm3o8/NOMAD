@@ -171,8 +171,10 @@ and transition target. The reference profile enters AUTO in VTOL state. The
 already-qualified `transition-to-fixed-wing` operation restores fixed-wing
 state before the transition-ready dwell starts. NOMAD verifies the pinned
 frame and tilt parameters before it requires the measured altitude and requested
-loiter altitude to remain within 15–25 m relative to home, and the aircraft
-within 55 m of the horizontal point. The measured altitude need not exactly
+loiter altitude to be within 15–25 m relative to home before command
+transmission, and the aircraft within 55 m of the horizontal point. Post-ACK
+verification retains a 15 m minimum altitude floor but has no 25 m upper ceiling during
+transition climb. The measured altitude need not exactly
 match the mission target; its five fresh samples must vary by no more than 1 m.
 It must remain at no more than 28 m/s
 groundspeed with at most 3 m/s variation and at most 1 m/s climb rate. Five

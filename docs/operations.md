@@ -247,7 +247,8 @@ transition-ready envelope. It also verifies the pinned frame and tilt profile
 effect on this AUTO-only transition handler.
 
 That envelope is within 55 m horizontally of the explicit recovery coordinates,
-with the requested and measured altitude both between 15 and 25 m above home,
+with the requested and measured altitude both between 15 and 25 m above home
+before transmission,
 with at most 28 m/s groundspeed, at most 3 m/s groundspeed variation and 1 m/s
 climb rate. The measured altitude may differ from the loiter target within this
 band, but five distinct fresh position samples must span 2 s with altitude
@@ -260,7 +261,9 @@ without settling into a stable loiter.
 Success requires an accepted
 ACK followed by newer authoritative `VTOL_STATE=Multicopter` observations and
 two seconds of stable fresh position/velocity, with the aircraft still armed
-in AUTO. The command does not land or disarm. VTOL landing, generic land/RTL/QRTL, link-loss/manual
+in AUTO. After transmission altitude must remain at least 15 m above home; the
+pre-transition 25 m ceiling does not apply during transition climb. The command
+does not land or disarm. VTOL landing, generic land/RTL/QRTL, link-loss/manual
 takeover and hardware flight remain unqualified. Runtime IPC v1 does not expose
 the operation.
 
