@@ -27,8 +27,8 @@ def case_qland_transport_wire_semantics(probe) -> None:
     version_request = find_parameters(observed, mavlink.MAV_CMD_REQUEST_MESSAGE)
     qland = find_parameters(observed, COMMAND_DO_SET_MODE)
     require(
-        result.returncode == 0 and "version=4.7.1 hash=dbe79216 ack=0" in result.stdout,
-        "pinned AUTOPILOT_VERSION readback and QLAND command acknowledgement",
+        result.returncode == 0 and "version=4.7.1 hash=dbe79216 landed_state=on_ground ack=0" in result.stdout,
+        "EXTENDED_SYS_STATE landed-state mapping, pinned version readback, and QLAND acknowledgement",
         describe(result, observed),
     )
     require(
@@ -54,6 +54,7 @@ def case_qland_transport_rejects_denied_ack(probe) -> None:
     qland = find_parameters(observed, COMMAND_DO_SET_MODE)
     require(
         result.returncode != 0
+        and "landed_state=on_ground" in result.stdout
         and "ack=2" in result.stdout
         and qland == (1.0, 20.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         and sum(command == COMMAND_DO_SET_MODE for command, _system, _component in targets) == 1,
