@@ -48,6 +48,7 @@ class RouteObserver:
         self.velocities: list[tuple[float, float, float]] = []
         self.modes: list[tuple[float, int, bool]] = []
         self.vtol_states: list[tuple[float, int]] = []
+        self.landed_states: list[tuple[float, int]] = []
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -81,6 +82,7 @@ class RouteObserver:
                     self.modes.append((observed_at, int(message.custom_mode), is_armed))
                 else:
                     self.vtol_states.append((observed_at, int(message.vtol_state)))
+                    self.landed_states.append((observed_at, int(message.landed_state)))
         finally:
             connection.close()
 
