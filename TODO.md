@@ -56,8 +56,8 @@ close its integration or release gate.
   `quadplane-tilttri` profile, then verify armed state, the requested climb
   delta from the final pre-command relative altitude, and authoritative state
   with a fixed 0.5 m completion margin plus timeout/failure cases.
-  Transition qualification is recorded separately; route, return and landing
-  remain independent slices.
+  Transition, route, return/recovery and landing are independent qualification
+  slices; their current status is recorded in the later entries below.
   Falsification: an ACK is accepted as completion, the generic Copter takeoff
   path is reused silently, or a failed/partial climb reports success.
 
@@ -75,8 +75,10 @@ close its integration or release gate.
   `GUIDED` VTOL-takeoff -> `AUTO` -> transition sequence.
   Focused tests cover unsupported non-transmission, rejected ACK, ACK without
   completion, intermediate timeout, stale/missing state and link interruption.
-  Fixed-wing route, return, VTOL-back, landing, link-loss strategy and hardware
-  qualification remain open.
+  This forward-transition slice did not qualify fixed-wing route, recovery,
+  transition-back, landing, link-loss strategy or hardware. The later route,
+  recovery and transition-back entries record the separately completed slices;
+  VTOL landing, link-loss strategy and hardware remain open.
 
 - [x] G-M standalone-router status/config slice: PR #22 added a versioned local
   status/events/safe link-selection protocol and a standalone management
@@ -95,8 +97,9 @@ close its integration or release gate.
   at implementation head `7f6206cbad51aade79ae86b20983d4e1fb818901`:
   two points, `AUTO`/fixed-wing at setup, `GUIDED` during route, independently
   observed progress `[1, 2]`, arrival distances 43.1 m and 44.7 m, and NOMAD
-  completion at 14.7 s. Return/recovery, transition-back, VTOL landing,
-  link-loss strategy and complete Task 1 flight remain out of scope.
+  completion at 14.7 s. That route slice did not itself qualify return/recovery,
+  transition-back, VTOL landing, link-loss strategy or complete Task 1 flight;
+  recovery and transition-back are qualified in the later entries below.
   Falsification: command acceptance, stale position or an intermediate
   waypoint is reported as route completion.
 
@@ -110,8 +113,8 @@ close its integration or release gate.
   passed on implementation head `6157d13ff0a9e9516d862a194768f07d7bc3e44b`:
   the independent observer saw 242.3 m initial distance, 37.4 m minimum
   distance, 42.3 m completion distance, 3.6 m altitude error, and 11.2 s
-  completion. Generic RTL/QRTL, transition-back, VTOL landing, link-loss
-  strategy, complete Task 1 flight and hardware remain unqualified.
+  completion. Generic RTL/QRTL, VTOL landing, link-loss strategy, complete
+  Task 1 flight and hardware remain unqualified.
   Falsification: an ACK, stale or pre-command position, insufficient progress,
   or interrupted session is reported as recovery.
 
@@ -120,13 +123,14 @@ close its integration or release gate.
   `param1=MAV_VTOL_STATE_MC` only in AUTO. An independent loiter setup moves the
   recovered armed GUIDED fixed-wing aircraft into AUTO; NOMAD then requires the
   stable 15–25 m/55 m transition-ready envelope before sending the request.
-  Exact-head hosted [run 35973919013](https://github.com/YoussGm3o8/NOMAD/actions/runs/35973919013)
-  passed at `3b1efb9b5bb3840f9957fae12b18103e167fa1a2`, with full Copter
+  Hosted implementation-head [run 35980310680](https://github.com/YoussGm3o8/NOMAD/actions/runs/35980310680)
+  passed at `0231481e0fd20ccf5138938276f3bf1f575991c9`, with full Copter
   regression success. The independent observer saw
-  `fixed_wing -> multicopter`, 50.8 m maximum ready distance, 21.1 s dwell,
-  25.4 m/s maximum speed, 0.4 m/s maximum climb, 45.7 s completion, final AUTO
-  mode 10 and armed state. ArduPlane emitted no intermediate transition state.
-  This proves transition to multicopter flight only; landing remains separate.
+  `fixed_wing -> multicopter`, 50.4 m maximum ready distance, 21.1 s dwell,
+  25.4 m/s maximum groundspeed, 0.5 m/s maximum absolute climb, 45.2 s
+  completion, final AUTO mode 10 and armed state. ArduPlane emitted no
+  intermediate transition state. This proves transition to multicopter flight
+  only; landing remains separate.
   Falsification: an ACK, pre-ACK multicopter state, stale telemetry, gate failure,
   non-multicopter final state, unstable position, disarm or unexpected mode is
   reported as transition completion.

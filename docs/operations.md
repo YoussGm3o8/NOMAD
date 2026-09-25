@@ -11,7 +11,7 @@ authorize hardware use or prove readiness. [Migration](migration.md) owns gates;
 | Task 1 / groundstation_gpu | Proposed lightweight VTOL; Walksnail FPV camera; Pi Zero for backup LTE and possibly video; Here4 GNSS | GPU CV, video capture/display, C++ core, Mission Planner and server adapter | User direction; video capture, RF bandwidth, complete QuadPlane mission and endurance unqualified |
 | Task 2 / onboard_companion candidate | Under-15-kg quad; optional Jetson if useful autonomy emerges; tracker/tagging/sampling payload | Mission Planner, operator approvals and tracker CSV export; server applicability Q04 | Jetson placement and payload mechanism TBD |
 | groundstation_minimal | ArduPilot, navigation and selected command/telemetry link | C++ core and clients; lightweight server exchange when implemented | Product requirement; no ROS/perception dependency |
-| Development | Isolated Copter and future QuadPlane SITL | Core, fake/mock services and passive observers | Local build/config checks pass; live startup and profile qualification remain open |
+| Development | Isolated Copter and pinned QuadPlane SITL | Core, fake/mock services and passive observers | Pinned SITL identity and flight slices are qualified; broader hardware startup and profile matrix remain open |
 
 Use a strict under-15-kg project ceiling including maximum task payload; the
 CONOPS maximum-15-kg wording conflicts with its under-15-kg FRR wording (Q03).
@@ -223,8 +223,9 @@ Success means at least 10 m of post-ACK progress and a new position within
 45 m horizontally and 5 m of the requested
 relative-home altitude. The 45 m radius is a fixed-wing SITL qualification
 tolerance, not obstacle clearance. The aircraft remains armed in GUIDED and
-circles the target; an operator must retain control until later transition-back
-and landing capabilities are separately qualified. The overall deadline is
+circles the target. The subsequent transition-to-VTOL operation requires an
+independent operator/test authority to establish AUTO first as described below.
+VTOL landing remains a separate unqualified capability. The overall deadline is
 180 s; the ACK wait is capped at 3 s. Runtime IPC v1 does not expose this verb.
 
 The semantic direct CLI verb `transition-to-vtol <latitude> <longitude>
@@ -267,12 +268,13 @@ does not land or disarm. VTOL landing, generic land/RTL/QRTL, link-loss/manual
 takeover and hardware flight remain unqualified. Runtime IPC v1 does not expose
 the operation.
 
-The pinned exact-head hosted [run 35973919013](https://github.com/YoussGm3o8/NOMAD/actions/runs/35973919013)
+The pinned hosted implementation-head [run 35980310680](https://github.com/YoussGm3o8/NOMAD/actions/runs/35980310680)
 passed the transition and full Copter regression at
-`3b1efb9b5bb3840f9957fae12b18103e167fa1a2`. The independent observer recorded
-`fixed_wing -> multicopter`, 21.1 s stabilization and final armed AUTO mode 10.
-The evidence is limited to the pinned SITL profile; landing and hardware flight
-remain unqualified.
+`0231481e0fd20ccf5138938276f3bf1f575991c9`. The independent observer recorded
+recovery distance 34.4 m, altitude error 4.1 m, a 50.4 m maximum readiness
+distance, 21.1 s stabilization, `fixed_wing -> multicopter`, 45.2 s completion
+and final armed AUTO mode 10. The evidence is limited to the pinned SITL
+profile; landing and hardware flight remain unqualified.
 
 ## Observability and evidence
 

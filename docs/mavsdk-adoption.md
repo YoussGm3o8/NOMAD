@@ -60,8 +60,12 @@ The merged-main NOMAD qualification also passed the complete hosted Copter SITL
 matrix in [run 35489428247](https://github.com/YoussGm3o8/NOMAD/actions/runs/35489428247)
 at commit `26d7f9b101a029725d06aee2c6716da95e622417`. The run covered the command,
 mission, velocity, payload, link, heartbeat, loop-closure and geofence paths;
-resource approval, ROS, aircraft-class/QuadPlane, packaging and hardware gates
-remain open.
+resource approval, ROS, the broader supported-aircraft/QuadPlane matrix,
+packaging and hardware gates remain open. Narrow QuadPlane flight slices have
+since qualified on the pinned ArduPlane profile; hosted
+[run 35980310680](https://github.com/YoussGm3o8/NOMAD/actions/runs/35980310680)
+observed the fixed-wing-to-VTOL transition complete in armed AUTO multicopter
+state. This does not close the broader aircraft matrix or qualify landing.
 
 The original Phase A graph passed recursive hosted qualification. Test
 run `34535620056` completed the Python suite, C++ core, provenance checker,

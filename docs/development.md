@@ -179,10 +179,9 @@ match the mission target; its five fresh samples must vary by no more than 1 m.
 It must remain at no more than 28 m/s
 groundspeed with at most 3 m/s variation and at most 1 m/s climb rate. Five
 fresh position samples must span 2 s, with bounded altitude and radial variation.
-The 55 m radius extends
-11.8 m beyond the measured recovery completion distance, and the independent
-observer reports the farthest position in its stable readiness window. The
-speed cap is below the measured 26.8 m/s maximum plus a 1.2 m/s margin.
+The exact-head transition run completed recovery 34.4 m from the point and
+reported the farthest stable readiness sample at 50.4 m. The speed cap is below
+the measured 26.8 m/s maximum plus a 1.2 m/s margin.
 Completion requires fresh post-ACK `Multicopter` state reports, retained armed
 AUTO mode and two seconds of stable position/velocity telemetry. Run `pixi run
 core-sitl-quadplane-transition-back` for the pinned live sequence. These slices
@@ -195,13 +194,15 @@ server-contract tests. The independent pymavlink mode driver establishes
 does not qualify an autonomous GUIDED -> AUTO -> transition sequence or transfer
 command authority to the test driver.
 
-Exact-head hosted [run 35973919013](https://github.com/YoussGm3o8/NOMAD/actions/runs/35973919013)
+Hosted implementation-head [run 35980310680](https://github.com/YoussGm3o8/NOMAD/actions/runs/35980310680)
 passed the pinned transition and full Copter regression at
-`3b1efb9b5bb3840f9957fae12b18103e167fa1a2`. The transition observer reported
-50.8 m maximum readiness distance, 21.1 s stabilization, 25.4 m/s groundspeed,
-0.4 m/s maximum climb, observed states `[fixed_wing, multicopter]`, completion
-in 45.7 s, final AUTO mode 10 and armed state. This remains SITL evidence and
-does not establish landing or hardware qualification.
+`0231481e0fd20ccf5138938276f3bf1f575991c9`. The transition observer reported
+34.4 m recovery distance, 4.1 m recovery altitude error, 20.0 m transition
+altitude, 50.4 m maximum readiness distance, 21.1 s stabilization, 25.4 m/s
+maximum groundspeed, 0.5 m/s maximum absolute climb, observed states
+`[fixed_wing, multicopter]`, completion in 45.2 s, final AUTO mode 10 and armed
+state. This remains SITL evidence and does not establish landing or hardware
+qualification.
 
 ## Adapter and optional build checks
 
