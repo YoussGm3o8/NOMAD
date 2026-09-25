@@ -13,7 +13,7 @@
 #include <thread>
 #include <vector>
 
-class FakeConnection final : public nomad::mavlink::MavlinkConnection {
+class FakeConnection : public nomad::mavlink::MavlinkConnection {
   public:
     FakeConnection() {
         state->identity = nomad::telemetry::identify_vehicle(nomad::telemetry::kArduPilotAutopilot,
@@ -383,6 +383,9 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
         if (state->position_valid) {
             state->position_updated_at = now;
         }
+        if (state->velocity_updated_at != std::chrono::steady_clock::time_point{}) {
+            state->velocity_updated_at = now;
+        }
         if (state->battery_valid) {
             state->battery_updated_at = now;
         }
@@ -439,7 +442,7 @@ class FakeConnection final : public nomad::mavlink::MavlinkConnection {
             if (disarm_on_takeoff) {
                 state->armed = false;
             }
-        } else if (command.id == 3000) {
+        } else if (command.id == 3000 && command.parameters[0] == 4.0F) {
             if (transition_state_unavailable_on_command) {
                 state->vtol_state_valid = false;
             } else if (transition_loses_link_on_command) {

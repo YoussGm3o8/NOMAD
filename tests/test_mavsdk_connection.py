@@ -19,6 +19,10 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts" / "dev"
 sys.path.insert(0, str(SCRIPTS))
 
 import mavsdk_connection_fixture as fixture  # noqa: E402
+from mavsdk_vtol_transition_fixture import (  # noqa: E402
+    case_quadplane_transition_to_vtol_is_verified,
+    case_transition_directions_use_the_same_targeted_command_transport,
+)
 
 CLI = fixture.find_binary("nomad")
 PROBE = fixture.find_binary("nomad_mavsdk_connection_tests")
@@ -143,6 +147,16 @@ def test_quadplane_vtol_takeoff_is_verified_from_climb_state() -> None:
 @requires_mavsdk_build
 def test_quadplane_transition_is_verified_from_vtol_state() -> None:
     fixture.case_quadplane_transition_is_verified(CLI)
+
+
+@requires_mavsdk_build
+def test_quadplane_transition_to_vtol_command_wire_and_ack() -> None:
+    case_quadplane_transition_to_vtol_is_verified(CLI)
+
+
+@requires_mavsdk_build
+def test_quadplane_transition_directions_use_targeted_command_long() -> None:
+    case_transition_directions_use_the_same_targeted_command_transport(CLI)
 
 
 @requires_mavsdk_build

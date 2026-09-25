@@ -103,6 +103,7 @@ and `L` means local/read-only with no aircraft command. Entries are ordered
 | `transition_to_fixed_wing` | N/N/N/N | None | N/N/Y/N | Pinned ArduPlane `AUTO` `MAV_CMD_DO_VTOL_TRANSITION` with `param1=MAV_VTOL_STATE_FW`; a fresh newer `EXTENDED_SYS_STATE.vtol_state=FW` observation is required after the ACK. NOMAD does not establish `AUTO`; an operator/test authority must establish this precondition |
 | `fixed_wing_route` | N/N/N/N | None | N/N/Y/N | Exactly two QuadPlane waypoints, checked against the configured NOMAD fence when present, use `MAV_CMD_DO_REPOSITION` in confirmed GUIDED mode with `CHANGE_MODE` clear; each point requires a fresh post-ACK position at least 10 m closer than the captured ACK-boundary position, within 45 m and 5 m altitude. ACKs and intermediate route setup do not prove completion |
 | `fixed_wing_recovery` | N/N/N/N | None | N/N/Y/N | One explicit QuadPlane recovery point uses the reviewed fixed-wing GUIDED reposition transport after route completion, with `Q_GUIDED_MODE=0` readback. It requires fresh post-ACK progress of 10 m, arrival within 45 m horizontally and 5 m of the requested relative-home altitude, and retains armed GUIDED fixed-wing state. It does not select RTL/QRTL or land |
+| `transition_to_vtol` | N/N/N/N | None | N/N/Y/N | Pinned ArduPlane `AUTO` `MAV_CMD_DO_VTOL_TRANSITION` with `param1=MAV_VTOL_STATE_MC`; a fresh post-ACK multicopter VTOL state, same session, armed state and stable two-second post-transition position/velocity are required. It verifies `Q_ENABLE=2`, `Q_FRAME_CLASS=7`, `Q_TILT_ENABLE=1`, `Q_TILT_MASK=3`, `Q_TILT_TYPE=0`, `Q_TILT_RATE_UP=40` and `Q_TILT_MAX=45`; the requested altitude and measured altitude before transmission must be within the 15–25 m relative-home band, and the pre-transition envelope is within 55 m of the explicit recovery coordinates. After ACK, altitude must remain at least 15 m, with no 25 m upper ceiling during transition climb. Readiness requires five fresh position samples over 2 s, speed at most 28 m/s with at most 3 m/s variation, climb at most 1 m/s, altitude variation at most 1 m and radial variation at most 8 m. An operator/test authority installs a loiter mission and establishes AUTO after recovery; because AUTO entry initially sets VTOL state, the already-qualified fixed-wing transition restores fixed-wing state before readiness is measured. NOMAD does not gain generic `set_mode` |
 | `update_vio` | L/L/L/L | Local validation | L/L/L/L | Updates local safety input and transmits nothing |
 | `set_velocity` | Y/N/N/N | Copter only | Y/N/N/N | Copter loop-closure and zero-delivery evidence; fixed-wing zero-stop semantics are unsafe |
 | `set_servo` | Y/Y/Y/Y | Copter baseline only | Y/N/N/N | Output/channel meaning is not qualified for Plane, QuadPlane or Unknown |
@@ -124,8 +125,9 @@ and `L` means local/read-only with no aircraft command. Entries are ordered
 
 These entries are admission policy, not proof that every downstream physical
 effect has been independently observed. The route and recovery rows qualify two
-narrow fixed-wing navigation primitives for the pinned QuadPlane profile. Generic
-RTL/QRTL, transition back to VTOL, landing, QuadPlane link-loss response, complete Task 1
+narrow fixed-wing navigation primitives for the pinned QuadPlane profile. The
+transition-back row adds one explicit operation with a stricter handoff envelope.
+Generic RTL/QRTL, landing, QuadPlane link-loss response, complete Task 1
 execution and hardware qualification remain separate gates.
 
 The `nomad-runtime` executable owns one long-lived MAVSDK connection and one

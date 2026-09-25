@@ -60,8 +60,12 @@ The merged-main NOMAD qualification also passed the complete hosted Copter SITL
 matrix in [run 35489428247](https://github.com/YoussGm3o8/NOMAD/actions/runs/35489428247)
 at commit `26d7f9b101a029725d06aee2c6716da95e622417`. The run covered the command,
 mission, velocity, payload, link, heartbeat, loop-closure and geofence paths;
-resource approval, ROS, aircraft-class/QuadPlane, packaging and hardware gates
-remain open.
+resource approval, ROS, the broader supported-aircraft/QuadPlane matrix,
+packaging and hardware gates remain open. Narrow QuadPlane flight slices have
+since qualified on the pinned ArduPlane profile; hosted
+[run 35980310680](https://github.com/YoussGm3o8/NOMAD/actions/runs/35980310680)
+observed the fixed-wing-to-VTOL transition complete in armed AUTO multicopter
+state. This does not close the broader aircraft matrix or qualify landing.
 
 The original Phase A graph passed recursive hosted qualification. Test
 run `34535620056` completed the Python suite, C++ core, provenance checker,
@@ -291,12 +295,16 @@ because `Vehicle::motor_test` sends command ID 139, which is not a `MAV_CMD`
 entry in the pinned dialect (`MAV_CMD_DO_MOTOR_TEST` is 209); that is recorded
 as C23 in the migration contradictions. Explicit vehicle-class identification
 is landed for the pinned profiles, and the deterministic peer now covers the
-QuadPlane startup and transition operations. The transition uses MAVSDK's
+QuadPlane startup and both transition directions. The back-transition peer
+checks command 3000 as `COMMAND_LONG`, target system/component, `param1=3`
+(`MAV_VTOL_STATE_MC`), accepted-state verification and denied ACK handling.
+The transition uses MAVSDK's
 existing typed `subscribe_vtol_state` path; no fork edit or hand-written
 MAVLink encoder was needed. A two-point fixed-wing route and an explicit
 recovery point now use the typed `COMMAND_INT` path; general navigation, RTL,
-landing and full Task 1 coverage remain open. Everything up to and including
-the production cutover has landed.
+landing and full Task 1 coverage remain open. Runtime IPC v1 does not expose
+the new transition operation. Everything up to and including the production
+cutover has landed.
 The recovery peer verifies command 192, relative-altitude frame, clear
 `CHANGE_MODE`, 30 m loiter radius, target system/component and denied ACK
 mapping. Pinned hosted [run 35897872732](https://github.com/YoussGm3o8/NOMAD/actions/runs/35897872732)

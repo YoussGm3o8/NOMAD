@@ -16,6 +16,7 @@ import core_sitl_quadplane_observe as quadplane  # noqa: E402
 import core_sitl_quadplane_recovery as recovery  # noqa: E402
 import core_sitl_quadplane_route as route  # noqa: E402
 import core_sitl_quadplane_transition as transition  # noqa: E402
+import core_sitl_quadplane_transition_back as transition_back  # noqa: E402
 import core_sitl_quadplane_vtol_takeoff as vtol_takeoff  # noqa: E402
 
 
@@ -151,6 +152,87 @@ def test_quadplane_transition_state_sequence_is_collapsed_without_fabrication() 
         (0.8, transition.VTOL_STATE_FW),
     ]
     assert transition.observed_state_names(states) == ["multicopter", "transition_to_fixed_wing", "fixed_wing"]
+
+
+def test_quadplane_transition_back_harness_uses_reviewed_auto_loiter_setup() -> None:
+    source = (ROOT / "scripts" / "dev" / "core_sitl_quadplane_transition_back.py").read_text(encoding="utf-8")
+    assert '"transition-to-vtol"' in source
+    assert "MAV_CMD_DO_VTOL_TRANSITION" in source
+    assert "MAV_VTOL_STATE_MC" in source
+    assert "MAV_CMD_NAV_LOITER_UNLIM" in source
+    assert "request_observed_mode(port, MODE_AUTO)" in source
+    assert "transition_ready_samples" in source
+    assert "observed_states=" in source
+    assert "final_armed={final['armed']}" in source
+    assert transition_back.READY_RADIUS_METERS == 55.0
+    assert transition_back.READY_MAX_GROUNDSPEED_MPS == 28.0
+    assert transition_back.READY_MAX_GROUNDSPEED_VARIATION_MPS == 3.0
+    assert transition_back.READY_DWELL_SECONDS == 2.0
+    assert transition_back.READY_SAMPLE_COUNT == 5
+    assert transition_back.VTOL_DWELL_SECONDS == 2.0
+
+
+def test_transition_setup_keeps_the_explicit_recovery_altitude(monkeypatch: pytest.MonkeyPatch) -> None:
+    status = {
+        "position": "45.0,-73.0",
+        "relative_altitude_m": "24.1",
+        "mode": str(transition_back.MODE_GUIDED),
+        "armed": "true",
+    }
+    monkeypatch.setattr(transition_back, "read_status", lambda _binary, _port: status)
+    monkeypatch.setattr(transition_back, "require_fresh_vtol_state", lambda _status, _state: None)
+
+    point, recovery_distance, recovery_altitude_error = transition_back.get_transition_point_from_recovery(
+        ROOT / "build" / "core" / "nomad.exe", "14570", (45.0, -73.0, 20.0)
+    )
+
+    assert point == (45.0, -73.0, 20.0)
+    assert recovery_distance == 0.0
+    assert recovery_altitude_error == pytest.approx(4.1)
+
+
+def test_quadplane_transition_back_observer_accepts_only_fresh_stable_envelope() -> None:
+    observer = route.RouteObserver(14581)
+    point = (45.5, -73.5, 20.0)
+    observer.positions = [
+        (1.0, 45.5, -73.5, 20.0),
+        (1.5, 45.50001, -73.5, 20.1),
+        (2.0, 45.50002, -73.5, 19.9),
+        (2.5, 45.50001, -73.5, 20.0),
+        (3.1, 45.5, -73.5, 20.0),
+    ]
+    observer.velocities = [(sample[0], 8.0, 0.2) for sample in observer.positions]
+    samples = transition_back.transition_ready_samples(observer, 0.5, point)
+    assert len(samples) == 5
+    assert samples[-1][0] - samples[0][0] >= transition_back.READY_DWELL_SECONDS
+
+    observer.velocities[-1] = (3.1, 29.0, 0.0)
+    samples = transition_back.transition_ready_samples(observer, 0.5, point)
+    assert samples == []
+
+    observer.velocities = [
+        (1.0, 8.0, 0.2),
+        (1.5, 12.0, 0.2),
+        (2.0, 8.0, 0.2),
+        (2.5, 12.0, 0.2),
+        (3.1, 8.0, 0.2),
+    ]
+    samples = transition_back.transition_ready_samples(observer, 0.5, point)
+    assert len(samples) == 1
+    assert samples[0][0] == 3.1
+
+
+def test_quadplane_transition_ready_proof_requires_current_mode_state_and_samples() -> None:
+    observer = route.RouteObserver(14581)
+    now = transition_back.time.monotonic()
+    samples = [(now - 2.0 + index * 0.5, 42.0, 20.0, 26.0 + index * 0.2, 0.0) for index in range(5)]
+    observer.modes = [(now - 0.1, transition_back.MODE_AUTO, True)]
+    observer.vtol_states = [(now - 0.1, transition_back.VTOL_STATE_FW)]
+
+    assert transition_back.has_current_transition_ready_window(samples, observer, now - 3.0)
+
+    observer.vtol_states = [(now - 2.0, transition_back.VTOL_STATE_FW)]
+    assert not transition_back.has_current_transition_ready_window(samples, observer, now - 3.0)
 
 
 def test_quadplane_route_harness_drives_nomad_and_observes_aircraft_positions() -> None:

@@ -12,9 +12,10 @@ Edge Core source has been removed. Build and profile/service wiring repairs are
 recorded in the migration gates, and setup/provisioning now targets the C++ core.
 MAVSDK is an early competition prerequisite with deterministic parity and smoke
 targets. The pinned QuadPlane profile now has identity/telemetry, arm, VTOL
-takeoff, VTOL-to-fixed-wing transition and a two-point fixed-wing route
-qualification. Return/recovery, fixed-wing link-loss response, transition back
-to VTOL, landing and the complete Task 1 flight remain unqualified.
+takeoff, VTOL-to-fixed-wing transition, a two-point fixed-wing route, bounded
+fixed-wing recovery, and fixed-wing-to-VTOL transition qualification.
+Fixed-wing link-loss/manual-takeover response, VTOL landing and the complete
+Task 1 flight remain unqualified.
 
 Task 1 targets a lightweight VTOL with ground GPU vision. Task 2 targets a quad
 below 15 kg with optional onboard compute. All three product profiles remain:

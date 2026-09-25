@@ -41,6 +41,7 @@ EXPECTED_VERBS = (
     "takeoff",
     "vtol-takeoff",
     "transition-to-fixed-wing",
+    "transition-to-vtol",
     "goto",
     "land",
     "rtl",
@@ -133,6 +134,10 @@ def test_unknown_command_prints_usage_and_fails() -> None:
         ("vtol-takeoff", "banana"),  # altitude must parse as a float
         ("vtol-takeoff", "nan"),  # non-finite altitude must fail before socket work
         ("vtol-takeoff", "5", "9"),  # extra positional argument
+        ("transition-to-vtol", "45.0", "-73.0"),  # requires exactly three values
+        ("transition-to-vtol", "nan", "-73.0", "20"),  # coordinates must be finite
+        ("transition-to-vtol", "45.0", "-73.0", "inf"),  # altitude must be finite
+        ("transition-to-vtol", "45.0", "-73.0", "20", "30"),  # extra positional argument
         ("mode", "4", "extra"),  # extra positional argument
         ("goto", "45.0", "9.0"),  # goto requires latitude, longitude, and altitude
         ("goto", "45.0", "banana", "5"),  # longitude must parse as a float
@@ -196,6 +201,7 @@ def test_silent_endpoint_times_out_cleanly() -> None:
         ("takeoff", "5"),
         ("vtol-takeoff", "5"),
         ("transition-to-fixed-wing",),
+        ("transition-to-vtol", "45.0", "-73.0", "20"),
         ("goto", "45.0", "9.0", "5"),
         ("land",),
         ("rtl",),
@@ -250,6 +256,14 @@ def test_goto_is_an_actuation_verb_and_requires_the_key(monkeypatch) -> None:
     assert result.returncode != 0
     assert "audit command=goto result=refused auth=none reason=missing_api_key" in result.stderr
     assert "timed out waiting" not in result.stderr
+
+
+def test_transition_to_vtol_is_not_exposed_through_runtime_ipc_v1() -> None:
+    result = invoke("--runtime", "transition-to-vtol", "45.0", "-73.0", "20")
+
+    assert result.returncode != 0
+    assert "error[unsupported_request]" in result.stderr
+    assert "transition-to-vtol is not available through runtime protocol v1" in result.stderr
 
 
 def test_goto_with_key_reaches_transport_and_audits(monkeypatch) -> None:

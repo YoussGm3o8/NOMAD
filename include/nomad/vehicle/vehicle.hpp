@@ -55,7 +55,8 @@ class Vehicle {
                      std::chrono::milliseconds takeoff_state_timeout = std::chrono::seconds(30),
                      std::chrono::milliseconds transition_state_timeout = std::chrono::seconds(90),
                      std::chrono::milliseconds fixed_wing_route_timeout = std::chrono::seconds(180),
-                     std::chrono::milliseconds fixed_wing_recovery_timeout = std::chrono::seconds(180));
+                     std::chrono::milliseconds fixed_wing_recovery_timeout = std::chrono::seconds(180),
+                     std::chrono::milliseconds transition_ready_dwell = std::chrono::seconds(2));
     ~Vehicle();
 
     Vehicle(const Vehicle &) = delete;
@@ -78,6 +79,7 @@ class Vehicle {
     CommandResult takeoff(float altitude_m);
     CommandResult vtol_takeoff(float altitude_m);
     CommandResult transition_to_fixed_wing();
+    CommandResult transition_to_vtol(const RecoveryPoint &point);
     CommandResult fixed_wing_route(const std::vector<RouteWaypoint> &route);
     CommandResult fixed_wing_recovery(const RecoveryPoint &point);
     CommandResult update_vio(bool healthy, float confidence);
@@ -115,6 +117,19 @@ class Vehicle {
     std::optional<std::string> vtol_takeoff_state_error(const telemetry::VehicleState &state) const;
     CommandResult wait_for_fixed_wing_transition(std::uint8_t expected_system_id,
                                                  std::chrono::steady_clock::time_point ack_boundary);
+    CommandResult wait_for_transition_ready(const RecoveryPoint &point, std::uint64_t expected_session_id,
+                                            std::uint8_t expected_system_id, std::uint8_t expected_component_id,
+                                            std::chrono::steady_clock::time_point deadline);
+    CommandResult verify_transition_profile(std::uint64_t expected_session_id, std::uint8_t expected_system_id,
+                                            std::uint8_t expected_component_id,
+                                            std::chrono::steady_clock::time_point deadline);
+    CommandResult wait_for_multicopter_state(const RecoveryPoint &point, std::uint64_t expected_session_id,
+                                              std::uint8_t expected_system_id, std::uint8_t expected_component_id,
+                                              std::chrono::steady_clock::time_point ack_boundary,
+                                              std::chrono::steady_clock::time_point deadline);
+    CommandResult verify_final_multicopter_state(const RecoveryPoint &point, std::uint64_t expected_session_id,
+                                                 std::uint8_t expected_system_id, std::uint8_t expected_component_id,
+                                                 std::chrono::steady_clock::time_point ack_boundary) const;
     CommandResult wait_for_fixed_wing_waypoint(const RouteWaypoint &waypoint, std::uint64_t expected_session_id,
                                                std::chrono::steady_clock::time_point acknowledgement_boundary,
                                                double acknowledgement_distance_m,
@@ -155,6 +170,7 @@ class Vehicle {
     // position wait after a target request is acknowledged.
     std::chrono::milliseconds fixed_wing_route_timeout_{std::chrono::seconds(180)};
     std::chrono::milliseconds fixed_wing_recovery_timeout_{std::chrono::seconds(180)};
+    std::chrono::milliseconds transition_ready_dwell_{std::chrono::seconds(2)};
     safety::ReleaseInterlock payload_interlock_;
     mutable std::mutex payload_mutex_;
     mutable std::mutex velocity_mutex_;

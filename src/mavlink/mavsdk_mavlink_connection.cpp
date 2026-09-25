@@ -299,6 +299,7 @@ void MavsdkMavlinkConnection::observe_velocity(const mavsdk::Telemetry::Velocity
                                                 velocity.east_m_s * velocity.east_m_s);
     // NED down is positive downwards, so climb rate is its negation.
     state_.velocity.climb_rate_mps = -velocity.down_m_s;
+    state_.velocity_updated_at = ObservationClock::now();
 }
 
 void MavsdkMavlinkConnection::observe_battery(const mavsdk::Telemetry::Battery &battery) {

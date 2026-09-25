@@ -161,15 +161,48 @@ ordered aircraft position trace. The recovery harness then repeats that
 sequence and asks NOMAD to reposition to an explicit point near its starting
 route location. Independent post-command position, altitude, mode and VTOL
 telemetry must show the bounded recovery region reached while fixed wing.
-These slices do not qualify disarm, generic
-takeoff/goto, route planning, arbitrary RTL/QRTL, transition back to VTOL, VTOL
-landing, QuadPlane link-loss response or the complete Task 1 flight. Copter mode numbers and
-velocity-stop behavior cannot stand in for those tests. Gazebo/Isaac are
+The transition-back harness repeats the pinned identity/takeoff/forward
+transition/route/recovery sequence. It then gives AUTO one explicit
+`NAV_LOITER_UNLIM` mission item at the explicit recovery coordinates through the
+independent test authority because the pinned transition handler requires AUTO.
+It verifies the first fresh recovered relative altitude is inside the reviewed
+15–25 m band, then keeps the explicit recovery-point altitude as the AUTO loiter
+and transition target. The reference profile enters AUTO in VTOL state. The
+already-qualified `transition-to-fixed-wing` operation restores fixed-wing
+state before the transition-ready dwell starts. NOMAD verifies the pinned
+frame and tilt parameters before it requires the measured altitude and requested
+loiter altitude to be within 15–25 m relative to home before command
+transmission, and the aircraft within 55 m of the horizontal point. Post-ACK
+verification retains a 15 m minimum altitude floor but has no 25 m upper ceiling during
+transition climb. The measured altitude need not exactly
+match the mission target; its five fresh samples must vary by no more than 1 m.
+It must remain at no more than 28 m/s
+groundspeed with at most 3 m/s variation and at most 1 m/s climb rate. Five
+fresh position samples must span 2 s, with bounded altitude and radial variation.
+The exact-head transition run completed recovery 34.4 m from the point and
+reported the farthest stable readiness sample at 50.4 m. The speed cap is below
+the measured 26.8 m/s maximum plus a 1.2 m/s margin.
+Completion requires fresh post-ACK `Multicopter` state reports, retained armed
+AUTO mode and two seconds of stable position/velocity telemetry. Run `pixi run
+core-sitl-quadplane-transition-back` for the pinned live sequence. These slices
+do not qualify disarm, generic takeoff/goto, route planning, arbitrary RTL/QRTL,
+VTOL landing, QuadPlane link-loss response or the complete Task 1 flight. Copter
+mode numbers and velocity-stop behavior cannot stand in for those tests. Gazebo/Isaac are
 optional sensor-evidence tools; they are not prerequisites for basic unit or
 server-contract tests. The independent pymavlink mode driver establishes
 `AUTO` because NOMAD deliberately rejects arbitrary QuadPlane `set_mode`; this
 does not qualify an autonomous GUIDED -> AUTO -> transition sequence or transfer
 command authority to the test driver.
+
+Hosted implementation-head [run 35980310680](https://github.com/YoussGm3o8/NOMAD/actions/runs/35980310680)
+passed the pinned transition and full Copter regression at
+`0231481e0fd20ccf5138938276f3bf1f575991c9`. The transition observer reported
+34.4 m recovery distance, 4.1 m recovery altitude error, 20.0 m transition
+altitude, 50.4 m maximum readiness distance, 21.1 s stabilization, 25.4 m/s
+maximum groundspeed, 0.5 m/s maximum absolute climb, observed states
+`[fixed_wing, multicopter]`, completion in 45.2 s, final AUTO mode 10 and armed
+state. This remains SITL evidence and does not establish landing or hardware
+qualification.
 
 ## Adapter and optional build checks
 

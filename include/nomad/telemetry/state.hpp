@@ -86,6 +86,7 @@ struct VehicleState {
     VtolState vtol_state{VtolState::Undefined};
     bool vtol_state_valid{false};
     std::chrono::steady_clock::time_point position_updated_at{};
+    std::chrono::steady_clock::time_point velocity_updated_at{};
     std::chrono::steady_clock::time_point battery_updated_at{};
     std::chrono::steady_clock::time_point gps_updated_at{};
     std::chrono::steady_clock::time_point attitude_updated_at{};
