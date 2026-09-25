@@ -40,7 +40,8 @@ Vehicle::Vehicle(mavlink::MavlinkConnection &connection, safety::WatchdogPolicy 
                  std::chrono::milliseconds transition_state_timeout,
                  std::chrono::milliseconds fixed_wing_route_timeout,
                  std::chrono::milliseconds fixed_wing_recovery_timeout,
-                 std::chrono::milliseconds transition_ready_dwell)
+                 std::chrono::milliseconds transition_ready_dwell,
+                 std::chrono::milliseconds quadplane_landing_timeout)
     : connection_(connection),
       watchdog_policy_(watchdog_policy),
       fence_policy_(std::move(fence_policy)),
@@ -50,7 +51,8 @@ Vehicle::Vehicle(mavlink::MavlinkConnection &connection, safety::WatchdogPolicy 
       transition_state_timeout_(transition_state_timeout),
       fixed_wing_route_timeout_(fixed_wing_route_timeout),
       fixed_wing_recovery_timeout_(fixed_wing_recovery_timeout),
-      transition_ready_dwell_(transition_ready_dwell) {}
+      transition_ready_dwell_(transition_ready_dwell),
+      quadplane_landing_timeout_(quadplane_landing_timeout) {}
 
 Vehicle::~Vehicle() {
     {

@@ -63,6 +63,7 @@ from mavsdk_peer import (
     CommandRecord,
     VehiclePeer,
 )
+from mavsdk_qland_fixture import case_qland_transport_rejects_denied_ack, case_qland_transport_wire_semantics
 from mavsdk_recovery_fixture import (
     case_quadplane_fixed_wing_recovery_rejects_denied_ack,
     case_quadplane_fixed_wing_recovery_uses_reposition_command_int,
@@ -435,14 +436,7 @@ def case_quadplane_transitions(cli: Path) -> None:
     case_transition_directions_use_the_same_targeted_command_transport(cli)
 
 
-def main() -> int:
-    cli = find_binary("nomad")
-    probe = find_binary("nomad_mavsdk_connection_tests")
-    zero_delivery = find_binary("nomad_mavsdk_zero_delivery_tests")
-    if cli is None or probe is None or zero_delivery is None:
-        print("MAVSDK Phase B binaries are missing; run `pixi run build-core-mavsdk` first", file=sys.stderr)
-        return 2
-
+def run_observation_cases(cli: Path, probe: Path, zero_delivery: Path) -> None:
     case_status(cli)
     case_quadplane_identity_uses_ardupilot_parameter(cli)
     case_gcs_heartbeat_announces_to_a_silent_peer(probe)
@@ -452,6 +446,9 @@ def main() -> int:
     case_fence_upload_and_readback(probe)
     case_disabled_fence_does_not_verify(probe)
     case_zero_delivery_scenarios(zero_delivery)
+
+
+def run_command_cases(cli: Path, probe: Path) -> None:
     case_arm_accepted(cli)
     case_arm_denied(cli)
     case_arm_timeout(cli)
@@ -459,11 +456,16 @@ def main() -> int:
     case_param_timeout_honors_caller_budget(probe)
     case_command_int(probe)
     case_command_long(probe)
+    case_qland_transport_wire_semantics(probe)
+    case_qland_transport_rejects_denied_ack(probe)
     case_wrong_system(probe)
     case_unqualified_identity_sends_no_mode_command(cli)
     case_mode_is_verified(cli)
     case_takeoff_is_verified(cli)
     case_quadplane_vtol_takeoff_is_verified(cli)
+
+
+def run_vehicle_operation_cases(cli: Path) -> None:
     case_quadplane_transitions(cli)
     case_quadplane_navigation(cli)
     case_goto_is_verified(cli)
@@ -474,6 +476,19 @@ def main() -> int:
     case_gimbal_config_parity(cli)
     case_user_command_parity(cli)
     case_motor_test_parity(cli)
+
+
+def main() -> int:
+    cli = find_binary("nomad")
+    probe = find_binary("nomad_mavsdk_connection_tests")
+    zero_delivery = find_binary("nomad_mavsdk_zero_delivery_tests")
+    if cli is None or probe is None or zero_delivery is None:
+        print("MAVSDK Phase B binaries are missing; run `pixi run build-core-mavsdk` first", file=sys.stderr)
+        return 2
+
+    run_observation_cases(cli, probe, zero_delivery)
+    run_command_cases(cli, probe)
+    run_vehicle_operation_cases(cli)
     return 0
 
 

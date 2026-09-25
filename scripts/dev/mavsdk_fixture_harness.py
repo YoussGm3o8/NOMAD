@@ -19,6 +19,7 @@ import subprocess
 from pathlib import Path
 
 from mavsdk_peer import ACCEPTED, CommandRecord, VehiclePeer
+from mavsdk_qland_peer import with_qland_peer
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD_DIR = Path(os.environ.get("NOMAD_MAVSDK_FIXTURE_BUILD_DIR", ROOT / "build" / "mavsdk-phase-a"))
@@ -168,3 +169,27 @@ def run_probe_case(
         return result
 
     return with_peer(port, peer_system_id, ack_result, action), observed
+
+
+def run_qland_probe(
+    probe: Path, qland_ack_result: int = ACCEPTED
+) -> tuple[subprocess.CompletedProcess, list[CommandRecord], list[tuple[int, int, int]]]:
+    """Verify pinned version decoding and the fixed QLAND COMMAND_LONG wire request."""
+    port = find_free_udp_port()
+    observed: list[CommandRecord] = []
+    targets: list[tuple[int, int, int]] = []
+
+    def action(peer: VehiclePeer) -> subprocess.CompletedProcess:
+        result = subprocess.run(
+            [str(probe), "--qland", f"udpin:127.0.0.1:{port}", "1"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        observed.extend(peer.commands())
+        targets.extend(peer.command_targets)
+        return result
+
+    result = with_qland_peer(port, qland_ack_result, action)
+    return result, observed, targets
