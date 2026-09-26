@@ -107,7 +107,33 @@ def wait_for_landing_ready(observer: RouteObserver, started: float, landing_poin
             if mode and vtol and landed and mode[1:] == (MODE_AUTO, True) and vtol[1] == VTOL_STATE_MC:
                 return ready_samples
         time.sleep(0.1)
-    raise ScenarioError("independent observer did not prove the two-second landing-ready dwell")
+    recent_samples = describe_recent_landing_samples(observer, started, landing_point)
+    raise ScenarioError(
+        f"independent observer did not prove the two-second landing-ready dwell; recent_samples={recent_samples}"
+    )
+
+
+def describe_recent_landing_samples(observer, started, landing_point):
+    samples = []
+    for position, velocity in zip(observer.positions, observer.velocities, strict=False):
+        timestamp, latitude, longitude, altitude = position
+        velocity_time, groundspeed, climb_rate = velocity
+        if timestamp < started:
+            continue
+        mode = latest_before(observer.modes, timestamp)
+        vtol = latest_before(observer.vtol_states, timestamp)
+        landed = latest_before(observer.landed_states, timestamp)
+        mode_state = None if mode is None else (mode[1], mode[2])
+        vtol_state = None if vtol is None else vtol[1]
+        landed_state = None if landed is None else landed[1]
+        point_distance = distance_m((latitude, longitude), landing_point)
+        samples.append(
+            f"age_s={time.monotonic() - timestamp:.2f} position_velocity_skew_s={abs(timestamp - velocity_time):.2f} "
+            f"altitude_m={altitude:.2f} landing_distance_m={point_distance:.2f} "
+            f"groundspeed_mps={groundspeed:.2f} climb_rate_mps={climb_rate:.2f} "
+            f"mode_armed={mode_state} vtol={vtol_state} landed={landed_state}"
+        )
+    return samples[-5:]
 
 
 def verify_landing_mode(modes, started):
