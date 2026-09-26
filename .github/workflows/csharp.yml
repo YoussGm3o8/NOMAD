@@ -60,6 +60,9 @@ jobs:
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v3
 
+      - name: Build-only dispatch tests (isolated installation)
+        run: pwsh -File scripts/build/test_build_plugin_windows.ps1
+
       - name: Build standalone ground router
         run: pwsh -File scripts/build/build_ground_router.ps1
 

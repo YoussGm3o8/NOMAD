@@ -1,7 +1,20 @@
 # NOMAD Mission Planner Plugin - Build and Deploy Script
 # Location: scripts/build/build_plugin_windows.ps1
 # Usage: .\scripts\build\build_plugin_windows.ps1 (from repo root)
+#        .\scripts\build\build_plugin_windows.ps1 -NoDeploy
 #        or Run from anywhere - it will auto-locate the project
+param(
+    [switch]$NoDeploy
+)
+
+if ($NoDeploy) {
+    Write-Host 'Mode: build only. Deployment is disabled.' -ForegroundColor Green
+} else {
+    Write-Warning (
+        'Deployment is enabled. This run can modify Mission Planner and remove the legacy AppData plugin. ' +
+        'Use -NoDeploy to build only.'
+    )
+}
 
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host " NOMAD Mission Planner Plugin Build" -ForegroundColor Cyan
@@ -17,9 +30,6 @@ Set-Location $ProjectDir
 # Configuration
 $ProjectFile = "NOMADPlugin.csproj"
 $Configuration = "Release"
-$MissionPlannerDir = "${env:ProgramFiles(x86)}\Mission Planner"
-$MissionPlannerExe = Join-Path $MissionPlannerDir "MissionPlanner.exe"
-$MissionPlannerPluginsDir = Join-Path $MissionPlannerDir "plugins"
 
 # Step 1: Find MSBuild
 Write-Host "[1/4] Locating MSBuild..." -ForegroundColor Yellow
@@ -53,9 +63,10 @@ Write-Host ""
 # Step 2: Clean previous build
 Write-Host "[2/4] Cleaning previous build..." -ForegroundColor Yellow
 & $msbuild $ProjectFile /t:Clean /p:Configuration=$Configuration /v:minimal /nologo
-if ($LASTEXITCODE -ne 0) {
+$cleanExitCode = $LASTEXITCODE
+if ($cleanExitCode -ne 0) {
     Write-Host "ERROR: Clean failed!" -ForegroundColor Red
-    exit 1
+    exit $cleanExitCode
 }
 Write-Host "  Clean complete" -ForegroundColor Green
 Write-Host ""
@@ -63,12 +74,38 @@ Write-Host ""
 # Step 3: Build project
 Write-Host "[3/4] Building plugin..." -ForegroundColor Yellow
 & $msbuild $ProjectFile /t:Build /p:Configuration=$Configuration /v:minimal /nologo
-if ($LASTEXITCODE -ne 0) {
+$buildExitCode = $LASTEXITCODE
+if ($buildExitCode -ne 0) {
     Write-Host "ERROR: Build failed!" -ForegroundColor Red
-    exit 1
+    exit $buildExitCode
 }
 Write-Host "  Build successful" -ForegroundColor Green
 Write-Host ""
+
+# Confirm the expected output before entering the deployment branch.
+$BuiltDll = Join-Path $ProjectDir "bin\$Configuration\NOMADPlugin.dll"
+if (-not (Test-Path -LiteralPath $BuiltDll -PathType Leaf)) {
+    Write-Host "ERROR: Built DLL not found at $BuiltDll" -ForegroundColor Red
+    exit 1
+}
+
+$FileInfo = Get-Item -LiteralPath $BuiltDll
+Write-Host "  Plugin size: $($FileInfo.Length / 1KB) KB" -ForegroundColor Gray
+
+if ($NoDeploy) {
+    Write-Host "[4/4] Deployment skipped (-NoDeploy)." -ForegroundColor Yellow
+    Write-Host "  Output artifact: $BuiltDll" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "======================================" -ForegroundColor Cyan
+    Write-Host " Build Only Complete!" -ForegroundColor Green
+    Write-Host "======================================" -ForegroundColor Cyan
+    exit 0
+}
+
+# Deployment paths are resolved only after build-only has returned.
+$MissionPlannerDir = "${env:ProgramFiles(x86)}\Mission Planner"
+$MissionPlannerExe = Join-Path $MissionPlannerDir "MissionPlanner.exe"
+$MissionPlannerPluginsDir = Join-Path $MissionPlannerDir "plugins"
 
 # Step 4: Deploy plugin
 Write-Host "[4/4] Deploying plugin..." -ForegroundColor Yellow
@@ -98,19 +135,8 @@ try {
     Write-Host "  Warning: failed to copy libVLC files: $_" -ForegroundColor Yellow
 }
 
-$BuiltDll = "bin\$Configuration\NOMADPlugin.dll"
-
 # Get all DLLs from the bin folder for copying dependencies (Helix Toolkit, etc.)
 $BuiltDlls = Get-ChildItem "bin\$Configuration\*.dll" -ErrorAction SilentlyContinue
-
-if (-not (Test-Path $BuiltDll)) {
-    Write-Host "ERROR: Built DLL not found at $BuiltDll" -ForegroundColor Red
-    exit 1
-}
-
-# Get file info
-$FileInfo = Get-Item $BuiltDll
-Write-Host "  Plugin size: $($FileInfo.Length / 1KB) KB" -ForegroundColor Gray
 
 # Mission Planner loads DLL plugins only from the plugins directory next to
 # MissionPlanner.exe. The LocalAppData plugins directory stores NOMAD config,

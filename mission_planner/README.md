@@ -19,10 +19,18 @@ The plugin requires Windows, MSBuild, .NET Framework 4.8, and Mission Planner
 reference assemblies:
 
 ```powershell
-pixi run build-plugin
+pixi run build-plugin-only
 ```
 
-This task can install/overwrite the local plugin; it is a deployment operation.
+This compiles the plugin and writes `src/bin/Release/NOMADPlugin.dll` without
+copying, creating, or deleting files in the Mission Planner installation. Run
+`pixi run test-plugin-build-only` to check the build-only dispatch against an
+isolated deny-write installation. That test uses the C# compiler bundled with
+Visual Studio MSBuild. The legacy `pixi run build-plugin` task still
+deploys the plugin and dependencies and removes the old AppData copy; it prints
+a warning before doing so. Use it only when you intend to deploy. For manual
+installation steps, see [the packaging guide](packaging/README.md).
+
 Use `lint-plugin` and focused `test-plugin-*` tasks for non-deploying checks.
 `NomadCoreClient` supports `LegacyOneShot` and `PersistentRuntime`. Persistent
 mode connects to the C++ runtime over versioned loopback JSON Lines IPC, performs
