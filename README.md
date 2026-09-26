@@ -11,11 +11,18 @@ basic Copter operations, safety/watchdog/fence/payload primitives and adapters.
 Edge Core source has been removed. Build and profile/service wiring repairs are
 recorded in the migration gates, and setup/provisioning now targets the C++ core.
 MAVSDK is an early competition prerequisite with deterministic parity and smoke
-targets. The pinned QuadPlane profile now has identity/telemetry, arm, VTOL
-takeoff, VTOL-to-fixed-wing transition, a two-point fixed-wing route, bounded
-fixed-wing recovery, and fixed-wing-to-VTOL transition qualification.
-Fixed-wing link-loss/manual-takeover response, VTOL landing and the complete
-Task 1 flight remain unqualified.
+targets. The pinned QuadPlane profile is qualified in SITL for identity and
+telemetry, arm, VTOL takeoff, VTOL-to-fixed-wing transition, a two-point
+fixed-wing route, bounded recovery, fixed-wing-to-VTOL transition, and QLAND
+landing. The independent observer in [hosted run 36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163)
+recorded 20.01 m entry altitude, a 0.04 m landing-point distance, 2.10 s
+readiness dwell, QLAND, descent beginning 9.43 s after the command, and
+`ON_GROUND` 42.63 s after it. Final state was disarmed QLAND, multicopter,
+`ON_GROUND`, 0.14 m altitude, 0.02 m/s groundspeed and 0.00 m/s climb. This is
+qualification for the pinned ArduPlane 4.7.1 `quadplane-tilttri` SITL profile
+only. Fixed-wing link-loss/manual-takeover response, integrated Task 1 flight,
+command-authority/runtime hardening, competition-server integration, generic
+landing/RTL/QRTL, and hardware qualification remain open.
 
 Task 1 targets a lightweight VTOL with ground GPU vision. Task 2 targets a quad
 below 15 kg with optional onboard compute. All three product profiles remain:

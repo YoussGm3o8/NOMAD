@@ -76,9 +76,10 @@ close its integration or release gate.
   Focused tests cover unsupported non-transmission, rejected ACK, ACK without
   completion, intermediate timeout, stale/missing state and link interruption.
   This forward-transition slice did not qualify fixed-wing route, recovery,
-  transition-back, landing, link-loss strategy or hardware. The later route,
-  recovery and transition-back entries record the separately completed slices;
-  VTOL landing, link-loss strategy and hardware remain open.
+  transition-back, landing, link-loss strategy or hardware. Later sections
+  record the separately qualified route, recovery, transition-back and QLAND
+  landing slices. Link-loss/manual takeover, integrated Task 1 and hardware
+  remain open.
 
 - [x] G-M standalone-router status/config slice: PR #22 added a versioned local
   status/events/safe link-selection protocol and a standalone management
@@ -135,10 +136,21 @@ close its integration or release gate.
   non-multicopter final state, unstable position, disarm or unexpected mode is
   reported as transition completion.
 
-- [~] G-M QuadPlane VTOL landing qualification: select and qualify one pinned
-  QuadPlane VTOL landing mechanism from the armed stable multicopter state, with
-  authoritative touchdown/landing completion. Generic land and RTL/QRTL remain
-  blocked.
+- [x] G-M QuadPlane VTOL landing qualification: the pinned ArduPlane 4.7.1
+  profile now has a narrow `quadplane-vtol-land` operation that enters QLAND
+  (custom mode 20) only after profile, armed AUTO multicopter state, 15–25 m
+  altitude, 5 m landing region, ≤1 m/s groundspeed, ≤0.25 m/s climb and a
+  five-sample/two-second readiness dwell pass. Its ACK is only a command
+  boundary; completion requires post-command QLAND, at least 5 m descent,
+  fresh `EXTENDED_SYS_STATE=ON_GROUND`, disarm and five stable final samples.
+  C++ and deterministic MAVSDK checks pass. Hosted full-chain pinned SITL run
+  [36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163)
+  passed at code head `dcdd1d121d51eefa451fa5d16ab121ef8793e427`. Its independent
+  observer recorded 20.01 m entry altitude, 0.04 m landing-point distance,
+  2.10 s readiness dwell, QLAND, descent after 9.43 s, `ON_GROUND` after
+  42.63 s, then final disarmed QLAND/multicopter state at 0.14 m, 0.02 m/s
+  groundspeed and 0.00 m/s climb. This qualifies only the pinned SITL profile;
+  generic `land`, RTL/QRTL and hardware remain blocked.
 
 - [ ] G-M QuadPlane link-loss/manual takeover qualification: define and prove
   the aircraft and operator response to lost link during supported QuadPlane

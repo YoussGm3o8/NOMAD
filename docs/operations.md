@@ -225,8 +225,9 @@ relative-home altitude. The 45 m radius is a fixed-wing SITL qualification
 tolerance, not obstacle clearance. The aircraft remains armed in GUIDED and
 circles the target. The subsequent transition-to-VTOL operation requires an
 independent operator/test authority to establish AUTO first as described below.
-VTOL landing remains a separate unqualified capability. The overall deadline is
-180 s; the ACK wait is capped at 3 s. Runtime IPC v1 does not expose this verb.
+VTOL landing is handled by a separate QLAND operation; it is not part of
+transition-to-VTOL. The overall deadline is 180 s; the ACK wait is capped at
+3 s. Runtime IPC v1 does not expose this verb.
 
 The semantic direct CLI verb `transition-to-vtol <latitude> <longitude>
 <relative_altitude_m>` qualifies the next handoff for the pinned QuadPlane
@@ -264,8 +265,9 @@ ACK followed by newer authoritative `VTOL_STATE=Multicopter` observations and
 two seconds of stable fresh position/velocity, with the aircraft still armed
 in AUTO. After transmission altitude must remain at least 15 m above home; the
 pre-transition 25 m ceiling does not apply during transition climb. The command
-does not land or disarm. VTOL landing, generic land/RTL/QRTL, link-loss/manual
-takeover and hardware flight remain unqualified. Runtime IPC v1 does not expose
+does not land or disarm. Generic land/RTL/QRTL, link-loss/manual takeover and
+hardware flight remain unqualified. VTOL landing is covered by the separate
+QLAND operation below. Runtime IPC v1 does not expose
 the operation.
 
 The pinned hosted implementation-head [run 35980310680](https://github.com/YoussGm3o8/NOMAD/actions/runs/35980310680)
@@ -274,7 +276,31 @@ passed the transition and full Copter regression at
 recovery distance 34.4 m, altitude error 4.1 m, a 50.4 m maximum readiness
 distance, 21.1 s stabilization, `fixed_wing -> multicopter`, 45.2 s completion
 and final armed AUTO mode 10. The evidence is limited to the pinned SITL
-profile; landing and hardware flight remain unqualified.
+profile. The complete pinned landing chain passed in hosted
+[run 36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163).
+Hardware flight remains unqualified.
+
+The dedicated direct CLI verb `quadplane-vtol-land <latitude> <longitude>` is
+restricted to the pinned ArduPlane 4.7.1 `quadplane-tilttri` profile. It admits
+only an armed AUTO multicopter with fresh heartbeat, position, velocity, GPS,
+VTOL and landed-state telemetry; exact firmware/profile parameter readback;
+15–25 m altitude above home; at most 1 m/s groundspeed and 0.25 m/s absolute
+climb; and five distinct fresh samples over 2 s within 5 m of the supplied
+landing point. The point is only a bounded reference; QLAND holds position and
+descends. NOMAD sends one `MAV_CMD_DO_SET_MODE` request for custom mode 20 and
+does not expose arbitrary mode setting, generic landing, RTL/QRTL or mission
+execution. The ACK proves command acceptance only. Completion requires newer
+post-command QLAND telemetry, at least 5 m of descent, fresh `ON_GROUND`,
+disarm and five stable final samples over 2 s within 5 m, altitude -1 to 1.5 m,
+groundspeed at most 0.5 m/s and absolute climb at most 0.2 m/s. Hosted full-chain
+QuadPlane SITL run [36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163)
+passed. The independent trace recorded a 20.01 m start, 0.04 m point distance,
+2.10 s readiness dwell, QLAND, descent at 9.43 s, and `ON_GROUND` at 42.63 s.
+Final state was disarmed mode 20, multicopter, `ON_GROUND`, 0.14 m altitude,
+0.02 m/s groundspeed and 0.00 m/s climb. These values are qualification bounds
+for this exact SITL profile, not general flight limits or hardware approval.
+Earlier harness failures stopped before QLAND and are recorded in the migration
+history. The operation is not available through Runtime IPC v1.
 
 ## Observability and evidence
 

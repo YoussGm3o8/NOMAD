@@ -65,7 +65,19 @@ packaging and hardware gates remain open. Narrow QuadPlane flight slices have
 since qualified on the pinned ArduPlane profile; hosted
 [run 35980310680](https://github.com/YoussGm3o8/NOMAD/actions/runs/35980310680)
 observed the fixed-wing-to-VTOL transition complete in armed AUTO multicopter
-state. This does not close the broader aircraft matrix or qualify landing.
+state. A narrowly gated QLAND operation now reads the pinned
+`AUTOPILOT_VERSION`, subscribes to landed-state telemetry and sends one fixed
+`DO_SET_MODE` request. The deterministic peer checks the QLAND mode parameters,
+target IDs and denied ACK path. Hosted full-chain pinned landing run
+[36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163)
+passed at implementation head `dcdd1d121d51eefa451fa5d16ab121ef8793e427`.
+The independent observer recorded QLAND, descent beginning 9.43 s after the
+command, `ON_GROUND` at 42.63 s, then disarmed QLAND/multicopter state at
+0.14 m altitude, 0.02 m/s groundspeed and 0.00 m/s climb. This qualifies the
+pinned ArduPlane 4.7.1 `quadplane-tilttri` profile only. Earlier observer runs
+stopped before QLAND because the five-sample dwell window spanned only one
+second. This does not close the broader aircraft matrix or qualify generic
+landing.
 
 The original Phase A graph passed recursive hosted qualification. Test
 run `34535620056` completed the Python suite, C++ core, provenance checker,
@@ -301,8 +313,9 @@ checks command 3000 as `COMMAND_LONG`, target system/component, `param1=3`
 The transition uses MAVSDK's
 existing typed `subscribe_vtol_state` path; no fork edit or hand-written
 MAVLink encoder was needed. A two-point fixed-wing route and an explicit
-recovery point now use the typed `COMMAND_INT` path; general navigation, RTL,
-landing and full Task 1 coverage remain open. Runtime IPC v1 does not expose
+recovery point now use the typed `COMMAND_INT` path. Generic navigation,
+generic landing, RTL and full Task 1 coverage remain open; the pinned QLAND
+operation is a separate QuadPlane-only capability. Runtime IPC v1 does not expose
 the new transition operation. Everything up to and including the production
 cutover has landed.
 The recovery peer verifies command 192, relative-altitude frame, clear
