@@ -280,10 +280,15 @@ runs its real adapter tests. Current source still has blocking callbacks; passin
 existing tests does not prove the target callback deadline contract.
 
 Mission Planner uses Windows/.NET Framework 4.8 and its reference assemblies.
-Use lint-plugin and relevant test-plugin-* tasks for non-deploying checks.
-build-plugin invokes a script that can install/overwrite the local plugin;
-inspect it and obtain deployment authorization before running it. Do not confuse
-a pure helper test with full plugin integration.
+Use `pixi run build-plugin-only` to compile the plugin to
+`mission_planner/src/bin/Release/NOMADPlugin.dll` without changing the Mission
+Planner installation. `pixi run test-plugin-build-only` checks this dispatch
+with a temporary deny-write installation and the C# compiler bundled with
+Visual Studio MSBuild. The legacy `pixi run build-plugin`
+task still deploys the plugin and dependencies and removes the old AppData copy;
+it prints a warning before doing so. Use it only when deployment is intended.
+Use `lint-plugin` and relevant `test-plugin-*` tasks for other non-deploying
+checks. Do not confuse a pure helper test with full plugin integration.
 
 ## Contribution and evidence workflow
 

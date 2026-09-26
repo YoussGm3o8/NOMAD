@@ -177,8 +177,14 @@ precommit = "pre-commit run --all-files"
 # Bootstrap (run once when first cloning)
 bootstrap = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup/bootstrap.ps1"
 
-# Build the Mission Planner plugin (Windows only)
+# Compile the Mission Planner plugin without touching its installation (Windows only)
+build-plugin-only = "powershell -ExecutionPolicy Bypass -File scripts/build/build_plugin_windows.ps1 -NoDeploy"
+
+# Build and deploy the Mission Planner plugin (Windows only; prints a deployment warning)
 build-plugin = "powershell -ExecutionPolicy Bypass -File scripts/build/build_plugin_windows.ps1"
+
+# Requires Visual Studio's MSBuild/C# compiler; tests dispatch against a temporary deny-write installation.
+test-plugin-build-only = "powershell -ExecutionPolicy Bypass -File scripts/build/test_build_plugin_windows.ps1"
 
 # Dead-code lint for the plugin (Windows only) — fails on unused fields/locals,
 # unreachable code, etc. (C# compiler diagnostics promoted to errors).
