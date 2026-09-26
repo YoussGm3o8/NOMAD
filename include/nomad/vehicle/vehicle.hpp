@@ -113,6 +113,12 @@ class Vehicle {
     using StateVerdict = std::function<std::optional<CommandResult>(const telemetry::VehicleState &)>;
 
     CommandResult send_command(const mavlink::Command &command, const char *name);
+    CommandResult send_command(const mavlink::Command &command, const char *name,
+                               std::uint64_t expected_session_id);
+    CommandResult prepare_vtol_takeoff(const telemetry::VehicleState &initial_state);
+    CommandResult arm_for_vtol_takeoff(std::uint64_t expected_session_id);
+    CommandResult set_guided_mode_for_vtol_takeoff(std::uint64_t expected_session_id,
+                                                   telemetry::AircraftClass aircraft_class);
     CommandResult wait_for_state_until(std::chrono::milliseconds timeout, std::string timeout_message,
                                        const StateVerdict &verdict);
     CommandResult wait_for_armed_state(bool expected, const char *name);
@@ -120,9 +126,13 @@ class Vehicle {
     CommandResult wait_for_mode(const std::function<bool(std::uint32_t)> &matches, const char *name);
     CommandResult send_mode_and_verify(std::uint32_t custom_mode, const char *name);
     CommandResult wait_for_altitude(float minimum_altitude_m, const char *name);
-    CommandResult wait_for_vtol_takeoff(float target_altitude_m);
-    std::optional<std::string> vtol_takeoff_state_error(const telemetry::VehicleState &state) const;
-    CommandResult wait_for_fixed_wing_transition(std::uint8_t expected_system_id,
+    CommandResult wait_for_vtol_takeoff(float target_altitude_m, const telemetry::VehicleState &expected_state,
+                                        std::chrono::steady_clock::time_point ack_boundary);
+    std::optional<std::string> vtol_takeoff_identity_error(const telemetry::VehicleState &state,
+                                                           const telemetry::VehicleState &expected_state) const;
+    std::optional<std::string> vtol_takeoff_state_error(const telemetry::VehicleState &state,
+                                                        const telemetry::VehicleState &expected_state) const;
+    CommandResult wait_for_fixed_wing_transition(const telemetry::VehicleState &expected_state,
                                                  std::chrono::steady_clock::time_point ack_boundary);
     CommandResult wait_for_transition_ready(const RecoveryPoint &point, std::uint64_t expected_session_id,
                                             std::uint8_t expected_system_id, std::uint8_t expected_component_id,
@@ -167,7 +177,7 @@ class Vehicle {
                                                             std::uint64_t expected_session_id,
                                                             bool require_auto_mode) const;
     std::optional<std::string> vtol_transition_state_error(const telemetry::VehicleState &state,
-                                                            std::uint8_t expected_system_id,
+                                                            const telemetry::VehicleState &expected_state,
                                                             bool require_precondition) const;
     CommandResult wait_for_location(const Location &location);
     CommandResult require_operation(VehicleOperation operation) const;
