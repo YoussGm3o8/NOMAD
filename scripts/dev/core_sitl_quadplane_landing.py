@@ -89,6 +89,11 @@ def has_stable_ready_envelope(samples):
     return position_spread <= FINAL_POSITION_SPREAD_METERS and altitude_spread <= 1.0
 
 
+def trim_samples_to_dwell(samples):
+    while len(samples) > READY_SAMPLE_COUNT and samples[-1][0] - samples[1][0] >= READY_DWELL_SECONDS:
+        samples.pop(0)
+
+
 def wait_for_landing_ready(observer: RouteObserver, started: float, landing_point: tuple[float, float]):
     deadline = time.monotonic() + 45.0
     while time.monotonic() < deadline:
@@ -99,7 +104,7 @@ def wait_for_landing_ready(observer: RouteObserver, started: float, landing_poin
                 ready_samples.clear()
                 continue
             ready_samples.append((timestamp, latitude, longitude, altitude, velocity[1], velocity[2]))
-        ready_samples = ready_samples[-READY_SAMPLE_COUNT:]
+        trim_samples_to_dwell(ready_samples)
         if has_stable_ready_envelope(ready_samples):
             mode = latest_before(observer.modes, ready_samples[-1][0])
             vtol = latest_before(observer.vtol_states, ready_samples[-1][0])
@@ -191,7 +196,8 @@ def collect_stable_final_samples(observer, started, landed_at, landing_point):
             candidate.clear()
             continue
         candidate.append((timestamp, latitude, longitude, altitude, groundspeed, climb_rate))
-    return candidate[-READY_SAMPLE_COUNT:]
+        trim_samples_to_dwell(candidate)
+    return candidate
 
 
 def has_stable_final_envelope(candidate):
