@@ -152,7 +152,7 @@ close its integration or release gate.
   groundspeed and 0.00 m/s climb. This qualifies only the pinned SITL profile;
   generic `land`, RTL/QRTL and hardware remain blocked.
 
-- [ ] G-M QuadPlane link-loss/manual takeover qualification: define and prove
+- [~] G-M QuadPlane link-loss/manual takeover qualification: define and prove
   the aircraft and operator response to lost link during supported QuadPlane
   states, without disabling ArduPilot failsafes.
 
