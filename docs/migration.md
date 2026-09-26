@@ -1,11 +1,43 @@
 # Migration and release gates
 
-Source review baseline: `fab9f46`, inspected 2026-09-10 with a clean working tree;
+Historical source review baseline: `fab9f46`, inspected 2026-09-10 with a clean working tree;
 includes planning `d31b0aa`, runtime `3ef38e7`, profiles `51f309e`, setup `a9762b0`
 and MAVSDK Phase A `6922371`. Earlier evidence below retains its original dates.
 This document owns implementation status, the
 cutover inventory and gate evidence. [PRD](prd.md) owns requirements and decisions;
 [architecture](architecture.md) owns the target; TODO is the working ledger.
+
+## Current qualification status
+
+This is the current owner for qualification scope, provenance and unqualified
+gates. Run [36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163)
+was created 2026-09-26T02:04:54Z. Its pinned QuadPlane full chain and Copter
+loop-closure check passed at implementation head
+`dcdd1d121d51eefa451fa5d16ab121ef8793e427`; the separate
+`mavsdk-phase-a-sitl` job was skipped. This is historical evidence, not a new
+run. Code SHAs below identify the implementations tested, not this document's
+current commit.
+
+The pinned QuadPlane chain covers identity/telemetry → arm → VTOL takeoff →
+VTOL-to-fixed-wing → two-point route → bounded recovery → fixed-wing-to-VTOL →
+QLAND. Observed landing completion required `ON_GROUND`, disarm and stable final
+samples.
+
+| Operation | Aircraft / firmware SHA | Code SHA / SITL run and date | Command path | Deterministic evidence | Scope limits / next unqualified gate |
+|---|---|---|---|---|---|
+| Copter regression matrix and velocity loop closure | ArduCopter 4.7.1 image built from the `Copter-4.7.1` tag; the workflow does not record its source SHA | Full matrix: `26d7f9b101a029725d06aee2c6716da95e622417`, [35489428247](https://github.com/YoussGm3o8/NOMAD/actions/runs/35489428247), 2026-09-20. Later loop closure: shared run above, at `dcdd1d121d51eefa451fa5d16ab121ef8793e427`. | `.github/workflows/sitl.yml` `sitl` job; `pixi run sitl-scenario` runs `tests/sitl/velocity_loop_closure.py` | C++ fake-transport tests and the MAVSDK peer fixture cover command and failure contracts; SITL checks authoritative vehicle state. | These Copter scenarios do not qualify Plane or QuadPlane operations, hardware behavior or competition readiness. Next: record an immutable Copter firmware SHA; close Phase A resource approval, supported-firmware and ROS matrices, and packaging/install/rollback gates. |
+| Pinned QuadPlane operation chain through QLAND | ArduPlane 4.7.1 `quadplane-tilttri`, `Q_ENABLE=2` and pinned parameters; firmware SHA `dbe792162d06cab66c3475fd5556bf7a120f119e` | Shared run above at `dcdd1d121d51eefa451fa5d16ab121ef8793e427`. | `.github/workflows/sitl.yml` `quadplane-observation` job; `pixi run core-sitl-quadplane-vtol-landing` runs the pinned chain. | C++ falsification tests and deterministic MAVSDK peer checks; an independent pymavlink observer verifies live post-command state. | Limited to these operations on this SITL profile. Arbitrary modes, generic takeoff/goto/land/RTL/QRTL, link-loss/manual takeover, full Task 1 execution and hardware remain unqualified. Next: qualify link-loss/manual takeover, the integrated Task 1 flight and hardware operation; complete G-M release and G7 safety gates. |
+
+Repository checks are separate from aircraft qualification. On audited `main`
+commit `bc7cf4e36690e0561a7af9370bdf46e4f9e91443` (2026-09-26), root
+`CMakeLists.txt` registered 17 tests and CTest passed all 17 (17/17).
+`pixi run test-python` completed with 618 passed and 3 skipped. File/function/line-length
+improvement baseline entry counts are 5/1/0.
+Strict docs build, lint and format checks passed on this baseline. These results
+do not extend either aircraft row's scope.
+
+These operation results do not close command-authority/runtime hardening,
+competition-server integration or any unlisted G2-G8 gate.
 
 ## Current implementation inventory
 
@@ -16,7 +48,7 @@ merged baseline, hosted qualification results, and remaining fork/adapter work.
 
 | Area | Source and tests inspected | Actual scope and remaining limitation |
 |---|---|---|
-| C++ foundation | CMakeLists.txt; include/nomad; src; eleven CTest targets | Library and CLI build against the mandatory MAVSDK transport; no Python or mavgen build dependency, no Python runtime dependency |
+| C++ foundation | CMakeLists.txt; include/nomad; src; registered CTest coverage (current count above) | Library and CLI build against the mandatory MAVSDK transport; no Python or mavgen build dependency, no Python runtime dependency |
 | MAVLink | src/mavlink (MAVSDK transport); core_test, mavsdk_connection_test, mavsdk_zero_delivery_test | MAVSDK owns framing/transport; NOMAD owns ACK classification, typed telemetry, heartbeat/relay handling, the zero-setpoint stop and fence/parameter traffic; native serial/TCP absent |
 | Vehicle | src/vehicle/operation.cpp; src/vehicle/vehicle*.cpp; src/telemetry/identity.cpp; core_test.cpp; operation_capability_test.cpp; QuadPlane route/recovery/transition tests | Aircraft recognition is separate from a fail-closed per-operation capability policy; the pinned QuadPlane profile admits semantic GUIDED arm, VTOL takeoff, both explicit transitions, a two-point fixed-wing route and recovery; Plane, Unknown and adjacent QuadPlane operations remain rejected before transport |
 | Missions | src/mission/executor.cpp; core_test.cpp | Synchronous small step executor; no integrated cancellation, persisted resume, survey or Task 2 workflow |
@@ -243,8 +275,8 @@ classifies known Copter, Plane and QuadPlane identities, selects their guided
 and return-to-launch modes, rejects unknown identities, and refuses non-Copter
 body-frame velocity. Only Copter landing is supported by this slice. Plane and
 QuadPlane landing are rejected before transmission because their direct
-COMMAND_LONG NAV_LAND behavior has not been qualified. The focused tests pass in
-the ten-target CTest suite. ArduPlane's fixed-wing heartbeat is classified as
+COMMAND_LONG NAV_LAND behavior has not been qualified. Focused tests exercise
+this policy. ArduPlane's fixed-wing heartbeat is classified as
 QuadPlane for `Q_ENABLE=1` or `2`, Plane for zero, and Unknown when the parameter
 is unavailable or invalid.
 The pinned observation harness described below now provides QuadPlane SITL

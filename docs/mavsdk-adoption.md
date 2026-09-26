@@ -13,6 +13,11 @@ Its [source requirements](conops-requirements.md) define the acceptance context:
 
 ## Current status
 
+The [migration qualification status](migration.md#current-qualification-status)
+owns current aircraft scope, run and implementation provenance, repository
+baseline counts and open release gates. This document keeps the transport decision
+and its dated parity evidence.
+
 MAVSDK is the transport. The Phase E cutover removed the hand-written codec
 (`src/mavlink/{protocol,udp_connection,udp_commands,fence,params}.cpp`, the
 generated dialect headers and the legacy codec test targets), so no build can
@@ -46,7 +51,7 @@ recovery evidence, exclusion polygons, controlled retry loss, repeated progress
 acknowledgements and concurrent deadlines. Millisecond timer rounding no longer
 causes retries immediately before an operation deadline.
 
-Local qualification on 2026-09-19 passed 415 MAVSDK unit tests, 114 system tests,
+Historical local transport qualification on 2026-09-19 passed 415 MAVSDK unit tests, 114 system tests,
 33 compatibility tests against pinned ArduCopter 4.7.1, and 80 repeated Linux
 deadline/retry checks. The pinned revision's hosted compatibility run also
 passed all 33; its final change affects only archive workflow paths and docs.
@@ -56,28 +61,12 @@ SDK system IDs are checked before narrowing, including rejection of ID 257 for
 expected ID 1. Complete Linux, Apple and Windows workflows pass on that revision;
 see the [closeout record](mavsdk-handoff.md) for the final evidence and remaining gates.
 
-The merged-main NOMAD qualification also passed the complete hosted Copter SITL
-matrix in [run 35489428247](https://github.com/YoussGm3o8/NOMAD/actions/runs/35489428247)
-at commit `26d7f9b101a029725d06aee2c6716da95e622417`. The run covered the command,
-mission, velocity, payload, link, heartbeat, loop-closure and geofence paths;
-resource approval, ROS, the broader supported-aircraft/QuadPlane matrix,
-packaging and hardware gates remain open. Narrow QuadPlane flight slices have
-since qualified on the pinned ArduPlane profile; hosted
-[run 35980310680](https://github.com/YoussGm3o8/NOMAD/actions/runs/35980310680)
-observed the fixed-wing-to-VTOL transition complete in armed AUTO multicopter
-state. A narrowly gated QLAND operation now reads the pinned
-`AUTOPILOT_VERSION`, subscribes to landed-state telemetry and sends one fixed
-`DO_SET_MODE` request. The deterministic peer checks the QLAND mode parameters,
-target IDs and denied ACK path. Hosted full-chain pinned landing run
-[36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163)
-passed at implementation head `dcdd1d121d51eefa451fa5d16ab121ef8793e427`.
-The independent observer recorded QLAND, descent beginning 9.43 s after the
-command, `ON_GROUND` at 42.63 s, then disarmed QLAND/multicopter state at
-0.14 m altitude, 0.02 m/s groundspeed and 0.00 m/s climb. This qualifies the
-pinned ArduPlane 4.7.1 `quadplane-tilttri` profile only. Earlier observer runs
-stopped before QLAND because the five-sample dwell window spanned only one
-second. This does not close the broader aircraft matrix or qualify generic
-landing.
+The merged-main Copter matrix and later pinned QuadPlane operation chain are
+recorded in the [current migration status](migration.md#current-qualification-status).
+The detailed observer measurements and earlier failed attempts remain in the
+dated migration evidence. These results do not close resource approval, the
+broader supported-aircraft/QuadPlane matrix, ROS, packaging/install/rollback,
+generic landing, or hardware gates.
 
 The original Phase A graph passed recursive hosted qualification. Test
 run `34535620056` completed the Python suite, C++ core, provenance checker,

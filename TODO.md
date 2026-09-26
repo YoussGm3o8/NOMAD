@@ -1,8 +1,9 @@
 # NOMAD work ledger
 
 One ledger; one active item. Requirements/decisions live in [PRD](docs/prd.md),
-implementation/evidence in [migration](docs/migration.md), and transport details
-in [MAVSDK adoption](docs/mavsdk-adoption.md).
+current qualification scope and provenance in the [migration status matrix](docs/migration.md#current-qualification-status),
+dated implementation evidence in [migration](docs/migration.md), and transport
+details in [MAVSDK adoption](docs/mavsdk-adoption.md).
 
 Status: [ ] open, [~] active, [x] complete. A task being implemented does not
 close its integration or release gate.
@@ -124,14 +125,10 @@ close its integration or release gate.
   `param1=MAV_VTOL_STATE_MC` only in AUTO. An independent loiter setup moves the
   recovered armed GUIDED fixed-wing aircraft into AUTO; NOMAD then requires the
   stable 15–25 m/55 m transition-ready envelope before sending the request.
-  Hosted implementation-head [run 35980310680](https://github.com/YoussGm3o8/NOMAD/actions/runs/35980310680)
-  passed at `0231481e0fd20ccf5138938276f3bf1f575991c9`, with full Copter
-  regression success. The independent observer saw
-  `fixed_wing -> multicopter`, 50.4 m maximum ready distance, 21.1 s dwell,
-  25.4 m/s maximum groundspeed, 0.5 m/s maximum absolute climb, 45.2 s
-  completion, final AUTO mode 10 and armed state. ArduPlane emitted no
-  intermediate transition state. This proves transition to multicopter flight
-  only; landing remains separate.
+  Historical run details and implementation provenance remain in the dated
+  [migration evidence](docs/migration.md). Current hosted scope is summarized in
+  the [qualification status matrix](docs/migration.md#current-qualification-status).
+  This proves transition to multicopter flight only; landing remains separate.
   Falsification: an ACK, pre-ACK multicopter state, stale telemetry, gate failure,
   non-multicopter final state, unstable position, disarm or unexpected mode is
   reported as transition completion.
@@ -143,14 +140,11 @@ close its integration or release gate.
   five-sample/two-second readiness dwell pass. Its ACK is only a command
   boundary; completion requires post-command QLAND, at least 5 m descent,
   fresh `EXTENDED_SYS_STATE=ON_GROUND`, disarm and five stable final samples.
-  C++ and deterministic MAVSDK checks pass. Hosted full-chain pinned SITL run
-  [36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163)
-  passed at code head `dcdd1d121d51eefa451fa5d16ab121ef8793e427`. Its independent
-  observer recorded 20.01 m entry altitude, 0.04 m landing-point distance,
-  2.10 s readiness dwell, QLAND, descent after 9.43 s, `ON_GROUND` after
-  42.63 s, then final disarmed QLAND/multicopter state at 0.14 m, 0.02 m/s
-  groundspeed and 0.00 m/s climb. This qualifies only the pinned SITL profile;
-  generic `land`, RTL/QRTL and hardware remain blocked.
+  C++ and deterministic MAVSDK checks pass. The historical hosted result is in
+  the [qualification status matrix](docs/migration.md#current-qualification-status);
+  detailed observer measurements remain in the dated [migration evidence](docs/migration.md).
+  This qualifies only the pinned SITL profile; generic `land`, RTL/QRTL and
+  hardware remain blocked.
 
 - [~] G-M QuadPlane link-loss/manual takeover qualification: define and prove
   the aircraft and operator response to lost link during supported QuadPlane
@@ -166,8 +160,9 @@ close its integration or release gate.
 
 - [x] G2 / SR-LNK-03 zero-delivery evidence: repair the live observer's MAVLink
   datagram parsing, prove nonzero-then-zero ordering independently, and rerun the
-  complete hosted Copter SITL suite. Merged-main run
-  `35489428247` passed the full matrix at `26d7f9b`; this repairs evidence
+  complete hosted Copter SITL suite. The full Copter matrix provenance is in the
+  [qualification status matrix](docs/migration.md#current-qualification-status);
+  this repairs evidence
   collection only and does not weaken the core watchdog or substitute command
   acknowledgements for wire evidence. Falsification: the observer misses a valid
   packed setpoint, accepts zero without a preceding nonzero command, or live wire
@@ -176,8 +171,9 @@ close its integration or release gate.
 - [x] G2 / SR-LNK-04 GCS-heartbeat evidence: validate at least three measured
   intervals between 0.9 s and 1.3 s, route MAVSDK's `udpout:` source through the
   heartbeat-gated relay, preserve the dropped-announcement negative control, and
-  rerun the current-head full SITL suite. Merged-main run `35489428247` passed
-  the heartbeat gate and every later Copter scenario at `26d7f9b`. Falsification:
+  rerun the current-head full SITL suite. The run and implementation provenance
+  are in the [qualification status matrix](docs/migration.md#current-qualification-status).
+  Falsification:
   cadence exceeds the owned limit, the relay opens without valid GCS heartbeats,
   or a future complete suite stops at this gate.
 
@@ -232,11 +228,10 @@ gates. Do not mark multiple work items active or bypass predecessor safety gates
   Copter vehicle/mission operations exist.
 - [x] Velocity configuration, watchdog, VIO source validation, fence and
   dedicated payload safety paths with unit tests exist.
-- [x] Wire-level zero-delivery tests and named SITL harnesses exist; hosted run
-  `34648914427` independently observed the ordered nonzero/zero wire sequence and
-  hover on Copter 4.7.1, and merged-main run `35489428247` passed the complete
-  Copter matrix including containment. Aircraft-class, all-mode and hardware
-  containment evidence remains open.
+- [x] Wire-level zero-delivery tests and named SITL harnesses exist; historical
+  observer and Copter matrix results are in the [qualification status
+  matrix](docs/migration.md#current-qualification-status). Aircraft-class,
+  all-mode and hardware containment evidence remains open.
 - [x] Mission Planner core client for goto/discrete outputs and ROS adapter exist;
   full command ownership migration remains open.
 - [x] MAVSDK Phase A build/smoke target and fork wiring exist; the production
@@ -249,8 +244,9 @@ gates. Do not mark multiple work items active or bypass predecessor safety gates
   release blocker.
 - [x] Three profile templates/config tests and retained Python video bridge exist;
   runtime and hardware capability evidence remains open.
-- [x] Documentation review baseline: test-core 9/9; test-python 251 passed,
-  3 skipped on 2026-09-08. See migration for subsequent quality checks.
+- [x] Historical documentation review baseline (2026-09-08): test-core 9/9;
+  test-python 251 passed, 3 skipped. Current repository check counts are in the
+  [qualification status matrix](docs/migration.md#current-qualification-status).
 
 ## User decisions recorded on 2026-09-08
 
