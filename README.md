@@ -6,23 +6,17 @@ stabilization, EKF, navigation execution and failsafes.
 
 ## Current status
 
-The working migration tree contains a tested C++ core, UDP MAVLink implementation,
-basic Copter operations, safety/watchdog/fence/payload primitives and adapters.
-Edge Core source has been removed. Build and profile/service wiring repairs are
-recorded in the migration gates, and setup/provisioning now targets the C++ core.
-MAVSDK is an early competition prerequisite with deterministic parity and smoke
-targets. The pinned QuadPlane profile is qualified in SITL for identity and
-telemetry, arm, VTOL takeoff, VTOL-to-fixed-wing transition, a two-point
-fixed-wing route, bounded recovery, fixed-wing-to-VTOL transition, and QLAND
-landing. The independent observer in [hosted run 36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163)
-recorded 20.01 m entry altitude, a 0.04 m landing-point distance, 2.10 s
-readiness dwell, QLAND, descent beginning 9.43 s after the command, and
-`ON_GROUND` 42.63 s after it. Final state was disarmed QLAND, multicopter,
-`ON_GROUND`, 0.14 m altitude, 0.02 m/s groundspeed and 0.00 m/s climb. This is
-qualification for the pinned ArduPlane 4.7.1 `quadplane-tilttri` SITL profile
-only. Fixed-wing link-loss/manual-takeover response, integrated Task 1 flight,
-command-authority/runtime hardening, competition-server integration, generic
-landing/RTL/QRTL, and hardware qualification remain open.
+The working migration tree contains a C++ core, UDP MAVLink implementation,
+Copter operations, safety/watchdog/fence/payload primitives and adapters. Edge
+Core source has been removed. Build and profile/service wiring repairs are
+recorded in the migration gates, and setup/provisioning targets the C++ core.
+The [current qualification status](docs/migration.md#current-qualification-status)
+owns the exact aircraft profiles, implementation SHAs, test baseline, hosted SITL
+evidence and remaining gates. Existing Copter scenarios and narrow QuadPlane
+operations through QLAND are SITL evidence for their listed profiles. Fixed-wing
+link-loss/manual takeover, integrated Task 1 flight, competition-server
+integration, command-authority/runtime hardening, generic landing/RTL/QRTL and
+hardware qualification remain open.
 
 Task 1 targets a lightweight VTOL with ground GPU vision. Task 2 targets a quad
 below 15 kg with optional onboard compute. All three product profiles remain:
@@ -34,7 +28,7 @@ documents for confirmed directions, confirmed source requirements and unresolved
 - [Delivery plan](PLAN.md) and [working ledger](TODO.md)
 - [Requirements and user decisions](docs/prd.md)
 - [Architecture](docs/architecture.md)
-- [Migration status and evidence gates](docs/migration.md)
+- [Current qualification status](docs/migration.md#current-qualification-status)
 - [Development](docs/development.md), [operations](docs/operations.md)
   and [safety case](docs/safety.md)
 
@@ -44,8 +38,8 @@ pixi run test-python
 pixi run docs-build
 ~~~
 
-These checks do not start hardware. Core and daemon-free configuration checks are
-current; live Docker/SITL/ROS startup remains an open G1 qualification gate. Real
+These checks do not start hardware. The status matrix lists the scoped live SITL
+evidence; broader image/profile and ROS startup gates at G1 remain open. Real
 configuration stays in ignored local storage.
 
 ## Layout

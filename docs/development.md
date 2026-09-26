@@ -2,8 +2,8 @@
 
 The current tree builds a C++20 library and CLI with optional ROS 2 and Mission
 Planner adapters. Edge Core source is deleted and active build, deployment and
-setup entrypoints target the C++ core. Source status and evidence belong in
-[migration](migration.md).
+setup entrypoints target the C++ core. Current qualification scope and baseline
+counts belong in [migration status](migration.md#current-qualification-status).
 
 ## Prerequisites and verified local checks
 
@@ -40,11 +40,10 @@ lines per source file, 40 per Python function, and 120 columns per C/C++ line
 (ruff already enforces the Python limit through E501). It also rejects a baseline
 entry that no longer points at an oversized file, function or tolerated over-long
 line, so the baselines cannot silently widen the gate.
-`config/file_size_baseline.txt` lists only the oversized files that still exist;
-`config/function_size_baseline.txt` is empty; `config/line_length_baseline.txt`
-names the five legacy transport files whose existing over-length lines Phase E
-deletes instead of wrapping. Add an entry only for a genuine offender — the
-freshness check makes removing it when the file is split, the lines are wrapped,
+The three improvement baseline files record the outstanding offenders; see the
+[current status](migration.md#current-qualification-status) for their entry
+counts. Add an entry only for a genuine offender — the freshness check makes
+removing it when the file is split, the function is shortened, lines are wrapped
 or the file is deleted non-optional. The C/C++ column limit is enforced through
 this reporter rather than clang-format because the formatter is not a pinned
 repository dependency. Shared helper code lives in exactly one place: C++ tests use
@@ -91,7 +90,7 @@ other optional compute services disabled until G3 qualification.
 
 | Layer | Current checks | Required expansion |
 |---|---|---|
-| C++ | Ten CTest targets including runtime IPC fake-connection coverage | Authority, per-field freshness, cancellation, MAVSDK and vehicle-class coverage |
+| C++ | Current registrations and qualification scope: see [migration status](migration.md#current-qualification-status) | Authority, per-field freshness, cancellation, MAVSDK and vehicle-class coverage |
 | Python | pytest includes client contracts, traceability, harnesses, profiles and video tools | Mock competition server/traffic, perception replay and tracker fixtures |
 | ROS | ros2/nomad_ros translation plus tests/ros integration | Bounded callbacks, acquisition-time/frame validation, command-owner integration |
 | Mission Planner | lint-plugin and test-plugin-* helper scripts | Ownership, capabilities, stale displays, action lifecycle and replay |
@@ -180,9 +179,9 @@ match the mission target; its five fresh samples must vary by no more than 1 m.
 It must remain at no more than 28 m/s
 groundspeed with at most 3 m/s variation and at most 1 m/s climb rate. Five
 fresh position samples must span 2 s, with bounded altitude and radial variation.
-The exact-head transition run completed recovery 34.4 m from the point and
-reported the farthest stable readiness sample at 50.4 m. The speed cap is below
-the measured 26.8 m/s maximum plus a 1.2 m/s margin.
+The historical transition-back results and their implementation provenance are
+recorded in [migration status](migration.md#current-qualification-status). The
+speed cap remains specific to this pinned SITL profile.
 Completion requires fresh post-ACK `Multicopter` state reports, retained armed
 AUTO mode and two seconds of stable position/velocity telemetry. Run `pixi run
 core-sitl-quadplane-transition-back` for the pinned live sequence. The new
@@ -191,13 +190,10 @@ calls NOMAD's dedicated `quadplane-vtol-land` CLI verb. It verifies pinned
 ArduPlane 4.7.1 / `quadplane-tilttri` readback, armed AUTO multicopter state,
 fresh position/velocity/GPS/VTOL/landed telemetry, relative-home altitude
 15–25 m, ≤1 m/s groundspeed, ≤0.25 m/s absolute climb and five fresh samples
-over two seconds within 5 m of the explicit landing point. Hosted full-chain
-[run 36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163)
-passed at implementation head `dcdd1d121d51eefa451fa5d16ab121ef8793e427`.
-Its independent observer recorded 20.01 m entry altitude, 0.04 m landing-point
-distance, 2.10 s readiness dwell, QLAND, descent after 9.43 s and `ON_GROUND`
-after 42.63 s. Final state was disarmed QLAND/multicopter at 0.14 m, with
-0.02 m/s groundspeed and 0.00 m/s climb. The core sends only fixed
+over two seconds within 5 m of the explicit landing point. The historical full-chain
+run provenance is in the [current qualification status](migration.md#current-qualification-status);
+its detailed observer measurements remain in the dated migration evidence. This
+is existing evidence, not a newly run check. The core sends only fixed
 `DO_SET_MODE` custom
 mode 20 (QLAND); the point is an admission/final-state reference, and QLAND
 holds current position rather than navigating to it. Acknowledgement is not
@@ -216,14 +212,9 @@ server-contract tests. The independent pymavlink mode driver establishes
 does not qualify an autonomous GUIDED -> AUTO -> transition sequence or transfer
 command authority to the test driver.
 
-Hosted implementation-head [run 35980310680](https://github.com/YoussGm3o8/NOMAD/actions/runs/35980310680)
-passed the pinned transition and full Copter regression at
-`0231481e0fd20ccf5138938276f3bf1f575991c9`. The transition observer reported
-34.4 m recovery distance, 4.1 m recovery altitude error, 20.0 m transition
-altitude, 50.4 m maximum readiness distance, 21.1 s stabilization, 25.4 m/s
-maximum groundspeed, 0.5 m/s maximum absolute climb, observed states
-`[fixed_wing, multicopter]`, completion in 45.2 s, final AUTO mode 10 and armed
-state. This remains SITL evidence and does not establish landing or hardware
+Historical transition-back and Copter regression provenance is in the [migration
+status](migration.md#current-qualification-status). The transition-back result
+alone establishes that transition only; it does not establish landing or hardware
 qualification.
 
 ## Adapter and optional build checks

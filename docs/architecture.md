@@ -1,7 +1,8 @@
 # Architecture
 
 Target design reconciled to CONOPS v1.0, 2026-09-10. Requirements and pending decisions are in
-[PRD](prd.md); current implementation and discrepancies are in [migration](migration.md).
+[PRD](prd.md); implementation and discrepancy records are in [migration](migration.md),
+with current qualification scope in the [status matrix](migration.md#current-qualification-status).
 The AEAC-specific external contract is in [AEAC 2027 integration](aeac-2027.md).
 The working tree already removes Edge Core. Removal is not proof of a complete
 replacement deployment.
@@ -104,7 +105,7 @@ and `L` means local/read-only with no aircraft command. Entries are ordered
 | `fixed_wing_route` | N/N/N/N | None | N/N/Y/N | Exactly two QuadPlane waypoints, checked against the configured NOMAD fence when present, use `MAV_CMD_DO_REPOSITION` in confirmed GUIDED mode with `CHANGE_MODE` clear; each point requires a fresh post-ACK position at least 10 m closer than the captured ACK-boundary position, within 45 m and 5 m altitude. ACKs and intermediate route setup do not prove completion |
 | `fixed_wing_recovery` | N/N/N/N | None | N/N/Y/N | One explicit QuadPlane recovery point uses the reviewed fixed-wing GUIDED reposition transport after route completion, with `Q_GUIDED_MODE=0` readback. It requires fresh post-ACK progress of 10 m, arrival within 45 m horizontally and 5 m of the requested relative-home altitude, and retains armed GUIDED fixed-wing state. It does not select RTL/QRTL or land |
 | `transition_to_vtol` | N/N/N/N | None | N/N/Y/N | Pinned ArduPlane `AUTO` `MAV_CMD_DO_VTOL_TRANSITION` with `param1=MAV_VTOL_STATE_MC`; a fresh post-ACK multicopter VTOL state, same session, armed state and stable two-second post-transition position/velocity are required. It verifies `Q_ENABLE=2`, `Q_FRAME_CLASS=7`, `Q_TILT_ENABLE=1`, `Q_TILT_MASK=3`, `Q_TILT_TYPE=0`, `Q_TILT_RATE_UP=40` and `Q_TILT_MAX=45`; the requested altitude and measured altitude before transmission must be within the 15–25 m relative-home band, and the pre-transition envelope is within 55 m of the explicit recovery coordinates. After ACK, altitude must remain at least 15 m, with no 25 m upper ceiling during transition climb. Readiness requires five fresh position samples over 2 s, speed at most 28 m/s with at most 3 m/s variation, climb at most 1 m/s, altitude variation at most 1 m and radial variation at most 8 m. An operator/test authority installs a loiter mission and establishes AUTO after recovery; because AUTO entry initially sets VTOL state, the already-qualified fixed-wing transition restores fixed-wing state before readiness is measured. NOMAD does not gain generic `set_mode` |
-| `quadplane_vtol_land` | N/N/N/N | None | N/N/Y/N | Pinned profile only: direct QLAND custom mode 20 via fixed `MAV_CMD_DO_SET_MODE` after armed AUTO multicopter admission and a stable 15–25 m landing-ready dwell. The landing point bounds the current position; QLAND itself holds position and descends. Success requires post-ACK QLAND, ≥5 m descent, fresh `ON_GROUND`, disarm and a stable final envelope. The independent observer passed the full chain in [hosted run 36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163): 20.01 m entry, 2.10 s dwell, touchdown state at 42.63 s and final disarmed QLAND at 0.14 m. This is not generic `land` |
+| `quadplane_vtol_land` | N/N/N/N | None | N/N/Y/N | Pinned profile only: direct QLAND custom mode 20 via fixed `MAV_CMD_DO_SET_MODE` after armed AUTO multicopter admission and a stable 15–25 m landing-ready dwell. The landing point bounds the current position; QLAND itself holds position and descends. Success requires post-ACK QLAND, ≥5 m descent, fresh `ON_GROUND`, disarm and a stable final envelope. The full-chain result and observer provenance are in the [migration status matrix](migration.md#current-qualification-status). This is not generic `land` |
 | `update_vio` | L/L/L/L | Local validation | L/L/L/L | Updates local safety input and transmits nothing |
 | `set_velocity` | Y/N/N/N | Copter only | Y/N/N/N | Copter loop-closure and zero-delivery evidence; fixed-wing zero-stop semantics are unsafe |
 | `set_servo` | Y/Y/Y/Y | Copter baseline only | Y/N/N/N | Output/channel meaning is not qualified for Plane, QuadPlane or Unknown |
@@ -129,9 +130,8 @@ effect has been independently observed. The route and recovery rows qualify two
 narrow fixed-wing navigation primitives for the pinned QuadPlane profile. The
 transition-back and VTOL landing rows add explicit operations with stricter
 handoff and touchdown evidence. The full sequence, including landing, passed
-independent pinned-profile SITL observation in
-[run 36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163).
-Generic
+independent pinned-profile SITL observation; provenance is in the [migration
+status matrix](migration.md#current-qualification-status). Generic
 `land`, RTL/QRTL, QuadPlane link-loss response, complete Task 1 execution and
 hardware qualification remain separate gates.
 

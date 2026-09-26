@@ -1,7 +1,8 @@
 # Operations
 
 Target procedures reconciled to CONOPS v1.0, 2026-09-10. Profile selection does not
-authorize hardware use or prove readiness. [Migration](migration.md) owns gates;
+authorize hardware use or prove readiness. [Current qualification status](migration.md#current-qualification-status)
+owns evidence scope and gates;
 [architecture](architecture.md) owns component boundaries.
 
 ## Task and deployment matrix
@@ -11,7 +12,7 @@ authorize hardware use or prove readiness. [Migration](migration.md) owns gates;
 | Task 1 / groundstation_gpu | Proposed lightweight VTOL; Walksnail FPV camera; Pi Zero for backup LTE and possibly video; Here4 GNSS | GPU CV, video capture/display, C++ core, Mission Planner and server adapter | User direction; video capture, RF bandwidth, complete QuadPlane mission and endurance unqualified |
 | Task 2 / onboard_companion candidate | Under-15-kg quad; optional Jetson if useful autonomy emerges; tracker/tagging/sampling payload | Mission Planner, operator approvals and tracker CSV export; server applicability Q04 | Jetson placement and payload mechanism TBD |
 | groundstation_minimal | ArduPilot, navigation and selected command/telemetry link | C++ core and clients; lightweight server exchange when implemented | Product requirement; no ROS/perception dependency |
-| Development | Isolated Copter and pinned QuadPlane SITL | Core, fake/mock services and passive observers | Pinned SITL identity and flight slices are qualified; broader hardware startup and profile matrix remain open |
+| Development | Isolated Copter and pinned QuadPlane SITL | Core, fake/mock services and passive observers | See the [current qualification status](migration.md#current-qualification-status); hardware startup and broader profile matrix remain open |
 
 Use a strict under-15-kg project ceiling including maximum task payload; the
 CONOPS maximum-15-kg wording conflicts with its under-15-kg FRR wording (Q03).
@@ -270,15 +271,12 @@ hardware flight remain unqualified. VTOL landing is covered by the separate
 QLAND operation below. Runtime IPC v1 does not expose
 the operation.
 
-The pinned hosted implementation-head [run 35980310680](https://github.com/YoussGm3o8/NOMAD/actions/runs/35980310680)
-passed the transition and full Copter regression at
-`0231481e0fd20ccf5138938276f3bf1f575991c9`. The independent observer recorded
-recovery distance 34.4 m, altitude error 4.1 m, a 50.4 m maximum readiness
-distance, 21.1 s stabilization, `fixed_wing -> multicopter`, 45.2 s completion
-and final armed AUTO mode 10. The evidence is limited to the pinned SITL
-profile. The complete pinned landing chain passed in hosted
-[run 36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163).
-Hardware flight remains unqualified.
+Historical runs [35980310680](https://github.com/YoussGm3o8/NOMAD/actions/runs/35980310680)
+and [36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163)
+record the pinned transition, Copter regression and full QuadPlane chain. Their
+provenance and scope are in the [current qualification status](migration.md#current-qualification-status);
+dated measured traces remain in the migration evidence. Hardware flight remains
+unqualified.
 
 The dedicated direct CLI verb `quadplane-vtol-land <latitude> <longitude>` is
 restricted to the pinned ArduPlane 4.7.1 `quadplane-tilttri` profile. It admits
@@ -292,15 +290,12 @@ does not expose arbitrary mode setting, generic landing, RTL/QRTL or mission
 execution. The ACK proves command acceptance only. Completion requires newer
 post-command QLAND telemetry, at least 5 m of descent, fresh `ON_GROUND`,
 disarm and five stable final samples over 2 s within 5 m, altitude -1 to 1.5 m,
-groundspeed at most 0.5 m/s and absolute climb at most 0.2 m/s. Hosted full-chain
-QuadPlane SITL run [36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163)
-passed. The independent trace recorded a 20.01 m start, 0.04 m point distance,
-2.10 s readiness dwell, QLAND, descent at 9.43 s, and `ON_GROUND` at 42.63 s.
-Final state was disarmed mode 20, multicopter, `ON_GROUND`, 0.14 m altitude,
-0.02 m/s groundspeed and 0.00 m/s climb. These values are qualification bounds
-for this exact SITL profile, not general flight limits or hardware approval.
-Earlier harness failures stopped before QLAND and are recorded in the migration
-history. The operation is not available through Runtime IPC v1.
+groundspeed at most 0.5 m/s and absolute climb at most 0.2 m/s. The historical
+full-chain result and its independent observer trace are in the [current
+qualification status](migration.md#current-qualification-status) and dated
+migration evidence. Earlier harness failures stopped before QLAND and remain
+recorded in the migration history. The operation is not available through
+Runtime IPC v1.
 
 ## Observability and evidence
 
