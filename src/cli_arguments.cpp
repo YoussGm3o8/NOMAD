@@ -91,6 +91,18 @@ bool consume_transition_to_vtol(Arguments &arguments, std::string_view value) {
     return true;
 }
 
+bool consume_quadplane_landing(Arguments &arguments, std::string_view value) {
+    if (arguments.quadplane_landing_values.size() >= 2) {
+        return false;
+    }
+    const auto parsed = parse_double(value);
+    if (!parsed.has_value()) {
+        return false;
+    }
+    arguments.quadplane_landing_values.push_back(*parsed);
+    return true;
+}
+
 bool consume_mode(Arguments &arguments, std::string_view value) {
     if (arguments.mode.has_value()) {
         return false;
@@ -270,6 +282,9 @@ bool consume_verb_value(Arguments &arguments, std::string_view token, int argc, 
     if (command == "transition-to-vtol") {
         return consume_transition_to_vtol(arguments, token);
     }
+    if (command == "quadplane-vtol-land") {
+        return consume_quadplane_landing(arguments, token);
+    }
     if (command == "mode") {
         return consume_mode(arguments, token);
     }
@@ -342,6 +357,9 @@ bool has_required_arguments(const Arguments &arguments) {
     }
     if (command == "transition-to-vtol") {
         return arguments.transition_to_vtol_values.size() == 3;
+    }
+    if (command == "quadplane-vtol-land") {
+        return arguments.quadplane_landing_values.size() == 2;
     }
     return true;
 }

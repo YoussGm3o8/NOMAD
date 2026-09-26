@@ -346,6 +346,47 @@ int run_param_probe(int argc, char **argv) {
     return value.has_value() ? 0 : 1;
 }
 
+int run_qland_probe(int argc, char **argv) {
+    if (argc != 4) {
+        std::fprintf(stderr, "usage: %s --qland <endpoint> <system-id>\n", argv[0]);
+        return 2;
+    }
+    auto connection = nomad::mavlink::make_mavsdk_connection(
+        argv[2], static_cast<std::uint8_t>(std::stoi(argv[3])), std::chrono::seconds(3));
+    if (connection == nullptr || !connection->connect() ||
+        !connection->wait_for_heartbeat(std::chrono::seconds(3)).has_value()) {
+        std::printf("connect=fail\n");
+        return 1;
+    }
+    const auto landed_state_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    auto state = connection->get_state();
+    while ((!state.landed_state_valid || state.landed_state != nomad::telemetry::LandedState::OnGround) &&
+           std::chrono::steady_clock::now() < landed_state_deadline) {
+        static_cast<void>(connection->wait_for_state(std::chrono::milliseconds(50)));
+        state = connection->get_state();
+    }
+    if (!state.landed_state_valid || state.landed_state != nomad::telemetry::LandedState::OnGround) {
+        std::printf("landed_state=missing\n");
+        return 1;
+    }
+    const auto version = connection->read_autopilot_version(std::chrono::seconds(3));
+    if (!version) {
+        std::printf("version=none\n");
+        return 1;
+    }
+    const Command qland{176, {1.0F, 20.0F, 0, 0, 0, 0, 0}};
+    const auto ack = connection->send_command(qland, connection->get_state().session_id, std::chrono::seconds(2));
+    const auto landed_state_name = nomad::telemetry::landed_state_name(state.landed_state);
+    std::printf("version=%u.%u.%u hash=%s landed_state=%.*s ack=%d\n", version->major, version->minor,
+                version->patch, version->git_hash.c_str(), static_cast<int>(landed_state_name.size()),
+                landed_state_name.data(), ack ? static_cast<int>(ack->result) : -1);
+    return version->major == 4 && version->minor == 7 && version->patch == 1 &&
+                   version->git_hash == "dbe79216" && state.landed_state == nomad::telemetry::LandedState::OnGround &&
+                   ack && ack->command == 176 && ack->result == 0
+               ? 0
+               : 1;
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -363,6 +404,9 @@ int main(int argc, char **argv) {
     }
     if (argc >= 2 && std::string_view(argv[1]) == "--param") {
         return run_param_probe(argc, argv);
+    }
+    if (argc >= 2 && std::string_view(argv[1]) == "--qland") {
+        return run_qland_probe(argc, argv);
     }
     const int result = nomad::test::run_tests([] {
         test_invalid_configuration_is_refused();

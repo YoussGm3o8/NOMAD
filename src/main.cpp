@@ -142,6 +142,11 @@ int run_command(nomad::mavlink::MavlinkConnection &connection, const Arguments &
         const nomad::vehicle::RecoveryPoint point{values[0], values[1], static_cast<float>(values[2])};
         return print_result(vehicle.transition_to_vtol(point));
     }
+    if (arguments.command == "quadplane-vtol-land" && arguments.quadplane_landing_values.size() == 2) {
+        const auto &values = arguments.quadplane_landing_values;
+        const nomad::vehicle::LandingPoint point{values[0], values[1]};
+        return print_result(vehicle.quadplane_vtol_land(point));
+    }
     if (arguments.command == "goto" && arguments.latitude.has_value() && arguments.longitude.has_value() &&
         arguments.altitude.has_value()) {
         const nomad::vehicle::Location target{*arguments.latitude, *arguments.longitude, *arguments.altitude};

@@ -42,6 +42,11 @@ struct RecoveryPoint {
     float relative_altitude_m{};
 };
 
+struct LandingPoint {
+    double latitude_deg{};
+    double longitude_deg{};
+};
+
 struct CommandResult {
     bool success{false};
     std::string message;
@@ -56,7 +61,8 @@ class Vehicle {
                      std::chrono::milliseconds transition_state_timeout = std::chrono::seconds(90),
                      std::chrono::milliseconds fixed_wing_route_timeout = std::chrono::seconds(180),
                      std::chrono::milliseconds fixed_wing_recovery_timeout = std::chrono::seconds(180),
-                     std::chrono::milliseconds transition_ready_dwell = std::chrono::seconds(2));
+                     std::chrono::milliseconds transition_ready_dwell = std::chrono::seconds(2),
+                     std::chrono::milliseconds quadplane_landing_timeout = std::chrono::seconds(90));
     ~Vehicle();
 
     Vehicle(const Vehicle &) = delete;
@@ -80,6 +86,7 @@ class Vehicle {
     CommandResult vtol_takeoff(float altitude_m);
     CommandResult transition_to_fixed_wing();
     CommandResult transition_to_vtol(const RecoveryPoint &point);
+    CommandResult quadplane_vtol_land(const LandingPoint &point);
     CommandResult fixed_wing_route(const std::vector<RouteWaypoint> &route);
     CommandResult fixed_wing_recovery(const RecoveryPoint &point);
     CommandResult update_vio(bool healthy, float confidence);
@@ -123,6 +130,25 @@ class Vehicle {
     CommandResult verify_transition_profile(std::uint64_t expected_session_id, std::uint8_t expected_system_id,
                                             std::uint8_t expected_component_id,
                                             std::chrono::steady_clock::time_point deadline);
+    CommandResult verify_quadplane_profile(const LandingPoint &point, std::uint64_t expected_session_id,
+                                            std::uint8_t expected_system_id, std::uint8_t expected_component_id,
+                                            std::chrono::steady_clock::time_point deadline);
+    CommandResult verify_quadplane_landing_admission(const LandingPoint &point,
+                                                      std::chrono::steady_clock::time_point deadline,
+                                                      std::uint64_t &session_id, std::uint8_t &system_id,
+                                                      std::uint8_t &component_id, float &entry_altitude_m);
+    CommandResult send_quadplane_qland(std::uint64_t expected_session_id,
+                                       std::chrono::steady_clock::time_point deadline);
+    CommandResult wait_for_quadplane_landing_ready(const LandingPoint &point, std::uint64_t expected_session_id,
+                                                    std::uint8_t expected_system_id,
+                                                    std::uint8_t expected_component_id,
+                                                    std::chrono::steady_clock::time_point deadline);
+    CommandResult verify_quadplane_touchdown(const LandingPoint &point, std::uint64_t expected_session_id,
+                                              std::uint8_t expected_system_id,
+                                              std::uint8_t expected_component_id,
+                                              std::chrono::steady_clock::time_point ack_boundary,
+                                              std::chrono::steady_clock::time_point deadline,
+                                              float entry_altitude_m);
     CommandResult wait_for_multicopter_state(const RecoveryPoint &point, std::uint64_t expected_session_id,
                                               std::uint8_t expected_system_id, std::uint8_t expected_component_id,
                                               std::chrono::steady_clock::time_point ack_boundary,
@@ -171,6 +197,7 @@ class Vehicle {
     std::chrono::milliseconds fixed_wing_route_timeout_{std::chrono::seconds(180)};
     std::chrono::milliseconds fixed_wing_recovery_timeout_{std::chrono::seconds(180)};
     std::chrono::milliseconds transition_ready_dwell_{std::chrono::seconds(2)};
+    std::chrono::milliseconds quadplane_landing_timeout_{std::chrono::seconds(90)};
     safety::ReleaseInterlock payload_interlock_;
     mutable std::mutex payload_mutex_;
     mutable std::mutex velocity_mutex_;

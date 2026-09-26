@@ -244,6 +244,12 @@ class FakeConnection : public nomad::mavlink::MavlinkConnection {
         return found->second;
     }
 
+    std::optional<nomad::mavlink::AutopilotVersion>
+    read_autopilot_version(std::chrono::milliseconds) override {
+        ++version_read_count;
+        return autopilot_version;
+    }
+
     std::atomic_bool connected{false};
     std::atomic_int connect_count{0};
     std::atomic_bool command_started{false};
@@ -252,6 +258,10 @@ class FakeConnection : public nomad::mavlink::MavlinkConnection {
     // timestamps by default. Tests for stale-feed behavior clear this flag and
     // set the relevant *_updated_at by hand.
     bool auto_stamp_fresh_fields{true};
+    int version_read_count{0};
+    std::optional<nomad::mavlink::AutopilotVersion> autopilot_version{
+        nomad::mavlink::AutopilotVersion{4, 7, 1, "dbe79216"},
+    };
     std::optional<nomad::telemetry::VehicleState> state{
         nomad::telemetry::VehicleState{true, true, false, 1, 1, 4},
     };
@@ -397,6 +407,9 @@ class FakeConnection : public nomad::mavlink::MavlinkConnection {
         }
         if (state->vtol_state_valid) {
             state->vtol_state_updated_at = now;
+        }
+        if (state->landed_state_valid) {
+            state->landed_state_updated_at = now;
         }
     }
 

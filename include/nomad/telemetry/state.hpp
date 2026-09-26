@@ -51,6 +51,30 @@ enum class VtolState : std::uint8_t {
     FixedWing = 4,
 };
 
+enum class LandedState : std::uint8_t {
+    Unknown = 0,
+    OnGround = 1,
+    InAir = 2,
+    TakingOff = 3,
+    Landing = 4,
+};
+
+inline std::string_view landed_state_name(LandedState state) {
+    switch (state) {
+    case LandedState::Unknown:
+        return "unknown";
+    case LandedState::OnGround:
+        return "on_ground";
+    case LandedState::InAir:
+        return "in_air";
+    case LandedState::TakingOff:
+        return "taking_off";
+    case LandedState::Landing:
+        return "landing";
+    }
+    return "unknown";
+}
+
 inline std::string_view vtol_state_name(VtolState state) {
     switch (state) {
     case VtolState::Undefined:
@@ -85,12 +109,15 @@ struct VehicleState {
     bool attitude_valid{false};
     VtolState vtol_state{VtolState::Undefined};
     bool vtol_state_valid{false};
+    LandedState landed_state{LandedState::Unknown};
+    bool landed_state_valid{false};
     std::chrono::steady_clock::time_point position_updated_at{};
     std::chrono::steady_clock::time_point velocity_updated_at{};
     std::chrono::steady_clock::time_point battery_updated_at{};
     std::chrono::steady_clock::time_point gps_updated_at{};
     std::chrono::steady_clock::time_point attitude_updated_at{};
     std::chrono::steady_clock::time_point vtol_state_updated_at{};
+    std::chrono::steady_clock::time_point landed_state_updated_at{};
     VehicleIdentity identity{};
     // Changes whenever this connection selects a new autopilot session, even
     // when the autopilot reuses the same MAVLink system and component IDs.

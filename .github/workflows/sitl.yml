@@ -215,7 +215,7 @@ jobs:
         run: pixi run dev-down
 
   quadplane-observation:
-    name: QuadPlane identity, takeoff, transitions, route and recovery qualification
+    name: QuadPlane identity, takeoff, transitions, route, recovery and landing qualification
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -294,6 +294,15 @@ jobs:
 
       - name: Qualify recovered QuadPlane fixed-wing-to-VTOL transition
         run: pixi run core-sitl-quadplane-transition-back
+
+      - name: Reset QuadPlane SITL before VTOL landing qualification
+        run: |
+          pixi run quadplane-sitl-down
+          pixi run quadplane-sitl-up
+          sleep 25
+
+      - name: Qualify full pinned QuadPlane chain through VTOL landing
+        run: pixi run core-sitl-quadplane-vtol-landing
 
       - name: QuadPlane SITL logs on failure
         if: failure()

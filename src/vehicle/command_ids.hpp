@@ -23,6 +23,7 @@ namespace nomad::vehicle {
 
 constexpr std::uint16_t kArmDisarmCommand = 400;      // MAV_CMD_COMPONENT_ARM_DISARM
 constexpr std::uint16_t kSetModeCommand = 176;        // MAV_CMD_DO_SET_MODE
+constexpr std::uint32_t kQuadplaneQlandMode = 20;     // Plane.Modes.QLAND
 constexpr std::uint16_t kTakeoffCommand = 22;         // MAV_CMD_NAV_TAKEOFF
 // ArduPlane's QuadPlane GUIDED handler dispatches this same command id through
 // QuadPlane::do_user_takeoff; it is a distinct NOMAD semantic operation.

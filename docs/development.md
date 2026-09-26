@@ -124,7 +124,8 @@ core-sitl-velocity-watchdog, core-sitl-geofence, core-sitl-payload,
 core-sitl-link-loss, core-sitl-link-recovery, core-sitl-zero-delivery,
 core-sitl-gcs-heartbeat, core-sitl-quadplane-observe,
 core-sitl-quadplane-vtol-takeoff, core-sitl-quadplane-transition,
-core-sitl-quadplane-route and sitl-fence. Use them
+core-sitl-quadplane-route, core-sitl-quadplane-transition-back,
+core-sitl-quadplane-vtol-landing and sitl-fence. Use them
 against a configured isolated endpoint with no hardware path attached; a live
 passing run is still required before G1 closes.
 
@@ -184,10 +185,31 @@ reported the farthest stable readiness sample at 50.4 m. The speed cap is below
 the measured 26.8 m/s maximum plus a 1.2 m/s margin.
 Completion requires fresh post-ACK `Multicopter` state reports, retained armed
 AUTO mode and two seconds of stable position/velocity telemetry. Run `pixi run
-core-sitl-quadplane-transition-back` for the pinned live sequence. These slices
-do not qualify disarm, generic takeoff/goto, route planning, arbitrary RTL/QRTL,
-VTOL landing, QuadPlane link-loss response or the complete Task 1 flight. Copter
-mode numbers and velocity-stop behavior cannot stand in for those tests. Gazebo/Isaac are
+core-sitl-quadplane-transition-back` for the pinned live sequence. The new
+`core-sitl-quadplane-vtol-landing` task repeats the full starting chain and then
+calls NOMAD's dedicated `quadplane-vtol-land` CLI verb. It verifies pinned
+ArduPlane 4.7.1 / `quadplane-tilttri` readback, armed AUTO multicopter state,
+fresh position/velocity/GPS/VTOL/landed telemetry, relative-home altitude
+15–25 m, ≤1 m/s groundspeed, ≤0.25 m/s absolute climb and five fresh samples
+over two seconds within 5 m of the explicit landing point. Hosted full-chain
+[run 36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163)
+passed at implementation head `dcdd1d121d51eefa451fa5d16ab121ef8793e427`.
+Its independent observer recorded 20.01 m entry altitude, 0.04 m landing-point
+distance, 2.10 s readiness dwell, QLAND, descent after 9.43 s and `ON_GROUND`
+after 42.63 s. Final state was disarmed QLAND/multicopter at 0.14 m, with
+0.02 m/s groundspeed and 0.00 m/s climb. The core sends only fixed
+`DO_SET_MODE` custom
+mode 20 (QLAND); the point is an admission/final-state reference, and QLAND
+holds current position rather than navigating to it. Acknowledgement is not
+completion: post-command proof requires QLAND, at least 5 m descent, fresh
+`ON_GROUND`, autopilot disarm and five stable final samples within 5 m, with
+altitude -1 to 1.5 m, speed ≤0.5 m/s and absolute climb ≤0.2 m/s. The
+independent pymavlink observer checks that trace separately from the CLI result.
+These are pinned SITL qualification bounds, not general flight limits. These
+slices do not qualify disarm as a public operation, generic takeoff/goto, route
+planning, generic land, arbitrary RTL/QRTL, QuadPlane link-loss response or the
+complete Task 1 flight. Copter mode numbers and velocity-stop behavior cannot stand
+in for those tests. Gazebo/Isaac are
 optional sensor-evidence tools; they are not prerequisites for basic unit or
 server-contract tests. The independent pymavlink mode driver establishes
 `AUTO` because NOMAD deliberately rejects arbitrary QuadPlane `set_mode`; this

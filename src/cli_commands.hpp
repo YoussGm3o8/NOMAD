@@ -43,6 +43,7 @@ struct Arguments {
     std::vector<double> fixed_wing_route_values;
     std::vector<double> fixed_wing_recovery_values;
     std::vector<double> transition_to_vtol_values;
+    std::vector<double> quadplane_landing_values;
 };
 
 // Defined in cli_arguments.cpp.

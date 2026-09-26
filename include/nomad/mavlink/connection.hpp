@@ -71,6 +71,13 @@ struct ParamValue {
     float value{};
 };
 
+struct AutopilotVersion {
+    std::uint8_t major{};
+    std::uint8_t minor{};
+    std::uint8_t patch{};
+    std::string git_hash;
+};
+
 // Which half of connect() failed. Opening the endpoint and finding an expected
 // autopilot are different operator problems, so the caller reports the client
 // diagnostic that matches instead of collapsing both into one message.
@@ -94,6 +101,13 @@ class MavlinkConnection {
     virtual std::optional<telemetry::VehicleState> wait_for_state(std::chrono::milliseconds timeout) = 0;
     virtual telemetry::VehicleState get_state() const = 0;
     virtual std::optional<CommandAck> send_command(const Command &command, std::chrono::milliseconds timeout) = 0;
+    virtual std::optional<CommandAck> send_command(const Command &command, std::uint64_t expected_session_id,
+                                                   std::chrono::milliseconds timeout) {
+        if (expected_session_id == 0 || get_state().session_id != expected_session_id) {
+            return std::nullopt;
+        }
+        return send_command(command, timeout);
+    }
     virtual bool goto_location_relative(double latitude_deg, double longitude_deg, float relative_altitude_m,
                                         std::chrono::milliseconds timeout) = 0;
     virtual std::optional<CommandAck> send_fixed_wing_waypoint(
@@ -109,6 +123,7 @@ class MavlinkConnection {
     // Reads a named parameter back from the autopilot. The returned value is
     // authoritative autopilot state, not an acknowledgement.
     virtual std::optional<float> read_param(const std::string &param_id, std::chrono::milliseconds timeout) = 0;
+    virtual std::optional<AutopilotVersion> read_autopilot_version(std::chrono::milliseconds timeout) = 0;
 };
 
 } // namespace nomad::mavlink

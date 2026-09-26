@@ -56,6 +56,10 @@ void print_state(const nomad::telemetry::VehicleState &state) {
         std::cout << "vtol_state=" << nomad::telemetry::vtol_state_name(state.vtol_state)
                   << " vtol_state_age_ms=" << age_milliseconds(state.vtol_state_updated_at) << '\n';
     }
+    if (state.landed_state_valid) {
+        std::cout << "landed_state=" << nomad::telemetry::landed_state_name(state.landed_state)
+                  << " landed_state_age_ms=" << age_milliseconds(state.landed_state_updated_at) << '\n';
+    }
 }
 
 } // namespace

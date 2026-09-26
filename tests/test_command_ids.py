@@ -30,6 +30,9 @@ DIALECT_COMMANDS_XML = REPO_ROOT / "third_party" / "ardupilot-mavlink" / "messag
 # the call sites; test_core_sources_declare_only_pinned_command_ids scans every
 # core source, so a constant declared anywhere but missing here still fails.
 PINNED_COMMAND_IDS = {
+    "src/mavlink/mavsdk_command_ids.hpp": {
+        "kRequestMessageCommand": "MAV_CMD_REQUEST_MESSAGE",
+    },
     "src/vehicle/command_ids.hpp": {
         "kArmDisarmCommand": "MAV_CMD_COMPONENT_ARM_DISARM",
         "kSetModeCommand": "MAV_CMD_DO_SET_MODE",

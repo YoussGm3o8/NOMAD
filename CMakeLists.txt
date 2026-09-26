@@ -66,6 +66,7 @@ add_library(nomad_core
     src/vehicle/vehicle.cpp
     src/vehicle/vehicle_fence.cpp
     src/vehicle/vehicle_payload.cpp
+    src/vehicle/vehicle_quadplane_landing.cpp
       src/vehicle/vehicle_route.cpp
       src/vehicle/vehicle_recovery.cpp
     src/vehicle/vehicle_transition.cpp
@@ -178,6 +179,7 @@ add_library(nomad_mavsdk_connection
     src/mavlink/mavsdk_command_result.cpp
     src/mavlink/mavsdk_fence.cpp
     src/mavlink/mavsdk_mavlink_connection.cpp
+    src/mavlink/mavsdk_mavlink_quadplane.cpp
     src/mavlink/mavsdk_route.cpp
     src/mavlink/mavsdk_vtol_state.cpp
     src/mavlink/mavsdk_system.cpp)
@@ -238,6 +240,11 @@ if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_link_libraries(nomad_quadplane_transition_to_vtol_tests PRIVATE nomad_core)
     target_compile_definitions(nomad_quadplane_transition_to_vtol_tests PRIVATE NOMAD_TESTS)
     add_test(NAME nomad_quadplane_transition_to_vtol_tests COMMAND nomad_quadplane_transition_to_vtol_tests)
+
+    add_executable(nomad_quadplane_vtol_landing_tests tests/quadplane_vtol_landing_test.cpp)
+    target_link_libraries(nomad_quadplane_vtol_landing_tests PRIVATE nomad_core)
+    target_compile_definitions(nomad_quadplane_vtol_landing_tests PRIVATE NOMAD_TESTS)
+    add_test(NAME nomad_quadplane_vtol_landing_tests COMMAND nomad_quadplane_vtol_landing_tests)
 
     add_executable(nomad_quadplane_route_tests tests/quadplane_route_test.cpp)
     target_link_libraries(nomad_quadplane_route_tests PRIVATE nomad_core)

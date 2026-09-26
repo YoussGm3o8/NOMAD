@@ -105,6 +105,7 @@ These retain their original obligations; partial coverage is not satisfaction.
 | SR-SEC-01 | No NOMAD command disables FC failsafes | Structural scan only; semantic allowlist and plugin parameter audit open |
 | SR-SEC-02 | Authenticate command clients at trust boundary | Nonempty environment value is not authentication; production gate open |
 | SR-SEC-03 | Authenticate and audit command requests | CLI admission logs only; final outcomes and all client/library entrypoints open |
+| SR-LND-01 | Pinned QuadPlane landing success requires fresh post-ACK descent, landed-state telemetry, disarm and a stable final envelope; ACK alone is never touchdown | C++ falsification and deterministic MAVSDK landed-state mapping pass; independent full-chain pinned SITL trace passed in [run 36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163) |
 
 ## Additional hazards and proposed obligations
 
@@ -128,6 +129,7 @@ mappings when implemented; do not invent entries in the existing checked block.
 | H-20 Fork-owned ArduPilot semantic is wrong or unverified | SR-CMD-02: every ArduPilot semantic comes from the pinned, tested fork | A wrong mode, altitude or frame interpretation inside the fork is treated as NOMAD code: each patch carries a test and an independent wire or SITL observation, and NOMAD still refuses to trust its acknowledgement | G-M |
 | H-21 Route ACK or stale position is mistaken for QuadPlane route completion | SR-MIS-01: fixed-wing route success requires fresh post-ACK aircraft progress and state for every waypoint | Unsupported class and malformed route send nothing; stale position, a pre-ACK arrival without later progress, prior target location, intermediate point, ACK-only, interruption and timeout remain incomplete; final waypoint proximity is independently observed in pinned SITL ([workflow run 35818612311](https://github.com/YoussGm3o8/NOMAD/actions/runs/35818612311)) | G-M |
 | H-22 Recovery tolerance is mistaken for transition readiness, or ACK/stale multicopter telemetry is mistaken for completed transition | SR-TYP-01: transition-to-VTOL uses the explicit recovery coordinates and altitude, measured pre-command altitude inside 15–25 m above home, a stabilized 55 m envelope and authoritative post-ACK state | Copter/Plane/Unknown, stale telemetry, wrong mode/state, outside-envelope, unstable position/speed samples, ACK-only, pre-ACK state, interruption and intermediate-only cases send nothing or fail; after command the aircraft remains above 15 m and independent state observation proves armed multicopter completion. The pre-command 25 m ceiling does not constrain transition climb. This does not prove a safe landing or pilot handover | G-M/G7 |
+| H-23 QLAND ACK or stale/contradictory state is mistaken for QuadPlane touchdown | SR-LND-01: landing success requires fresh post-ACK descent, landed-state telemetry, disarm and a stable final envelope | Unsupported classes, wrong profile, admission faults, stale/pre-ACK landed state, ACK-only, no-descent, interrupted link/session/mode, unstable touchdown and timeout remain failures; independent trace in [run 36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163) observed QLAND, descent, repeated `ON_GROUND`, disarm and a stable final envelope | G-M/G7 |
 
 Traffic advisories and explicit payload authorization remain project scope.
 CONOPS permits manual flight but requires actual traffic cylinder avoidance.
@@ -197,6 +199,8 @@ SR-MIS-01 | src/mavlink/mavsdk_route.cpp:send_fixed_wing_waypoint | tests/test_m
 SR-MIS-01 | src/vehicle/vehicle_recovery.cpp:fixed_wing_recovery | tests/quadplane_recovery_test.cpp::test_capability_and_readiness_rejections
 SR-MIS-01 | src/vehicle/vehicle_recovery.cpp:fixed_wing_recovery | tests/quadplane_recovery_test.cpp::test_ack_without_real_progress_cannot_complete
 SR-MIS-01 | src/mavlink/mavsdk_route.cpp:send_fixed_wing_waypoint | tests/test_mavsdk_connection.py::test_quadplane_fixed_wing_recovery_wire_protocol_and_completion
+SR-TYP-01 | src/vehicle/vehicle_quadplane_landing.cpp:quadplane_vtol_land | tests/quadplane_vtol_landing_test.cpp::test_initial_state_and_telemetry_fail_closed
+SR-LND-01 | src/vehicle/vehicle_quadplane_landing.cpp:verify_quadplane_touchdown | tests/quadplane_vtol_landing_test.cpp::test_valid_landing_requires_command_and_physical_post_ack_evidence
 SR-FEN-01 | src/vehicle/vehicle_fence.cpp:upload_fence | tests/safety_test.cpp::test_vehicle_upload_fence_validates_boundary
 SR-FEN-01 | src/vehicle/vehicle_fence.cpp:verify_fence_uploaded | tests/safety_test.cpp::test_vehicle_verifies_fence_status_and_fails_closed
 SR-FEN-01 | src/vehicle/vehicle_fence.cpp:upload_fence | tests/safety_test.cpp::test_vehicle_upload_fence_rejects_transport_failure

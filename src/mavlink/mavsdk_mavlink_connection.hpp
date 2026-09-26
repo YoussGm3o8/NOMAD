@@ -69,6 +69,8 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     std::optional<telemetry::VehicleState> wait_for_state(std::chrono::milliseconds timeout) override;
     telemetry::VehicleState get_state() const override;
     std::optional<CommandAck> send_command(const Command &command, std::chrono::milliseconds timeout) override;
+    std::optional<CommandAck> send_command(const Command &command, std::uint64_t expected_session_id,
+                                           std::chrono::milliseconds timeout) override;
     bool goto_location_relative(double latitude_deg, double longitude_deg, float relative_altitude_m,
                                 std::chrono::milliseconds timeout) override;
     std::optional<CommandAck> send_fixed_wing_waypoint(
@@ -82,6 +84,7 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     bool upload_fence_plan(const std::vector<FencePlanItem> &items) override;
     std::optional<std::vector<FencePlanItem>> download_fence_plan(std::chrono::milliseconds timeout) override;
     std::optional<float> read_param(const std::string &param_id, std::chrono::milliseconds timeout) override;
+    std::optional<AutopilotVersion> read_autopilot_version(std::chrono::milliseconds timeout) override;
 
   private:
     bool is_connected_unlocked() const;
@@ -100,6 +103,7 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     void observe_gps(const mavsdk::Telemetry::GpsInfo &gps);
     void observe_attitude(const mavsdk::Telemetry::EulerAngle &attitude);
     void observe_vtol_state(mavsdk::Telemetry::VtolState state);
+    void observe_landed_state(mavsdk::Telemetry::LandedState state);
 
     mavsdk::MavlinkPassthrough::Result send_long(const Command &command, std::chrono::milliseconds timeout);
     mavsdk::Offboard::Result queue_velocity_setpoint(const VelocitySetpoint &setpoint);
@@ -143,6 +147,7 @@ class MavsdkMavlinkConnection final : public MavlinkConnection {
     std::optional<mavsdk::Telemetry::GpsInfoHandle> gps_handle_;
     std::optional<mavsdk::Telemetry::AttitudeEulerHandle> attitude_handle_;
     std::optional<mavsdk::Telemetry::VtolStateHandle> vtol_state_handle_;
+    std::optional<mavsdk::Telemetry::LandedStateHandle> landed_state_handle_;
     std::optional<mavsdk::MavlinkPassthrough::MessageHandle> heartbeat_handle_;
     std::optional<mavsdk::System::IsConnectedHandle> connection_handle_;
 };

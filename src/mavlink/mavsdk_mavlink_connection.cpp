@@ -9,7 +9,6 @@
 #include "mavsdk_mavlink_connection.hpp"
 
 #include "mavsdk_system.hpp"
-#include "mavsdk_vtol_state.hpp"
 #include "nomad/mavlink/mavsdk_transport.hpp"
 
 #include <algorithm>
@@ -17,6 +16,7 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <numbers>
 #include <optional>
 #include <string>
@@ -41,7 +41,7 @@ bool has_finite_components(const VelocitySetpoint &setpoint) {
 
 bool has_telemetry(const telemetry::VehicleState &state) {
     return state.position_valid || state.battery_valid || state.gps_valid || state.attitude_valid ||
-           state.vtol_state_valid;
+           state.vtol_state_valid || state.landed_state_valid;
 }
 
 bool has_configuration(const std::string &endpoint, std::uint8_t expected_system_id,
@@ -181,6 +181,8 @@ void MavsdkMavlinkConnection::subscribe() {
     gps_handle_ = telemetry_->subscribe_gps_info([this](const auto &value) { observe_gps(value); });
     attitude_handle_ = telemetry_->subscribe_attitude_euler([this](const auto &value) { observe_attitude(value); });
     vtol_state_handle_ = telemetry_->subscribe_vtol_state([this](const auto value) { observe_vtol_state(value); });
+    landed_state_handle_ =
+        telemetry_->subscribe_landed_state([this](const auto value) { observe_landed_state(value); });
     heartbeat_handle_ = passthrough_->subscribe_message(MAVLINK_MSG_ID_HEARTBEAT,
                                                         [this](const auto &message) { observe_heartbeat(message); });
     connection_handle_ = system_->subscribe_is_connected([this](bool connected) {
@@ -218,6 +220,9 @@ void MavsdkMavlinkConnection::unsubscribe() {
         if (vtol_state_handle_) {
             telemetry_->unsubscribe_vtol_state(*vtol_state_handle_);
         }
+        if (landed_state_handle_) {
+            telemetry_->unsubscribe_landed_state(*landed_state_handle_);
+        }
     }
     if (passthrough_ && heartbeat_handle_) {
         passthrough_->unsubscribe_message(MAVLINK_MSG_ID_HEARTBEAT, *heartbeat_handle_);
@@ -231,6 +236,7 @@ void MavsdkMavlinkConnection::unsubscribe() {
     gps_handle_.reset();
     attitude_handle_.reset();
     vtol_state_handle_.reset();
+    landed_state_handle_.reset();
     heartbeat_handle_.reset();
     connection_handle_.reset();
 }
@@ -327,13 +333,6 @@ void MavsdkMavlinkConnection::observe_attitude(const mavsdk::Telemetry::EulerAng
     state_.attitude.yaw_deg = attitude.yaw_deg;
     state_.attitude_valid = true;
     state_.attitude_updated_at = ObservationClock::now();
-}
-
-void MavsdkMavlinkConnection::observe_vtol_state(mavsdk::Telemetry::VtolState state) {
-    ObservationUpdate update(observation_mutex_, observation_changed_);
-    state_.vtol_state = to_nomad_vtol_state(state);
-    state_.vtol_state_valid = true;
-    state_.vtol_state_updated_at = ObservationClock::now();
 }
 
 telemetry::VehicleState MavsdkMavlinkConnection::state_locked() const {
