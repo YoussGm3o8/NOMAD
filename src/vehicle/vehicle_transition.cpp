@@ -23,7 +23,7 @@ CommandResult Vehicle::transition_to_fixed_wing() {
     }
 
     const auto initial_state = connection_.get_state();
-    if (const auto error = vtol_transition_state_error(initial_state, initial_state.system_id, true);
+    if (const auto error = vtol_transition_state_error(initial_state, initial_state, true);
         error.has_value()) {
         return {false, "transition to fixed wing rejected: " + *error};
     }
@@ -32,23 +32,34 @@ CommandResult Vehicle::transition_to_fixed_wing() {
         make_command(kQuadplaneTransitionCommand,
                      {static_cast<float>(static_cast<std::uint8_t>(telemetry::VtolState::FixedWing)), 0, 0, 0, 0, 0,
                       0}),
-        "transition to fixed wing");
+        "transition to fixed wing", initial_state.session_id);
     if (!result.success) {
         return result;
     }
     // A fixed-wing observation received while waiting for the ACK is not post-ACK proof.
     const auto ack_boundary = std::chrono::steady_clock::now();
-    return wait_for_fixed_wing_transition(initial_state.system_id, ack_boundary);
+    return wait_for_fixed_wing_transition(initial_state, ack_boundary);
 }
 
 std::optional<std::string> Vehicle::vtol_transition_state_error(const telemetry::VehicleState &state,
-                                                                std::uint8_t expected_system_id,
+                                                                const telemetry::VehicleState &expected_state,
                                                                 bool require_precondition) const {
     if (state.identity.aircraft_class != telemetry::AircraftClass::QuadPlane) {
         return "aircraft identity changed";
     }
-    if (expected_system_id == 0 || state.system_id != expected_system_id) {
+    if (state.identity.autopilot_type != expected_state.identity.autopilot_type ||
+        state.identity.vehicle_type != expected_state.identity.vehicle_type ||
+        state.identity.aircraft_class != expected_state.identity.aircraft_class) {
+        return "aircraft identity changed";
+    }
+    if (expected_state.session_id == 0 || state.session_id != expected_state.session_id) {
         return "vehicle session changed";
+    }
+    if (expected_state.system_id == 0 || state.system_id != expected_state.system_id) {
+        return "vehicle system changed";
+    }
+    if (expected_state.component_id == 0 || state.component_id != expected_state.component_id) {
+        return "vehicle component changed";
     }
     if (!state.connected || !state.heartbeat_fresh) {
         return "heartbeat is stale";
@@ -59,26 +70,23 @@ std::optional<std::string> Vehicle::vtol_transition_state_error(const telemetry:
     if (std::chrono::steady_clock::now() - state.vtol_state_updated_at > kVtolStateFreshnessTimeout) {
         return "VTOL state feed is stale";
     }
-    if (!require_precondition) {
-        return {};
-    }
     if (!state.armed) {
         return "vehicle disarmed";
     }
     if (!telemetry::is_auto_mode(telemetry::AircraftClass::QuadPlane, state.custom_mode)) {
         return "AUTO mode is required";
     }
-    if (state.vtol_state != telemetry::VtolState::Multicopter) {
+    if (require_precondition && state.vtol_state != telemetry::VtolState::Multicopter) {
         return "vehicle is not in multicopter VTOL state";
     }
     return {};
 }
 
 CommandResult Vehicle::wait_for_fixed_wing_transition(
-    std::uint8_t expected_system_id, std::chrono::steady_clock::time_point ack_boundary) {
-    const auto verdict = [this, expected_system_id, ack_boundary](const telemetry::VehicleState &state)
+    const telemetry::VehicleState &expected_state, std::chrono::steady_clock::time_point ack_boundary) {
+    const auto verdict = [this, expected_state, ack_boundary](const telemetry::VehicleState &state)
         -> std::optional<CommandResult> {
-        if (const auto error = vtol_transition_state_error(state, expected_system_id, false); error.has_value()) {
+        if (const auto error = vtol_transition_state_error(state, expected_state, false); error.has_value()) {
             return CommandResult{false, "transition to fixed wing verification failed: " + *error};
         }
         if (state.vtol_state_updated_at <= ack_boundary) {

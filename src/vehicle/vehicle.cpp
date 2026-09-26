@@ -12,6 +12,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <optional>
 #include <string>
 #include <thread>
 #include <utility>
@@ -26,10 +27,21 @@ constexpr auto kNavigationStateTimeout = std::chrono::seconds(60);
 constexpr auto kStatePollTimeout = std::chrono::milliseconds(500);
 constexpr double kLocationToleranceDegrees = 0.00002;
 constexpr float kAltitudeToleranceMeters = 2.0F;
-// The pinned QuadPlane SITL profile settles at the requested target; keep a
-// bounded 0.5 m margin for telemetry/control settling instead of accepting a
-// percentage of the requested climb.
-constexpr float kVtolTakeoffCompletionToleranceMeters = 0.5F;
+
+CommandResult validate_command_acknowledgement(
+    const mavlink::Command &command, const char *name,
+    const std::optional<mavlink::CommandAck> &acknowledgement) {
+    if (!acknowledgement.has_value()) {
+        return {false, std::string(name) + " timed out waiting for acknowledgement"};
+    }
+    if (acknowledgement->command != command.id) {
+        return {false, std::string(name) + " received an acknowledgement for another command"};
+    }
+    if (acknowledgement->result != kAcceptedResult) {
+        return {false, std::string(name) + " rejected by ArduPilot"};
+    }
+    return {true, std::string(name) + " accepted"};
+}
 
 } // namespace
 
@@ -150,59 +162,6 @@ CommandResult Vehicle::takeoff(float altitude_m) {
         return result;
     }
     return wait_for_altitude(altitude_m * 0.8F, "takeoff");
-}
-
-CommandResult Vehicle::vtol_takeoff(float altitude_m) {
-    if (!std::isfinite(altitude_m) || altitude_m <= 0.0F) {
-        return {false, "vtol takeoff altitude must be finite and greater than zero"};
-    }
-    const auto admission = require_operation(VehicleOperation::VtolTakeoff);
-    if (!admission.success) {
-        return admission;
-    }
-
-    const auto initial_state = connection_.get_state();
-    if (!initial_state.position_valid) {
-        return {false, "vtol takeoff requires a valid position"};
-    }
-    if (position_is_stale(initial_state)) {
-        return {false, "vtol takeoff requires a fresh position"};
-    }
-
-    const auto guided_result = set_guided_mode();
-    if (!guided_result.success) {
-        return guided_result;
-    }
-    const auto state_before_arm = connection_.get_state();
-    if (state_before_arm.identity.aircraft_class != telemetry::AircraftClass::QuadPlane) {
-        return {false, "vtol takeoff identity is no longer QuadPlane"};
-    }
-    if (!state_before_arm.armed) {
-        const auto arm_result = arm();
-        if (!arm_result.success) {
-            return arm_result;
-        }
-    }
-
-    const auto pre_takeoff_state = connection_.get_state();
-    if (const auto error = vtol_takeoff_state_error(pre_takeoff_state); error.has_value()) {
-        return {false, *error};
-    }
-    const auto target_altitude_m = pre_takeoff_state.position.relative_altitude_m + altitude_m;
-    if (!std::isfinite(target_altitude_m)) {
-        return {false, "vtol takeoff target altitude is invalid"};
-    }
-
-    // ArduPlane's direct QuadPlane GUIDED path accepts NAV_TAKEOFF (22), not a
-    // generic Copter interpretation. Its altitude parameter is a climb offset
-    // from the final pre-command position, so completion uses the derived
-    // absolute relative-altitude target below.
-    const auto result = send_command(
-        make_command(kQuadplaneGuidedTakeoffCommand, {0, 0, 0, 0, 0, 0, altitude_m}), "vtol takeoff");
-    if (!result.success) {
-        return result;
-    }
-    return wait_for_vtol_takeoff(target_altitude_m);
 }
 
 CommandResult Vehicle::goto_location(const Location &location) {
@@ -361,54 +320,6 @@ CommandResult Vehicle::wait_for_altitude(float minimum_altitude_m, const char *n
         verdict);
 }
 
-std::optional<std::string> Vehicle::vtol_takeoff_state_error(const telemetry::VehicleState &state) const {
-    if (state.identity.aircraft_class != telemetry::AircraftClass::QuadPlane) {
-        return "aircraft identity changed";
-    }
-    if (!state.connected || !state.heartbeat_fresh) {
-        return "heartbeat is stale";
-    }
-    if (!state.position_valid) {
-        return "position is invalid";
-    }
-    if (position_is_stale(state)) {
-        return "position feed is stale";
-    }
-    if (!state.gps_valid || state.gps.fix_type < 3 || state.gps.satellites == 0) {
-        return "a valid 3D GPS fix is required";
-    }
-    if (state.gps_updated_at == std::chrono::steady_clock::time_point{} ||
-        std::chrono::steady_clock::now() - state.gps_updated_at > position_freshness_timeout_) {
-        return "GPS feed is stale";
-    }
-    if (!state.armed) {
-        return "vehicle disarmed";
-    }
-    if (!telemetry::is_guided_mode(telemetry::AircraftClass::QuadPlane, state.custom_mode)) {
-        return "guided mode was lost";
-    }
-    if (!std::isfinite(state.position.relative_altitude_m)) {
-        return "relative altitude is invalid";
-    }
-    return {};
-}
-
-CommandResult Vehicle::wait_for_vtol_takeoff(float target_altitude_m) {
-    const auto minimum_altitude_m = target_altitude_m - kVtolTakeoffCompletionToleranceMeters;
-    const auto verdict = [this, minimum_altitude_m](const telemetry::VehicleState &state)
-        -> std::optional<CommandResult> {
-        if (const auto error = vtol_takeoff_state_error(state); error.has_value()) {
-            return CommandResult{false, "vtol takeoff verification failed: " + *error};
-        }
-        if (state.position.relative_altitude_m < minimum_altitude_m) {
-            return std::nullopt;
-        }
-        return CommandResult{true, "vtol takeoff verified"};
-    };
-    return wait_for_state_until(takeoff_state_timeout_,
-                                "vtol takeoff acknowledgement received but climb verification timed out", verdict);
-}
-
 CommandResult Vehicle::wait_for_location(const Location &location) {
     const auto verdict = [this, &location](const telemetry::VehicleState &state) -> std::optional<CommandResult> {
         if (!state.position_valid) {
@@ -444,16 +355,17 @@ CommandResult Vehicle::send_command(const mavlink::Command &command, const char 
     }
 
     const auto acknowledgement = connection_.send_command(command, kCommandTimeout);
-    if (!acknowledgement.has_value()) {
-        return {false, std::string(name) + " timed out waiting for acknowledgement"};
+    return validate_command_acknowledgement(command, name, acknowledgement);
+}
+
+CommandResult Vehicle::send_command(const mavlink::Command &command, const char *name,
+                                    std::uint64_t expected_session_id) {
+    if (!connection_.is_connected()) {
+        return {false, "not connected"};
     }
-    if (acknowledgement->command != command.id) {
-        return {false, std::string(name) + " received an acknowledgement for another command"};
-    }
-    if (acknowledgement->result != kAcceptedResult) {
-        return {false, std::string(name) + " rejected by ArduPilot"};
-    }
-    return {true, std::string(name) + " accepted"};
+
+    const auto acknowledgement = connection_.send_command(command, expected_session_id, kCommandTimeout);
+    return validate_command_acknowledgement(command, name, acknowledgement);
 }
 
 } // namespace nomad::vehicle

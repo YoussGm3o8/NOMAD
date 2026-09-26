@@ -105,6 +105,7 @@ These retain their original obligations; partial coverage is not satisfaction.
 | SR-SEC-01 | No NOMAD command disables FC failsafes | Structural scan only; semantic allowlist and plugin parameter audit open |
 | SR-SEC-02 | Authenticate command clients at trust boundary | Nonempty environment value is not authentication; production gate open |
 | SR-SEC-03 | Authenticate and audit command requests | CLI admission logs only; final outcomes and all client/library entrypoints open |
+| SR-TYP-02 | QuadPlane forward transition and VTOL takeoff stay bound to the admitted aircraft identity and session; transition completion remains armed/AUTO and takeoff requires a fresh post-ACK climb sample | Deterministic counterexamples and controls in `tests/quadplane_transition_test.cpp` and `tests/quadplane_vtol_takeoff_test.cpp`; full pinned QuadPlane chain through stable QLAND remains required |
 | SR-LND-01 | Pinned QuadPlane landing success requires fresh post-ACK descent, landed-state telemetry, disarm and a stable final envelope; ACK alone is never touchdown | C++ falsification and deterministic MAVSDK landed-state mapping pass; independent full-chain pinned SITL trace passed in [run 36210548163](https://github.com/YoussGm3o8/NOMAD/actions/runs/36210548163) |
 
 ## Additional hazards and proposed obligations
