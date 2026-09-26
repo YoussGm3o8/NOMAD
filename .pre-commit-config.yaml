@@ -54,7 +54,7 @@ repos:
         name: Source size, line width, and baseline freshness
         description: Reject oversized sources, over-long C/C++ lines, and stale baselines
         entry: >
-          python scripts/dev/line_report.py --fail-over-file-limit --fail-over-function-limit
+          python -m scripts.dev.line_report --fail-over-file-limit --fail-over-function-limit
           --fail-line-length --fail-stale-baseline
         # language: python (like every other hook) so the entry runs in
         # pre-commit's own venv: the commit shell may not have `python` on

@@ -12,8 +12,11 @@ import argparse
 import ast
 import os
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from scripts.dev import source_size_caps
 
 SOURCE_EXTENSIONS = {
     ".c",
@@ -48,10 +51,16 @@ EXCLUDED_DIRS = {
     ".venv",
     "bin",
     "build",
+    "build-core",
     "dist",
+    "external",
+    "generated",
+    "local",
     "node_modules",
     "obj",
     "site",
+    "vendor",
+    "vendored",
     # Vendored submodules: CI checks them out as submodules and pre-commit only
     # ever sees the gitlinks, so repo size policy never applied to them.
     "third_party",
@@ -94,6 +103,10 @@ class Report:
     functions: list[FunctionSize]
 
 
+class GitCommandError(RuntimeError):
+    """Raised when a required Git query cannot define the report scope."""
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="*", type=Path, help="Specific source files to inspect")
@@ -105,6 +118,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--baseline-file", type=Path, default=Path("config/file_size_baseline.txt"))
     parser.add_argument("--baseline-function-file", type=Path, default=Path("config/function_size_baseline.txt"))
     parser.add_argument("--baseline-line-file", type=Path, default=Path("config/line_length_baseline.txt"))
+    parser.add_argument("--size-caps-file", type=Path, default=Path("config/source_size_caps.json"))
     parser.add_argument("--changed-only", action="store_true")
     parser.add_argument("--fail-over-file-limit", action="store_true")
     parser.add_argument("--fail-over-function-limit", action="store_true")
@@ -136,24 +150,34 @@ def should_scan(path: Path, root: Path) -> bool:
     return not any(contains_parts(relative.parts, excluded) for excluded in EXCLUDED_PATH_PARTS)
 
 
-def git_lines(root: Path, args: list[str]) -> list[str]:
+def git_paths(root: Path, args: list[str]) -> list[str]:
     result = subprocess.run(
         ["git", "-C", str(root), *args],
         check=False,
         capture_output=True,
-        text=True,
     )
     if result.returncode != 0:
-        return []
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        message = result.stderr.decode("utf-8", errors="replace").strip()
+        raise GitCommandError(f"git {' '.join(args)} failed: {message or 'unknown error'}")
+    return [path.decode("utf-8", errors="surrogateescape") for path in result.stdout.split(b"\0") if path]
+
+
+def tracked_source_paths(root: Path) -> list[Path]:
+    """Return eligible working-tree files whose paths are in the Git index."""
+    return [
+        root / name
+        for name in git_paths(root, ["ls-files", "--cached", "-z"])
+        if (root / name).is_file() and should_scan(root / name, root)
+    ]
 
 
 def changed_paths(root: Path) -> list[Path]:
-    names: set[str] = set()
     base_ref = os.environ.get("NOMAD_COMPLEXITY_BASE")
     diff_args = ["diff", "--name-only", f"{base_ref}...HEAD"] if base_ref else ["diff", "--name-only", "HEAD"]
-    names.update(git_lines(root, diff_args))
-    names.update(git_lines(root, ["ls-files", "--others", "--exclude-standard"]))
+    names = set(git_paths(root, [*diff_args, "-z"]))
+    if base_ref:
+        names.update(git_paths(root, ["diff", "--name-only", "HEAD", "-z"]))
+    names.update(git_paths(root, ["ls-files", "--others", "--exclude-standard", "-z"]))
     return [root / name for name in sorted(names) if (root / name).is_file()]
 
 
@@ -163,7 +187,7 @@ def iter_source_files(root: Path, paths: list[Path], changed_only: bool) -> list
     elif changed_only:
         candidates = changed_paths(root)
     else:
-        candidates = list(root.rglob("*"))
+        candidates = tracked_source_paths(root)
     return sorted(path for path in candidates if path.is_file() and should_scan(path, root))
 
 
@@ -268,6 +292,18 @@ def find_stale_line_length_entries(args: argparse.Namespace, root: Path) -> list
     return messages
 
 
+def find_stale_size_caps(args: argparse.Namespace, root: Path) -> list[str]:
+    """Reject caps that do not match the existing name-only baseline."""
+    if getattr(args, "size_caps_file", None) is None:
+        return []
+    caps = source_size_caps.read_size_caps(args.size_caps_file, root)
+    return source_size_caps.find_coverage_errors(
+        read_baseline(args.baseline_file, root),
+        read_baseline(args.baseline_function_file, root),
+        caps,
+    )
+
+
 def find_stale_baseline_entries(args: argparse.Namespace, root: Path) -> list[str]:
     """List baseline entries that no longer point at an oversized file, function or line.
 
@@ -279,6 +315,7 @@ def find_stale_baseline_entries(args: argparse.Namespace, root: Path) -> list[st
         find_stale_file_entries(args, root)
         + find_stale_function_entries(args, root)
         + find_stale_line_length_entries(args, root)
+        + find_stale_size_caps(args, root)
     )
 
 
@@ -311,7 +348,7 @@ def print_report(report: Report, args: argparse.Namespace) -> None:
     longest = sorted(report.long_lines, key=lambda item: item.length, reverse=True)[: args.top]
     oversized = [item for item in report.file_sizes if item.lines > args.max_file_lines]
     oversized_functions = [item for item in report.functions if item.lines > args.max_function_lines]
-    print(f"Scanned {len(report.file_sizes)} source files under {args.root.resolve()}")
+    print(f"Scanned {len(report.file_sizes)} selected source files (reported paths are root-relative)")
     print_table("\nLargest files", ("lines", "path"), [(item.lines, item.path.as_posix()) for item in largest])
     print_table(
         f"\nLongest lines over {args.max_line_length} characters",
@@ -344,7 +381,28 @@ def find_unbudgeted_long_lines(report: Report, args: argparse.Namespace, root: P
     ]
 
 
-def enforce_report(report: Report, args: argparse.Namespace, root: Path) -> int:
+def find_numeric_cap_violations(report: Report, args: argparse.Namespace, root: Path) -> list[str]:
+    if not args.fail_over_file_limit and not args.fail_over_function_limit:
+        return []
+    return source_size_caps.check_report_caps(
+        args.size_caps_file,
+        root,
+        read_baseline(args.baseline_file, root),
+        read_baseline(args.baseline_function_file, root),
+        [
+            (item.path.as_posix(), item.lines)
+            for item in report.file_sizes
+            if args.fail_over_file_limit and item.lines > args.max_file_lines
+        ],
+        [
+            (f"{item.path.as_posix()}:{item.name}", item.lines)
+            for item in report.functions
+            if args.fail_over_function_limit and item.lines > args.max_function_lines
+        ],
+    )
+
+
+def enforce_size_limits(report: Report, args: argparse.Namespace, root: Path) -> int:
     oversized = [item for item in report.file_sizes if item.lines > args.max_file_lines]
     baseline = read_baseline(args.baseline_file, root)
     new_oversized = [item for item in oversized if item.path.as_posix() not in baseline]
@@ -354,20 +412,6 @@ def enforce_report(report: Report, args: argparse.Namespace, root: Path) -> int:
     # (any function not in the baseline) still fail.
     baseline_functions = read_baseline(args.baseline_function_file, root)
     target_functions = [item for item in functions if f"{item.path.as_posix()}:{item.name}" not in baseline_functions]
-    if args.fail_stale_baseline:
-        stale = find_stale_baseline_entries(args, root)
-        if stale:
-            print("\nStale baseline entries (no longer oversized):")
-            for message in stale:
-                print(f"  {message}")
-            return 1
-    if args.fail_line_length:
-        cpp_long_lines = find_unbudgeted_long_lines(report, args, root)
-        if cpp_long_lines:
-            print(f"\nC/C++ lines over {args.max_line_length} characters:")
-            for item in sorted(cpp_long_lines, key=lambda item: (item.path.as_posix(), item.number)):
-                print(f"  {item.path.as_posix()}:{item.number} ({item.length} characters)")
-            return 1
     if args.fail_over_file_limit and new_oversized:
         print("\nNew or selected files exceed the source-file limit:")
         for item in new_oversized:
@@ -381,13 +425,43 @@ def enforce_report(report: Report, args: argparse.Namespace, root: Path) -> int:
     return 0
 
 
+def enforce_report(report: Report, args: argparse.Namespace, root: Path) -> int:
+    if args.fail_stale_baseline:
+        stale = find_stale_baseline_entries(args, root)
+        if stale:
+            print("\nStale baseline entries (no longer oversized):")
+            for message in stale:
+                print(f"  {message}")
+            return 1
+    cap_errors = find_numeric_cap_violations(report, args, root)
+    if cap_errors:
+        print("\nNumerical size debt caps:")
+        for message in cap_errors:
+            print(f"  {message}")
+        return 1
+    if args.fail_line_length:
+        cpp_long_lines = find_unbudgeted_long_lines(report, args, root)
+        if cpp_long_lines:
+            print(f"\nC/C++ lines over {args.max_line_length} characters:")
+            for item in sorted(cpp_long_lines, key=lambda item: (item.path.as_posix(), item.number)):
+                print(f"  {item.path.as_posix()}:{item.number} ({item.length} characters)")
+            return 1
+    return enforce_size_limits(report, args, root)
+
+
 def main() -> int:
     args = parse_args()
     root = args.root.resolve()
-    files = iter_source_files(root, args.paths, args.changed_only)
-    report = collect_report(files, root, args.max_line_length)
-    print_report(report, args)
-    return enforce_report(report, args, root)
+    try:
+        files = iter_source_files(root, args.paths, args.changed_only)
+        report = collect_report(files, root, args.max_line_length)
+        print_report(report, args)
+        if not files:
+            print("No source files were selected.")
+        return enforce_report(report, args, root)
+    except (GitCommandError, OSError, ValueError) as error:
+        print(f"Report unavailable: {error}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

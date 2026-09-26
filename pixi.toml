@@ -156,11 +156,13 @@ format = "ruff format ."
 format-check = "ruff format --check ."
 fmt = "pixi run format"
 fmt-check = "pixi run format-check"
-line-report = "python scripts/dev/line_report.py"
-# Gates source size, the C/C++ 120-column limit, and stale baselines on the
-# changed files (and every baseline entry, which is why this is cheap).
+line-report = "python -m scripts.dev.line_report"
+cpp-complexity-report = "python -m scripts.dev.cpp_complexity_report"
+# Gates changed source size, numerical debt caps, the C/C++ 120-column limit,
+# and stale baselines. Full reports use tracked paths; changed reports also
+# include nonignored untracked first-party files.
 complexity-check = """
-python scripts/dev/line_report.py --changed-only --fail-over-file-limit --fail-over-function-limit --fail-line-length --fail-stale-baseline
+python -m scripts.dev.line_report --changed-only --fail-over-file-limit --fail-over-function-limit --fail-line-length --fail-stale-baseline
 """
 # Whole-tree Python type check — advisory during the C++ migration.
 typecheck = "mypy"

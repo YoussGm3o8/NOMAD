@@ -10,6 +10,8 @@ fires for C/C++ without touching Python (ruff already owns Python).
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -30,6 +32,7 @@ def _args(**overrides) -> SimpleNamespace:
         "baseline_file": Path(FILE_BASELINE),
         "baseline_function_file": Path(FUNCTION_BASELINE),
         "baseline_line_file": Path(LINE_BASELINE),
+        "size_caps_file": None,
         "fail_over_file_limit": False,
         "fail_over_function_limit": False,
         "fail_line_length": False,
@@ -43,6 +46,18 @@ def _write(root: Path, relative: str, content: str) -> None:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def _git(root: Path, *args: str) -> str:
+    result = subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False, text=True)
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip()
+
+
+def _init_git_repo(root: Path) -> None:
+    _git(root, "init", "--quiet")
+    _git(root, "config", "user.name", "NOMAD test")
+    _git(root, "config", "user.email", "nomad-test@invalid")
 
 
 def _function_source(name: str, body_lines: int) -> str:
@@ -132,3 +147,96 @@ def test_line_length_baseline_entry_needs_a_long_line(tmp_path: Path):
 
     assert "src/wrapped.cpp: no line over 120 characters left to tolerate" in messages
     assert "src/deleted.cpp: no such file" in messages
+
+
+def test_full_scan_uses_only_tracked_first_party_paths(tmp_path: Path, monkeypatch):
+    _write(tmp_path, "src/tracked.cpp", "int tracked() {}\n")
+    _write(tmp_path, "src/untracked.cpp", "int untracked() {}\n")
+    _write(tmp_path, "local/private.py", "print('private')\n")
+    _write(tmp_path, "build-core/generated.cpp", "int generated() {}\n")
+    monkeypatch.setattr(
+        line_report,
+        "git_paths",
+        lambda _root, _args: ["src/tracked.cpp", "local/private.py", "build-core/generated.cpp"],
+    )
+
+    paths = line_report.tracked_source_paths(tmp_path)
+
+    assert [path.relative_to(tmp_path).as_posix() for path in paths] == ["src/tracked.cpp"]
+
+
+def test_changed_scan_includes_untracked_first_party_source_only(tmp_path: Path, monkeypatch):
+    _write(tmp_path, "src/changed.cpp", "int changed() {}\n")
+    _write(tmp_path, "src/new.cpp", "int new_source() {}\n")
+    _write(tmp_path, "local/private.py", "print('private')\n")
+    _write(tmp_path, "build-core/generated.cpp", "int generated() {}\n")
+
+    def paths(_root: Path, args: list[str]) -> list[str]:
+        return (
+            ["src/changed.cpp"]
+            if args[0] == "diff"
+            else ["src/new.cpp", "local/private.py", "build-core/generated.cpp"]
+        )
+
+    monkeypatch.setattr(line_report, "git_paths", paths)
+
+    result = line_report.iter_source_files(tmp_path, [], changed_only=True)
+
+    assert [path.relative_to(tmp_path).as_posix() for path in result] == ["src/changed.cpp", "src/new.cpp"]
+
+
+def test_git_changed_scan_includes_new_source_but_skips_ignored_and_private_files(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("NOMAD_COMPLEXITY_BASE", raising=False)
+    _init_git_repo(tmp_path)
+    _write(tmp_path, ".gitignore", "ignored.cpp\n")
+    _write(tmp_path, "src/base.cpp", "int base() { return 0; }\n")
+    _git(tmp_path, "add", ".gitignore", "src/base.cpp")
+    _git(tmp_path, "commit", "--quiet", "-m", "base")
+    _write(tmp_path, "src/new.cpp", "int new_source() { return 1; }\n")
+    _write(tmp_path, "ignored.cpp", "int ignored() { return 2; }\n")
+    _write(tmp_path, "local/private.py", "print('private')\n")
+
+    result = line_report.iter_source_files(tmp_path, [], changed_only=True)
+
+    assert [path.relative_to(tmp_path).as_posix() for path in result] == ["src/new.cpp"]
+
+
+def test_invalid_git_base_returns_report_error_instead_of_empty_success(tmp_path: Path, monkeypatch, capsys):
+    _init_git_repo(tmp_path)
+    _write(tmp_path, "src/one.cpp", "int one() {}\n")
+    _git(tmp_path, "add", "src/one.cpp")
+    _git(tmp_path, "commit", "--quiet", "-m", "base")
+    monkeypatch.setenv("NOMAD_COMPLEXITY_BASE", "refs/heads/missing")
+    monkeypatch.setattr(sys, "argv", ["line_report.py", "--root", str(tmp_path), "--changed-only"])
+
+    result = line_report.main()
+
+    captured = capsys.readouterr()
+    assert result == 2
+    assert "Report unavailable" in captured.err
+    assert "missing" in captured.err
+
+
+def test_valid_head_base_with_no_changes_reports_an_empty_selection(tmp_path: Path, monkeypatch):
+    _init_git_repo(tmp_path)
+    _write(tmp_path, "src/one.cpp", "int one() {}\n")
+    _git(tmp_path, "add", "src/one.cpp")
+    _git(tmp_path, "commit", "--quiet", "-m", "base")
+    monkeypatch.setenv("NOMAD_COMPLEXITY_BASE", "HEAD")
+
+    assert line_report.changed_paths(tmp_path) == []
+
+
+def test_valid_sha_base_works_after_detached_head_checkout(tmp_path: Path, monkeypatch):
+    _init_git_repo(tmp_path)
+    _write(tmp_path, "src/one.cpp", "int one() {}\n")
+    _git(tmp_path, "add", "src/one.cpp")
+    _git(tmp_path, "commit", "--quiet", "-m", "base")
+    base = _git(tmp_path, "rev-parse", "HEAD")
+    _write(tmp_path, "src/one.cpp", "int one() { return 1; }\n")
+    _git(tmp_path, "add", "src/one.cpp")
+    _git(tmp_path, "commit", "--quiet", "-m", "change")
+    _git(tmp_path, "checkout", "--detach", "--quiet", "HEAD")
+    monkeypatch.setenv("NOMAD_COMPLEXITY_BASE", base)
+
+    assert line_report.changed_paths(tmp_path) == [tmp_path / "src/one.cpp"]

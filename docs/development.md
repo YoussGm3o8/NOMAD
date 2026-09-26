@@ -52,6 +52,32 @@ and `tests/loopback_socket.hpp`; `nomad::util` owns argv and environment number
 parsing; `infra/tailscale/shell.py` owns the command probe both monitors call. Do
 not copy one of those helpers back into a caller.
 
+The full `line-report` census reads tracked source paths only. Changed-only
+checks also include non-ignored untracked first-party files; both scopes exclude
+private `local/`, generated/build output and vendored paths. Numerical ceilings
+for the five existing oversized files and one Python function live in
+`config/source_size_caps.json`, measured at its recorded baseline commit. These
+caps reject growth; the stale-baseline check separately requires removing an
+exemption once its file or function reaches the 500/40-line threshold.
+
+`pixi run cpp-complexity-report` prints a human summary;
+`pixi run python -m scripts.dev.cpp_complexity_report --output report.json`
+writes the versioned JSON artifact. CI uploads that report by head SHA as
+advisory evidence; no C++ complexity threshold blocks the build.
+`nomad-cpp-lexical-v1` counts physical
+function/lambda spans, decision tokens and lexical brace depth. It does not
+expand macros or evaluate conditional branches; brace depth is not control-flow
+nesting, nested-lambda decisions also appear in their enclosing function, and
+constructors with braced member initializers are omitted and listed. Operator
+definitions, function-pointer declarators and unusual C++ syntax may also be
+missed, so review coverage and representative safety functions before using a
+numeric C++ cap.
+
+debt: C++ complexity remains report-only; revisit when a clean-base artifact's
+tracked-file and function/lambda counts, macro/conditional totals, known omitted
+constructor count, and representative safety-function rows are reviewed; then
+ratchet only a reviewed subset or replace the lexical analyzer.
+
 `pixi run dev` and `dev-build` now build the C++ core. `pixi run test` measures
 coverage of retained Python tools and Tailscale helpers. The deleted API server,
 API smoke task and gimbal SITL task are removed.
