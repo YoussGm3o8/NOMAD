@@ -18,6 +18,8 @@ class ArduPilotPeer:
         self._address = ("127.0.0.1", port)
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._mavlink = mavlink.MAVLink(None, srcSystem=system_id, srcComponent=1)
+        self._position_boot_ms = 1000
+        self._gps_time_usec = 1_000_000
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._send_until_stopped, daemon=True)
 
@@ -46,9 +48,11 @@ class ArduPilotPeer:
                 mavlink.MAV_STATE_ACTIVE,
             )
         )
+        self._position_boot_ms += 200
+        self._gps_time_usec += 200_000
         self._send(
             self._mavlink.global_position_int_encode(
-                1000,
+                self._position_boot_ms,
                 int(45.5017 * 1e7),
                 int(-73.5673 * 1e7),
                 25000,
@@ -64,7 +68,7 @@ class ArduPilotPeer:
 
     def _gps_message(self):
         return self._mavlink.gps_raw_int_encode(
-            1_000_000,
+            self._gps_time_usec,
             3,
             int(45.5017 * 1e7),
             int(-73.5673 * 1e7),
