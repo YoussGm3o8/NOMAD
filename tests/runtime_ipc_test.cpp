@@ -246,7 +246,8 @@ void test_protocol_and_status(std::uint16_t port, FakeConnection &connection) {
     CHECK(hello["version"] == 1);
     CHECK(std::find(hello["capabilities"].begin(), hello["capabilities"].end(), "status") !=
           hello["capabilities"].end());
-    CHECK(!hello["capabilities"].contains("goto_location"));
+    CHECK(std::find(hello["capabilities"].begin(), hello["capabilities"].end(), "goto_location") ==
+          hello["capabilities"].end());
     const auto status = client.request(base_request("2", "status"));
     CHECK(status["status"]["runtime_ready"] == true);
     CHECK(status["status"]["identity_resolved"] == false);
