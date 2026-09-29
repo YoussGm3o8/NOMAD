@@ -32,7 +32,9 @@ class ArduPilotPeer:
         self._socket.close()
 
     def _send(self, message) -> None:
-        self._socket.sendto(message.pack(self._mavlink), self._address)
+        packet = message.pack(self._mavlink)
+        self._mavlink.seq = (self._mavlink.seq + 1) & 0xFF
+        self._socket.sendto(packet, self._address)
 
     def _send_until_stopped(self) -> None:
         while not self._stop.wait(0.2):
@@ -144,7 +146,7 @@ def main() -> int:
     require_case(valid.returncode == 0 and has_required_output("status", valid.stdout, "1"), "valid peer", valid)
 
     wrong = run_peer_case(binary, peer_id=2, expected_id=1, command="connect")
-    require_case(wrong.returncode != 0 and "wrong autopilot peer" in wrong.stderr, "wrong peer", wrong)
+    require_case(wrong.returncode != 0 and "different system ID" in wrong.stderr, "wrong peer", wrong)
 
     no_peer = run_binary(binary, "connect", find_free_udp_port(), system_id=1)
     require_case(no_peer.returncode != 0 and "timed out" in no_peer.stderr, "no peer", no_peer)
