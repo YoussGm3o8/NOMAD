@@ -72,8 +72,9 @@ at `14601`. Mission Planner's status panel reconnects to loopback management
 TCP `127.0.0.1:14610`, reports stale/unavailable status, and can select an
 enabled link or return to automatic selection.
 
-For integrated profiles, configure `mission_planner` with `AllowOutbound: false`
-in the standalone host JSON. The example already does this and leaves
+The standalone host enforces the `mission_planner` consumer as receive-only for
+all profiles. An explicit entry with `AllowOutbound` omitted (default true) or
+set true is rejected at startup; the example sets it false and leaves
 `nomad_core` command-capable. `IntegratedFlightMode` does not rewrite the
 separately running host configuration. Update the host JSON and Mission Planner's
 UDP consumer port together when changing endpoints. Legacy `RouterMode` values

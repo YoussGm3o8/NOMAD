@@ -82,7 +82,7 @@ namespace NOMAD.MissionPlanner
         public int RouterPort { get; set; }
         // Zero learns one loopback client's source port; nonzero is a fixed client-owned listener.
         public int ClientPort { get; set; }
-        // Existing configurations remain bidirectional unless they opt into observation-only mode.
+        // Other consumers default to bidirectional; the router reserves mission_planner as receive-only.
         public bool AllowOutbound { get; set; } = true;
     }
 

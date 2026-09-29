@@ -107,9 +107,9 @@ namespace NOMAD.MissionPlanner
             var routerHint = new Label
             {
                 Text = "Mission Planner never starts or stops the router. Configure physical links, " +
-                       "failover, duplicate suppression and consumer permissions in the standalone " +
-                       "router JSON, then supervise that host separately. Integrated profiles require " +
-                       "mission_planner AllowOutbound=false; nomad_core remains command-capable.",
+                       "failover and duplicate suppression in the standalone router JSON, then " +
+                       "supervise that host separately. The host rejects mission_planner " +
+                       "AllowOutbound=true; nomad_core remains command-capable.",
                 Font = new Font("Segoe UI", 8, FontStyle.Italic),
                 ForeColor = Color.FromArgb(150, 150, 150),
                 Location = new Point(40, y),

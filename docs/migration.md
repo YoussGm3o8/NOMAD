@@ -178,12 +178,13 @@ existing runtime and MAVSDK authority tests remain the checks for those
 invariants.
 
 The integrated profile inhibits plugin actions outside the runtime. The
-standalone ground-router JSON must separately make the Mission Planner consumer
-receive-only while retaining the command-capable NOMAD core consumer. The sample
-sets `mission_planner.AllowOutbound` to false; other host configurations must set
-it explicitly. This does not alter Mission Planner's native controls when it has
-a direct aircraft link, nor can it arbitrate RC/ELRS. The router's consumer name
-is a local configuration boundary, not authenticated client identity. Integrated deployment must exclude
+standalone ground router enforces its `mission_planner` consumer as receive-only
+while retaining the separate command-capable NOMAD core consumer. An explicit
+Mission Planner entry with `AllowOutbound` omitted (default true) or set true is
+rejected at startup; the implicit consumer is receive-only. This does not alter
+Mission Planner's native controls when it has a direct aircraft link, nor can it
+arbitrate RC/ELRS. The router's consumer name is a local configuration boundary,
+not authenticated client identity. Integrated deployment must exclude
 direct/bypass links and explicitly revoke NOMAD before pilot/native takeover.
 
 **Automated evidence.** The peer fixtures independently count physical UDP

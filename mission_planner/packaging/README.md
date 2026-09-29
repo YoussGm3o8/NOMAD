@@ -34,8 +34,9 @@ configuration beside the executable. The Mission Planner status panel connects
 to loopback TCP `127.0.0.1:14610`; native Mission Planner uses UDPCl to the
 configured `mission_planner` consumer, normally port `14600`.
 
-For integrated profiles, set `mission_planner.AllowOutbound` to false in the
-host JSON. The sample does this while preserving the separate command-capable
+The standalone host enforces `mission_planner` as receive-only. An explicit host
+JSON entry with `AllowOutbound` omitted (default true) or set true is rejected;
+the sample sets it false while preserving the separate command-capable
 `nomad_core` consumer. Mission Planner's `IntegratedFlightMode` does not rewrite
 the independently running router configuration. The plugin installer below
 installs only `NOMADPlugin.dll`; it does not install or register a router service.

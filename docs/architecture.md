@@ -236,12 +236,12 @@ Termination priority and aircraft-side takeover remain later work.
 
 Mission Planner native controls and RC remain possible external authorities.
 `NOMAD_INTEGRATED_FLIGHT` inhibits plugin actions outside the runtime. The
-standalone router configuration separately makes the Mission Planner consumer
-receive-only while leaving the NOMAD core consumer command-capable. The example
-does this with `AllowOutbound: false` on `mission_planner`; other standalone
-configurations must set the same value explicitly. Direct GCS links and local
-UDP source spoofing are outside that boundary. Integrated operations must define
-handover and inhibit NOMAD until reconciled;
+standalone router enforces the `mission_planner` consumer as receive-only while
+leaving the separate NOMAD core consumer command-capable. An explicit
+`mission_planner` entry with `AllowOutbound: true`, including the default when
+the JSON field is omitted, is rejected before sockets open; the implicit consumer
+is receive-only. Direct GCS links and local UDP source spoofing are outside that
+boundary. Integrated operations must define handover and inhibit NOMAD until reconciled;
 software cannot claim to prevent an independent pilot/autopilot action. Mission
 Planner gimbal angle requests now use the typed runtime operation; plugin
 boundary returns, emergency parameter changes and fence writes still need core
@@ -572,9 +572,10 @@ flowchart TD
 
 The standalone host owns physical connections, per-link parsing/sequence
 statistics, health, selection, deduplication, failover and local MAVLink
-distribution. Consumer `AllowOutbound` controls each local egress path; integrated
-profiles configure Mission Planner as receive-only and retain the separate core
-route. Outbound requests use exactly one physical transport. C++ retains capability
+distribution. Consumer `AllowOutbound` controls each local egress path, except
+that router validation reserves `mission_planner` as receive-only; other consumer
+IDs retain their configured setting. Outbound requests use exactly one physical
+transport. C++ retains capability
 admission, safety/payload policy, mission sequencing, deadlines, state verification
 and authoritative NOMAD outcomes. MP retains maps/HUD, diagnostics, native GCS
 functions and NOMAD client UI. ArduPilot retains stabilization, motors, EKF,

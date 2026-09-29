@@ -45,7 +45,7 @@ The [example](example.json) has the following ownership on the ground computer:
 | `0.0.0.0:14560` | Router, physical `lte` | Aircraft traffic in; selected outbound replies to learned peer |
 | `0.0.0.0:14550` | Router, physical `radiomaster` | Same, independently monitored |
 | `0.0.0.0:14570` | Router, physical `wifi` | Same, independently monitored |
-| `127.0.0.1:14600` | Router, consumer `mission_planner` | MP UDPCl receives telemetry; outbound is controlled by `AllowOutbound` |
+| `127.0.0.1:14600` | Router, consumer `mission_planner` | MP UDPCl receives telemetry only; unsafe outbound configuration is rejected |
 | Ephemeral MP port | Mission Planner | Receives telemetry and sends native GCS MAVLink |
 | `127.0.0.1:14602` | Router, consumer `nomad_core` | Sends downlink to `14601`; accepts outbound only from `14601` |
 | `127.0.0.1:14601` | One persistent C++ runtime or one exclusive direct CLI process | `udpin:127.0.0.1:14601`; MAVSDK learns router peer `14602` |
@@ -116,9 +116,11 @@ into those two IDs. An explicitly empty/invalid collection is rejected.
 `Consumers` contains 1–32 entries with unique `Id`, `RouterPort`, and optional
 `ClientPort`. `AllowOutbound` defaults to true; false lets a consumer receive
 telemetry while preventing its local MAVLink frames from reaching physical
-links. The example sets Mission Planner to receive-only and leaves the separate
-NOMAD core consumer command-capable. Every router consumer socket binds IPv4
-loopback. `ClientPort = 0`
+links. The exact ID `mission_planner` is reserved as receive-only: an explicit
+entry with `AllowOutbound` true, including an omitted field that defaults true,
+is rejected before sockets open. If `Consumers` is omitted, the implicit Mission
+Planner consumer is receive-only. `nomad_core` remains a separate, command-capable
+consumer. Every router consumer socket binds IPv4 loopback. `ClientPort = 0`
 learns one loopback peer; another peer can replace it only after three seconds
 without traffic from the old peer, resetting parser state. A fixed client port
 accepts only that endpoint and receives downlink without first sending anything.

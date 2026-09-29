@@ -31,8 +31,8 @@ namespace NOMAD.MissionPlanner
 
         /// <summary>
         /// Integrated profile mode inhibits plugin actuation that remains
-        /// outside the runtime. The separately configured ground router must
-        /// also set the Mission Planner consumer to receive-only.
+        /// outside the runtime. The standalone router independently enforces
+        /// its Mission Planner consumer as receive-only.
         /// </summary>
         public bool IntegratedFlightMode { get; set; } = false;
 

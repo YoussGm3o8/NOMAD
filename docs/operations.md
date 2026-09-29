@@ -132,10 +132,11 @@ not IPC authentication. Profile sync derives `IntegratedFlightMode` from
 `NOMAD_INTEGRATED_FLIGHT`, which is set in the supported integrated profiles.
 The gimbal window, arrow keys and physical gimbal joystick send bounded angle
 targets through typed `set_gimbal_target` requests; runtime, authority and busy
-failures are shown to the operator, with no direct MAVLink fallback. Integrated
-profiles also require the standalone ground-router JSON to set the
-`mission_planner` consumer's `AllowOutbound` to false; the sample configuration
-keeps the separate `nomad_core` route command-capable. The installed CLI sends
+failures are shown to the operator, with no direct MAVLink fallback. The
+standalone ground router enforces the `mission_planner` consumer as receive-only
+for every profile and rejects an explicit entry with `AllowOutbound` omitted
+(default true) or set true. The sample configuration keeps the separate
+`nomad_core` route command-capable. The installed CLI sends
 bare `nomad status`, `nomad admit`, `nomad revoke`, `nomad handback`, `nomad servo <channel>
 <pwm_us>`, `nomad relay <number> <0|1>`, `nomad motor-test <instance> <pwm_us>
 <timeout_s>` and `nomad gimbal-config <mount_mode>` commands as typed protocol-v1
