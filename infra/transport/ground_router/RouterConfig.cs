@@ -86,38 +86,6 @@ namespace NOMAD.MissionPlanner
         public bool AllowOutbound { get; set; } = true;
     }
 
-    public static class RouterConsumerPolicy
-    {
-        public static List<ConsumerConfig> ForIntegratedFlight(IEnumerable<ConsumerConfig> configured)
-        {
-            var consumers = new List<ConsumerConfig>();
-            if (configured == null)
-            {
-                return null;
-            }
-
-            foreach (var consumer in configured)
-            {
-                if (consumer == null)
-                {
-                    consumers.Add(null);
-                    continue;
-                }
-
-                var isMissionPlanner = string.Equals(
-                    consumer.Id, "mission_planner", StringComparison.OrdinalIgnoreCase);
-                consumers.Add(new ConsumerConfig
-                {
-                    Id = consumer.Id,
-                    RouterPort = consumer.RouterPort,
-                    ClientPort = consumer.ClientPort,
-                    AllowOutbound = isMissionPlanner ? false : consumer.AllowOutbound
-                });
-            }
-            return consumers;
-        }
-    }
-
     public partial class GroundLinkRouter
     {
         public class RouterConfig
