@@ -10,6 +10,28 @@ QuadPlane, and that capability gate remains intact.
 A test, passing workflow or simulator result proves only the boundary and
 revision it actually exercised. This page is not flight authorization.
 
+## Physical control-source slice
+
+The separate slice starts from PR #53's merge,
+`8e9c1450b433798aaa8d641eb627ea7091cfccc8`. Read-only bench observation on
+2026-09-30 identified ArduPlane 4.7.1 stable (`dbe79216`), QuadPlane enabled,
+system/component 1/1 and a complete 1202-parameter snapshot. Operator confirmed
+disarmed and props removed. No FC parameter or actuator command was sent.
+
+**Hardware arbitration is blocked:** operator-confirmed ELRS 4.0.0 MAVLink-only
+receiver ingress sends handset channels as RC overrides, not native RC input.
+Observed channel count is zero despite moving effective stick channels. Aux 46
+rejects writes to its own channel and gates the handset override stream too;
+the proposed dual-channel physical gate is unsuitable for this topology.
+Native-pilot ingress or another reviewed FC arbiter must be qualified first.
+
+The new policy tests and mapper do not activate production arbitration or a
+flight joystick stream. MP joystick characterization, physical pilot takeover,
+AUTO transitions, stale-receiver fault reproduction and real ELRS/LTE failover
+are NOT RUN. No USB joystick or LTE hardware was available. See the exact
+[source evidence, mapping and scenario matrix](source-arbitration.md#physical-bench-observation-2026-09-30)
+and the [bench record template](../tests/hardware/control-source-record.json).
+
 ## Evidence levels
 
 | Evidence | What it establishes | What it does not establish |
