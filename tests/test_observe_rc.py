@@ -74,7 +74,7 @@ def test_evidence_cannot_be_overwritten(tmp_path):
 def test_capture_sends_nothing(monkeypatch):
     port = Port()
     ticks = iter(index / 10 for index in range(30))
-    monkeypatch.setattr(observer.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(observer, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
     monkeypatch.setattr(observer, "selected_messages", lambda *_: iter([]))
     result = observer.capture(port, None, (1, 1), 1, "no-input")
     assert port.frames == []
@@ -85,7 +85,7 @@ def test_capture_sends_nothing(monkeypatch):
 def test_capture_aborts_on_heartbeat_loss(monkeypatch):
     port = Port()
     ticks = iter(range(20))
-    monkeypatch.setattr(observer.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(observer, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
     monkeypatch.setattr(observer, "selected_messages", lambda *_: iter([]))
     with pytest.raises(observer.ObservationError, match="heartbeat stale"):
         observer.capture(port, None, (1, 1), 8, "lost-link")

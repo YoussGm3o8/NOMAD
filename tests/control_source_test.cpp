@@ -85,6 +85,56 @@ void test_gap_reversal_and_bad_calibration() {
     CHECK(!invalid.admit(ControlSource::joystick, now));
 }
 
+void test_stale_tokens_cannot_revoke_current_owner() {
+    auto gate = make_gate();
+    const auto now = ControlSourceGate::Clock::time_point{} + 1s;
+    gate.observe(1500, true, true, now);
+    CHECK(gate.admit(ControlSource::joystick, now));
+    const auto old = gate.generation();
+    CHECK(gate.admit(ControlSource::joystick, now));
+    const auto current = gate.generation();
+    CHECK(!gate.allows(ControlSource::joystick, old, now, now - 200ms, false));
+    CHECK(gate.generation() == current);
+    CHECK(gate.allows(ControlSource::joystick, current, now, now, true));
+    gate.observe(2000, true, true, now + 1ms);
+    CHECK(gate.admit(ControlSource::autonomous, now + 1ms));
+    const auto autonomous = gate.generation();
+    CHECK(!gate.allows(ControlSource::joystick, current, now + 1ms, now - 200ms, false));
+    CHECK(gate.generation() == autonomous);
+    CHECK(gate.allows(ControlSource::autonomous, autonomous, now + 1ms, now, true));
+}
+
+void test_active_joystick_invalid_sample_revokes_owner() {
+    const auto now = ControlSourceGate::Clock::time_point{} + 1s;
+    for (const auto sample : {now - 200ms, now + 1ms, now}) {
+        auto gate = make_gate();
+        gate.observe(1500, true, true, now);
+        CHECK(gate.admit(ControlSource::joystick, now));
+        const auto token = gate.generation();
+        const bool deadman = sample != now;
+        CHECK(!gate.allows(ControlSource::joystick, token, now, sample, deadman));
+        CHECK(!gate.allows(ControlSource::joystick, token, now, now, true));
+        CHECK(gate.requested(now) == ControlSource::inhibited);
+    }
+}
+
+void test_auxiliary_switch_envelope() {
+    const auto now = ControlSourceGate::Clock::time_point{} + 1s;
+    using Ranges = std::array<nomad::safety::SelectorRange, 3>;
+    const Ranges low_boundary{{{800, 1020}, {1480, 1520}, {1980, 2020}}};
+    const Ranges high_boundary{{{980, 1020}, {1480, 1520}, {1980, 2200}}};
+    for (const auto ranges : {low_boundary, high_boundary}) {
+        ControlSourceGate gate(ranges, 200ms);
+        gate.observe(1500, true, true, now);
+        CHECK(!gate.admit(ControlSource::joystick, now));
+    }
+    for (const int value : {800, 2200}) {
+        auto gate = make_gate();
+        gate.observe(value, true, true, now);
+        CHECK(gate.requested(now) == ControlSource::inhibited);
+    }
+}
+
 } // namespace
 
 int main() {
@@ -93,5 +143,8 @@ int main() {
         test_invalid_and_stale_input();
         test_loss_does_not_restore_owner();
         test_gap_reversal_and_bad_calibration();
+        test_stale_tokens_cannot_revoke_current_owner();
+        test_active_joystick_invalid_sample_revokes_owner();
+        test_auxiliary_switch_envelope();
     });
 }

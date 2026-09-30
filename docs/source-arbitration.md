@@ -213,8 +213,9 @@ props removed, Mission Planner closed, no USB joystick and no LTE hardware.
 Read-only ELRS USB observation used 460800 baud with DTR/RTS low. Initial
 capture sent zero bytes; subsequent sends were parameter read requests and
 `MAV_CMD_REQUEST_MESSAGE(AUTOPILOT_VERSION)` only, source 254/component 190.
-No parameter writes, overrides, manual-control, arm/mode/actuator commands,
-RF faults or runtime/router deployment were performed.
+No parameter writes, PC/observer-generated overrides, manual-control,
+arm/mode/actuator commands, RF faults or runtime/router deployment were performed.
+The handset's ELRS-originated override stream was observed.
 
 The FC reports ArduPlane **4.7.1 stable**, custom-version ASCII `dbe79216`,
 fixed-wing heartbeat type 1, autopilot 3, system/component 1/1 and `Q_ENABLE=1`.

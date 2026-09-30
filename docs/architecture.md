@@ -94,7 +94,7 @@ integrated command path.
 
 ### Physical pilot and future flight joystick
 
-The required independent pilot path is handset sticks → EdgeTX → external ELRS transmitter
+The target independent pilot path is handset sticks → EdgeTX → external ELRS transmitter
 → receiver → ArduPilot input. It must operate without Windows, runtime, Mission
 Planner, joystick, LTE or the router. MAVLink routing must remain distinct from
 native physical RC input, even when they share RF hardware.

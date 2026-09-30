@@ -8,7 +8,7 @@ ControlSourceGate::ControlSourceGate(std::array<SelectorRange, 3> ranges, std::c
     configured_ = freshness.count() > 0;
     for (std::size_t index = 0; index < ranges.size(); ++index) {
         const auto range = ranges[index];
-        if (range.minimum < 800 || range.maximum > 2200 || range.minimum > range.maximum) {
+        if (range.minimum <= 800 || range.maximum >= 2200 || range.minimum > range.maximum) {
             configured_ = false;
         }
         if (index > 0 && ranges[index - 1].maximum >= range.minimum) {
@@ -83,12 +83,15 @@ bool ControlSourceGate::admit(ControlSource source, Clock::time_point now) {
 bool ControlSourceGate::allows(ControlSource source, std::uint64_t generation, Clock::time_point now,
                               Clock::time_point sample_at, bool deadman) {
     expire(now);
+    if ((source != ControlSource::joystick && source != ControlSource::autonomous) ||
+        source != requested_ || source != admitted_ || generation != generation_) {
+        return false;
+    }
     if (source == ControlSource::joystick && (!deadman || sample_at > now || now - sample_at >= freshness_)) {
         invalidate();
         return false;
     }
-    return (source == ControlSource::joystick || source == ControlSource::autonomous) &&
-           source == requested_ && source == admitted_ && generation == generation_;
+    return true;
 }
 
 std::uint64_t ControlSourceGate::generation() const {
