@@ -340,3 +340,6 @@ env = { NOMAD_API_KEY = "nomad-dev-sitl-key", NOMAD_CORE_SITL_PORT = "14572" }
 # command, so it needs the same development API key the other runners set.
 cmd = "pixi run build-sitl-tools && python scripts/dev/core_sitl_containment.py"
 env = { NOMAD_API_KEY = "nomad-dev-sitl-key" }
+
+[dependencies]
+pyserial = ">=3.5,<4"

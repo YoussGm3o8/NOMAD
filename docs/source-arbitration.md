@@ -14,6 +14,10 @@ not production termination, a C2-loss policy, or another command owner.
 
 ## Intended sources
 
+This page also records the separate physical arbitration slice based on merged
+PR #53, at `8e9c1450b433798aaa8d641eb627ea7091cfccc8`. Its read-only physical
+observations do not extend the earlier SITL qualification claims.
+
 | Source | Path | Can command? | NOMAD controls it? | Qualification status |
 |---|---|---|---|---|
 | `nomad-runtime` | runtime → MAVSDK → standalone ground router → aircraft router → FC | Yes, supported typed requests | Yes, this runtime's request admission and tested command-send fence | Software tests; disarmed pinned SITL scenario below |
@@ -200,3 +204,198 @@ airborne output/trajectory and phase-dependent takeover open. SITL must never
 mark this procedure passed. Qualification records belong in
 [qualification status](qualification.md); unresolved work stays in
 [TODO](../TODO.md).
+
+## Physical bench observation 2026-09-30
+
+This separate slice starts at merged PR #53, code
+`8e9c1450b433798aaa8d641eb627ea7091cfccc8`. Operator confirmed disarmed,
+props removed, Mission Planner closed, no USB joystick and no LTE hardware.
+Read-only ELRS USB observation used 460800 baud with DTR/RTS low. Initial
+capture sent zero bytes; subsequent sends were parameter read requests and
+`MAV_CMD_REQUEST_MESSAGE(AUTOPILOT_VERSION)` only, source 254/component 190.
+No parameter writes, PC/observer-generated overrides, manual-control,
+arm/mode/actuator commands, RF faults or runtime/router deployment were performed.
+The handset's ELRS-originated override stream was observed.
+
+The FC reports ArduPlane **4.7.1 stable**, custom-version ASCII `dbe79216`,
+fixed-wing heartbeat type 1, autopilot 3, system/component 1/1 and `Q_ENABLE=1`.
+`Plane-4.7.1` resolves to `dbe792162d06cab66c3475fd5556bf7a120f119e`, matching
+the reported prefix. The eight-byte prefix is not a full flashed-image attestation.
+Operator reports RadioMaster/EdgeTX handset, NOMAD module, RP2 receiver and
+ELRS 4.0.0 with MAVLink serial output, **no separate CRSF/native RC input**.
+Exact EdgeTX build, flashed ELRS hashes and receiver-generated source IDs remain
+unrecorded; DBR4 was not exercised.
+
+The indexed pre-change snapshot has 1202/1202 unique parameters, SHA-256
+`a2fb42e188c9bb4a457cc5bd35ee2f01b0aba51722c354bc39e0e2512f185519`.
+Full snapshots/capture summaries remain in ignored local
+`build/hardware-observation/`. Do not commit raw telemetry, location, UID,
+binding/signing secrets or host-specific port names.
+
+| Parameter | Actual readback |
+|---|---|
+| `RCMAP_ROLL/PITCH/THROTTLE/YAW` | 1 / 2 / 3 / 4 |
+| `FLTMODE_CH` | 8; physical switch identification pending |
+| Every `RC1_OPTION` through `RC16_OPTION` | 0; no Aux 46 configured |
+| `RC_OPTIONS`, `RC_OVERRIDE_TIME` | 32 / 3 seconds (readback, not measured expiry) |
+| `MAV_GCS_SYSID`, `MAV_GCS_SYSID_HI`, `MAV_OPTIONS` | 255 / 0 / 0 |
+| `RC_FS_TIMEOUT`, `THR_FAILSAFE`, `THR_FS_VALUE`, `FS_GCS_ENABL` | 1 second / 1 / 950 / 0 |
+| `SERIAL1_PROTOCOL`, `SERIAL1_BAUD` | 2 (MAVLink2) / 460 |
+
+All six `FLTMODE1..6` slots read back 17 (QSTABILIZE); no configured slot
+variation establishes a usable physical mode-selection policy. Stick calibration
+is still MIN/TRIM/MAX 1100/1500/1900, REVERSED 0, DZ 30 on channels 1–4;
+observed endpoints exceed these configured limits. No calibration was changed.
+
+| Physical action | Effective channel/range observed | Evidence limit |
+|---|---|---|
+| Roll retry | CH1 989–2010; last 2010 | CH2 also moved 1355–1568; not fully isolated |
+| Pitch retry | CH2 989–2012; centred 1500 | 90 samples, 0.999 Hz; native input not proved |
+| Throttle | CH3 989–2006; returned 989 | 60 samples, 1.001 Hz; native input not proved |
+| Yaw attempts | CH4 fixed 1495 | No excursion captured; physical identification incomplete |
+| Switch movement during yaw retry | CH9 1000–1500, CH10 1500–2000 | Operator identities unconfirmed; not a source-selector mapping |
+| Flight-mode switch / source-selector LOW/MID/HIGH | NOT MEASURED | No channel assignment or mix change proposed |
+
+Configured roll/pitch normalization clips the measured endpoints to -1/+1
+using the saved limits; centres within DZ map to zero. Configured throttle
+normalization clips 989/2006 to 0/1. These are mathematical interpretations of
+current calibration, not hardware axis-rate measurements. Telemetry observation
+rate near 1 Hz is not the handset/RF/receiver update rate. ELRS source schedules
+handset override frames every 10 ms; actual receiver output timing was not tapped.
+
+The after snapshot also contains 1202/1202 parameters, SHA-256
+`516fd67473d9829e72e69ca7c95929538aabcdf7cd54742b10d5ca37efc53a32`.
+The sole before/after difference is automatic `STAT_RUNTIME` 4864→6011;
+every other parameter value/type is equal. No configuration restoration was
+necessary because no parameter write occurred. Final snapshot observed disarmed.
+
+### Blocking physical-path finding
+
+**Do not configure the paired Aux-46 selector on this MAVLink-only topology.**
+ELRS 4.0.0 release source `ed9fc3e637207e8d656ffe9b1b3e8eef418573c6`
+converts handset channels to MAVLink overrides, while independently forwarding
+PC MAVLink traffic. Its receiver does not arbitrate pilot/computer ownership.
+See [ELRS sendRCFrame and forwarding](https://github.com/ExpressLRS/ExpressLRS/blob/ed9fc3e637207e8d656ffe9b1b3e8eef418573c6/src/src/rx-serial/SerialMavlink.cpp#L26-L58)
+and [official topology](https://www.expresslrs.org/software/mavlink/).
+Source defaults are 255/component TELEMETRY_RADIO (68), target 1/component ALL;
+Lua can change IDs, so these are source expectations, not observed packet IDs.
+
+Actual stick excursions reached effective RC telemetry at about 1 Hz, but
+`chancount=0`, RSSI 254 and SYS_STATUS receiver healthy remained unchanged.
+This is consistent with MAVLink pilot input and does not establish native HAL
+RC input or RF freshness. The handset path is independent of PC/runtime, but
+shares ArduPilot's override input domain with computer control.
+
+On the matching FC source, assigning Aux 46 makes that channel reject
+`set_override`, including handset-generated overrides. Disabling overrides
+would disable this pilot-input form too. Stop before writes or competing
+override tests. Redesign must supply a demonstrated native RC input alongside
+telemetry, or a separately reviewed FC-side arbiter with trusted physical
+provenance. Receiver choice does not change runtime/router ownership. Do not
+weaken the gate or restore arbitrary Mission Planner writes as a workaround.
+
+Only after native RC ingress is proved, reconsider the paired physical switch:
+A = measured three-state unassigned source request; B = Aux 46, LOW for PILOT
+and HIGH for both JOYSTICK/AUTO. Source, gate, flight mode, arming and termination
+are separate functions. All safety channels are excluded from software
+overrides. Effective RC_CHANNELS alone cannot authenticate A or prove freshness.
+
+### Installed-source audit and message decision
+
+The matching ArduPilot release source verifies:
+
+- Aux 46 LOW clears/disables, HIGH enables, MIDDLE retains state; its channel
+  rejects overrides. Receiver loss need not deliver a new LOW. See
+  [gate protection/expiry](https://github.com/ArduPilot/ardupilot/blob/dbe792162d06cab66c3475fd5556bf7a120f119e/libraries/RC_Channel/RC_Channel.cpp#L494-L533)
+  and [Aux 46 switch](https://github.com/ArduPilot/ardupilot/blob/dbe792162d06cab66c3475fd5556bf7a120f119e/libraries/RC_Channel/RC_Channel.cpp#L1297-L1312).
+- `RC_OPTIONS=32` is throttle arming check; bit14 `CLEAR_OVERRIDES_BY_RC` is absent.
+  [Options and gate clearing](https://github.com/ArduPilot/ardupilot/blob/dbe792162d06cab66c3475fd5556bf7a120f119e/libraries/RC_Channel/RC_Channel.h#L616-L660).
+- Override/manual handlers require the configured GCS sysid despite
+  `MAV_OPTIONS=0`; component IDs do not authenticate control. Runtime's default
+  245 differs from actual primary GCS 255.
+  [Handlers](https://github.com/ArduPilot/ardupilot/blob/dbe792162d06cab66c3475fd5556bf7a120f119e/libraries/GCS_MAVLink/GCS_Common.cpp#L3893-L3942).
+- Positive override timeout expires each channel; 0 disables; -1 prevents
+  expiry. Fallback does not check receiver sample freshness.
+  [Channel update](https://github.com/ArduPilot/ardupilot/blob/dbe792162d06cab66c3475fd5556bf7a120f119e/libraries/RC_Channel/RC_Channel.cpp#L290-L307).
+- Receiver status can reflect previously received overrides and failsafe state,
+  rather than a fresh physical sample.
+  [RC status](https://github.com/ArduPilot/ardupilot/blob/dbe792162d06cab66c3475fd5556bf7a120f119e/libraries/GCS_MAVLink/GCS.cpp#L576-L584).
+
+Engineering decision: prefer `MANUAL_CONTROL` for a future qualified four-axis
+HID stream on this Plane/QuadPlane release, **pending physical-ingress redesign
+and final-send fencing**. Plane maps y→roll, reversed x→pitch, z→throttle and
+r→yaw through RCMAP/calibration and cannot address selector/mode switches in
+that handler. See [Plane mapping](https://github.com/ArduPilot/ardupilot/blob/dbe792162d06cab66c3475fd5556bf7a120f119e/ArduPlane/GCS_MAVLink_Plane.cpp#L931-L940).
+Send all four fresh axes; validate device, sequence, range and deadman; explicitly
+revoke/release. Omitting axes is not a global release recipe. RC override can
+address safety channels and uses different release sentinels for 1–8 versus
+9–18. Neither message repairs stale fallback or creates pilot priority.
+Aux 46 does not block arbitrary navigation/servo/relay MAVLink commands.
+Production runtime exposes neither manual message today.
+
+### Stale receiver and shared RF/LTE hazard
+
+The installed shared channel code can fall back to stale receiver values after
+partial overrides expire. Plane may refresh radio-valid timing on override
+input with plausible retained throttle; see
+[radio failsafe](https://github.com/ArduPilot/ardupilot/blob/dbe792162d06cab66c3475fd5556bf7a120f119e/ArduPlane/radio.cpp#L172-L244).
+`RC_OVERRIDE_TIME=3` alone therefore does not make surviving LTE overrides safe.
+[Issue 32862](https://github.com/ArduPilot/ardupilot/issues/32862) reports stale
+mode fallback on Copter; [issue 33125](https://github.com/ArduPilot/ardupilot/issues/33125)
+reports a related partial override fault. Shared-source exposure is verified;
+installed Plane hardware reproduction is **NOT RUN**. LTE is absent and the
+native-pilot prerequisite failed. The earlier Aux-46 self-write issue is fixed
+in installed source ([PR 33275](https://github.com/ArduPilot/ardupilot/pull/33275));
+that protection does not create native RC input.
+
+### Read-only mapper and qualification gates
+
+`scripts/hardware/observe_rc.py --port <ELRS_USB_PORT> --snapshot --duration 60
+--output build/hardware-observation/before.json` saves the full indexed snapshot.
+Without `--snapshot`, it transmits no MAVLink packets. Capture one control at
+a time with `--label <control>` and a new file. It refuses overwrite and aborts
+on armed/stale ownship heartbeat. Save each switch position separately for
+LOW/MID/HIGH ranges/jitter; travel min/max alone cannot establish MID. Normalize
+axes against saved `RCn_MIN/TRIM/MAX/REVERSED`, not assumed endpoints.
+
+After native-pilot redesign, declare latency bounds, safe unloaded output
+isolation, witness and abort conditions before every override/takeover row.
+Characterize MP bench-only IDs/message set/rate/stop behavior without enabling
+normal router MP egress. Test continued overrides against PILOT, JOYSTICK axis
+allowlist, AUTO admission and return to PILOT, reverse transitions, noisy/missing
+selector, and old queued frames. No autonomous movement is part of this slice.
+Take full after snapshots and compare every parameter/type; prove restoration
+after any future edits. Missing evidence is ABORT/NOT RUN, never PASS.
+
+| Scenario | This run | Required next evidence |
+|---|---|---|
+| ELRS + LTE healthy | NOT RUN: LTE absent | Actual dual-link operation |
+| ELRS healthy, LTE lost | NOT RUN: LTE absent | Physical loss and ELRS continuity |
+| ELRS MAVLink lost, pilot available | NOT RUN | Prove separable native pilot path |
+| ELRS/pilot lost, LTE healthy | NOT RUN: LTE absent | Stale-input/failsafe reproduction |
+| LTE joystick active, LTE lost | NOT RUN: HID/LTE absent | Expiry/release/no retained owner |
+| ELRS returns after LTE control | NOT RUN | No historical selector/owner restoration |
+| Both MAVLink paths lost | NOT RUN | Qualified FC response/runtime inhibition |
+| Runtime restart | Policy software tests only | Real bench restart/no re-admission |
+| Router restart | Policy software tests only | No buffered old commands on real path |
+| Selector during link changes | Policy software tests only | Measured transitions during actual faults |
+
+`ControlSourceGate` is not wired into runtime: synthetic tests prove policy only.
+debt: policy-only until native pilot ingress is qualified; revisit when a trusted
+physical selector/freshness feed is demonstrated; then connect observations and
+per-frame final-send admission to runtime before exposing flight joystick IPC.
+Runtime must serialize observations, invalidation and final per-frame send
+under its authority lock, combining source generation with existing incarnation,
+session and expiry. Future HID samples contain four axes, allowlisted device ID,
+increasing sequence, local monotonic receive time and held deadman. Loss/restart
+requires explicit fresh admission; route restoration cannot grant authority.
+Router remains link selection/health/deduplication infrastructure. Existing CSV
+bridge retains virtual axes after bad/missing frames and is not a flight ingress.
+
+Exactly three GPT-6 Luna MAX read-only audits were used. ArduPilot/ELRS audit
+found the incompatible MAVLink-only pilot ingress and stale-fallback exposure;
+code audit found absent selector telemetry/manual IPC/final-send coverage and
+peripheral-only joystick; safety review required measured provenance, declared
+timing bounds, honest NOT RUN rows and complete snapshot/restoration evidence.
+Findings are resolved by stopping unsupported mutations, preserving one writer,
+and explicitly retaining physical-ingress and integration qualification gates.
