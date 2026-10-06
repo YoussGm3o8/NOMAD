@@ -68,6 +68,7 @@ else()
 endif()
 
 add_library(nomad_core
+    src/safety/control_source.cpp
     src/mission/executor.cpp
     src/safety/fence_config.cpp
     src/safety/geofence.cpp
@@ -356,6 +357,7 @@ if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     nomad_add_core_test(nomad_quadplane_route_tests tests/vehicle/quadplane/quadplane_route_test.cpp)
     nomad_add_core_test(nomad_quadplane_recovery_tests tests/vehicle/quadplane/quadplane_recovery_test.cpp)
     nomad_add_core_test(nomad_safety_tests tests/safety_test.cpp)
+    nomad_add_core_test(nomad_control_source_tests tests/control_source_test.cpp)
     nomad_add_core_test(nomad_output_tests tests/output_command_test.cpp)
     nomad_add_core_test(nomad_vio_tests tests/vio_source_test.cpp)
     nomad_add_core_test(nomad_aircraft_identity_tests tests/aircraft_identity_test.cpp)

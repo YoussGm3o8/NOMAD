@@ -192,6 +192,55 @@ under the exclusive lifetime lock.
 
 ## Component ownership
 
+### Physical pilot and future flight joystick
+
+The target independent pilot path is handset sticks → EdgeTX → external ELRS transmitter
+→ receiver → ArduPilot input. It must operate without Windows, runtime, Mission
+Planner, joystick, LTE or the router. MAVLink routing must remain distinct from
+native physical RC input, even when they share RF hardware.
+
+The observed ELRS 4.0.0 MAVLink-only receiver delivers pilot channels as
+MAVLink overrides, with no demonstrated native RC input. Aux 46 cannot protect
+pilot takeover on that topology; configuring it could inhibit the handset too.
+Physical-ingress redesign is required before production source arbitration.
+
+The candidate physical three-position source switch uses two measured native RC
+channels: an unassigned three-state source request and a binary FC override
+gate (Aux 46). PILOT requests gate LOW; JOYSTICK and AUTO request gate HIGH.
+Neither channel number nor switch endpoints are prescribed before mapping.
+The override gate only gates RC overrides; it does not block arbitrary
+MAVLink commands or establish physical termination.
+
+`ControlSourceGate` is a hardware-free policy component, not an active runtime
+interlock. It requires calibrated disjoint ranges and trustworthy fresh physical
+observations, inhibits on ambiguity/loss, and requires explicit admission after
+every source transition or invalidation. Runtime does not yet supply those
+observations. Effective `RC_CHANNELS` values alone cannot establish physical
+selector provenance. Production flight joystick/manual control remains disabled.
+
+The future HID path is device → typed runtime sample → per-frame admission →
+one MAVSDK transport → standalone router → selected ELRS/LTE MAVLink link.
+Samples carry device identity, axes, sequence, local receive time and deadman;
+stale/invalid samples revoke manual authority. Only four mapped flight axes
+are candidates; mode, source, arming, gate and termination channels are excluded.
+Roll/pitch/yaw are finite normalized -1..1; throttle is finite 0..1. Device
+identity must match the explicitly selected device, sequence must increase in
+the current device session, and freshness uses runtime-stamped monotonic receive
+time rather than a client timestamp. A heartbeat without a fresh axis sample
+does not extend control. Reconnecting a device starts a new inhibited session.
+Optional auxiliary actions require separate typed requests and explicit allowlists.
+Admission must fence each frame at final send as well as request acceptance.
+The current COMMAND_LONG/INT fence does not qualify MANUAL_CONTROL.
+
+Mission Planner remains UI/telemetry/typed runtime requests. Its existing
+joystick service controls peripherals; the CSV-to-virtual-gamepad bridge is not
+a qualified flight-input source. It must never consume the ELRS MAVLink modem
+port. The router selects links and cannot grant flight authority. Receiver type
+(RP2 or DBR4) changes qualification evidence, not software ownership.
+
+See the measured firmware and bench limits in
+[source arbitration](source-arbitration.md#physical-bench-observation-2026-09-30).
+
 | Component | Owns | Does not own |
 |---|---|---|
 | C++ core (`include/nomad/`, `src/`) | Reusable vehicle state, command validation, aircraft-class and operation policy, safety checks and observed software outcomes | UI rendering, ROS types, packet packing outside the MAVLink implementation |

@@ -1,0 +1,60 @@
+{
+  "status": "NOT RUN",
+  "code_sha": null,
+  "firmware_version": null,
+  "firmware_reported_hash": null,
+  "matching_release_sha": null,
+  "receiver_type": null,
+  "receiver_firmware": null,
+  "receiver_fc_protocol": null,
+  "native_rc_ingress_proven": false,
+  "handset_type": null,
+  "edgetx_version": null,
+  "module_type": null,
+  "module_firmware": null,
+  "observed_source_ids": [],
+  "rcmap": {},
+  "physical_controls": [],
+  "source_selector": {
+    "channel": null,
+    "low_range": null,
+    "middle_range": null,
+    "high_range": null,
+    "provenance_and_freshness_signal": null
+  },
+  "override_gate": {
+    "channel": null,
+    "cannot_be_software_overridden": null
+  },
+  "before_snapshot_sha256": null,
+  "after_snapshot_sha256": null,
+  "parameter_diff": null,
+  "operator_disarmed_props_removed_confirmation": null,
+  "output_isolation": null,
+  "independent_witness": null,
+  "timestamp_basis": null,
+  "cases": [
+    {
+      "case": null,
+      "status": "NOT RUN",
+      "expected_outcome": null,
+      "declared_max_latency_ms": null,
+      "actual_outcome": null,
+      "observed_latency_ms": null,
+      "link_states": {},
+      "source_state": null,
+      "runtime_generation_session": null,
+      "fc_mode_and_armed_state": null,
+      "fresh_rc_values": null,
+      "independent_output_observation": null,
+      "timeout_observed_ms": null,
+      "abort_reason": null,
+      "restricted_evidence_reference": null,
+      "cleanup_and_restoration": null
+    }
+  ],
+  "all_parameters_restored": null,
+  "final_disarmed_state": null,
+  "safety_review": null,
+  "unqualified_items": []
+}
